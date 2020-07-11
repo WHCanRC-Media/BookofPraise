@@ -1,0 +1,75 @@
+<head>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"> </script>
+ 
+  <script>
+	var vs_json
+	$.getJSON('verses.json',function(data){
+		vs_json = data
+	})
+	function search_change(form_name){
+	 	$("."+form_name+"_verse_check").hide()
+	 	var p = $("#"+form_name+"_select")[0].value
+		vs_json[form_name+'s'][p-1].forEach(function(v_num){
+			$("#"+form_name+"_verse_check_"+v_num).show()
+		})
+	}
+  </script>
+
+</head>
+<title>Setup</title>
+<table id="liturgy table">
+  {% for s in liturgy %}
+  <tr>
+	<td>
+	  {{s['song']}}:
+	</td>
+	<td>
+	  {% for v in s['verses'] %}
+	  {{v}}
+	  {% endfor %}
+	</td>
+  </tr>
+  {% endfor %}
+</table>
+<button onclick="location.href='clear_liturgy'">Clear Liturgy</button>
+<button onclick="location.href='display'">Done</button>
+<table>
+
+  <tr>
+	<form action="add_song">
+	  <td>
+		<input type="submit" value="Add Psalm">
+	  </td>
+	  <td>
+		Psalm <input name="psalm_number" type="text" min="1" max="150" id="psalm_select" oninput="search_change('psalm')">
+	  </td>
+	  <td>
+		{% for n in range(1,67) %}
+		<div id="psalm_verse_check_{{n}}" class="psalm_verse_check" hidden>
+		  <label for="PV{{n}}">V{{n}}</label>
+		  <input type="checkbox" id="PV{{n}}" name="PV{{n}}">
+		</div>
+		{% endfor %}
+	  </td>
+	</form>
+  </tr>
+  <tr>
+	<form action="add_song">
+	  <td>
+		<input type="submit" value="Add Hynm">
+	  </td>
+	  <td>
+		Hymn <input name="hymn_number" type="" min="1" max="150" id="hymn_select" oninput="search_change('hymn')">
+	  </td>
+	  <td>
+		{% for n in range(1,67) %}
+		<div id="hymn_verse_check_{{n}}" class="hymn_verse_check" hidden>
+		  <label for="HV{{n}}">V{{n}}</label>
+		  <input type="checkbox" id="HV{{n}}" name="HV{{n}}">
+		</div>
+		{% endfor %}
+	  </td>
+	</form>
+  </tr>
+</table>	
+</form>

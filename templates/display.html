@@ -1,0 +1,47 @@
+<head>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"> </script>
+  <script>
+	var photo_list = {{photo_list|tojson|safe}}
+	var current_index =0
+	function change_img(incr){
+		max_index=photo_list.length -1
+		next_index = current_index + incr
+		if(next_index<=0){
+			next_index = 0
+			$('#prev_butt').prop('disabled',true)
+		}else{
+			$('#prev_butt').prop('disabled',false)
+		}
+		if(next_index>=max_index){
+			next_index = max_index
+			$('#next_butt').prop('disabled',true)
+		}else{
+			$('#next_butt').prop('disabled',false)
+		}
+		current_index = next_index
+		$('#song_title').html(photo_list[current_index]['title'])
+		$('#lyrics').attr('src', photo_list[current_index]['path'])
+	}
+  </script>
+</head>
+<title>Song Display</title>
+<table id="liturgy table">
+  {% for s in liturgy %}
+  <tr>
+	<td>
+	  {{s['song']}}:
+	</td>
+	<td>
+	  {% for v in s['verses'] %}
+	  {{v}}
+	  {% endfor %}
+	</td>
+  </tr>
+  {% endfor %}
+</table>
+<button id='prev_butt' onclick='change_img(-1)'>Previous</button>
+<button id='next_butt' onclick='change_img(1)'>Next</button>
+<div>
+  <H1 id="song_title">{{photo_list[0]['title']}}</H1>
+  <img id="lyrics" src={{photo_list[0]['path']}}>
+</div>
