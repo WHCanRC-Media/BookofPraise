@@ -101,10 +101,10 @@
   </tr>
 </table>
 {% if photo_list|length > 0 %}
-<button id='prev_butt' onclick='change_img(-1)'>Previous</button>
-<button id='next_butt' onclick='change_img(1)'>Next</button>
+<button id="prev_butt" onclick="change_img(-1)">Previous</button>
+<button id="next_butt" onclick="change_img(1)">Next</button>
 <div>
   <H1 id="song_title">{{photo_list[0]['title']}}</H1>
-  <img id="lyrics" src={{photo_list[0]['path']}}>
+  <img max-height="75%" id="lyrics" src={{photo_list[0]['path']}}>
 </div>
 {% endif %}
