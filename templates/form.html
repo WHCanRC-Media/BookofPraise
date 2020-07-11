@@ -8,11 +8,40 @@
 	})
 	function search_change(form_name){
 	 	$("."+form_name+"_verse_check").hide()
+		$( "."+form_name+"_verse_check" ).prop( "checked", false );
 	 	var p = $("#"+form_name+"_select")[0].value
+
 		vs_json[form_name+'s'][p-1].forEach(function(v_num){
 			$("#"+form_name+"_verse_check_"+v_num).show()
 		})
+	
 	}
+	function checkbox_change(form_name){
+		nocheckbox_checked=$('input[type="checkbox"][class="'+form_name+'_check"]:checked').length==0
+		$("#psalm_submit").prop('disabled',nocheckbox_checked)		
+	}
+	var photo_list = {{photo_list|tojson|safe}}
+	var current_index =0
+	function change_img(incr){
+		max_index=photo_list.length -1
+		next_index = current_index + incr
+		if(next_index<=0){
+			next_index = 0
+			$('#prev_butt').prop('disabled',true)
+		}else{
+			$('#prev_butt').prop('disabled',false)
+		}
+		if(next_index>=max_index){
+			next_index = max_index
+			$('#next_butt').prop('disabled',true)
+		}else{
+			$('#next_butt').prop('disabled',false)
+		}
+		current_index = next_index
+		$('#song_title').html(photo_list[current_index]['title'])
+		$('#lyrics').attr('src', photo_list[current_index]['path'])
+	}
+
   </script>
 
 </head>
@@ -32,13 +61,12 @@
   {% endfor %}
 </table>
 <button onclick="location.href='clear_liturgy'">Clear Liturgy</button>
-<button onclick="location.href='display'">Done</button>
 <table>
 
   <tr>
-	<form action="add_song">
+	<form id="psalm_form" action="add_song">
 	  <td>
-		<input type="submit" value="Add Psalm">
+		<input id="psalm_submit" type="submit" value="Add Psalm" disabled>
 	  </td>
 	  <td>
 		Psalm <input name="psalm_number" type="text" min="1" max="150" id="psalm_select" oninput="search_change('psalm')">
@@ -47,16 +75,16 @@
 		{% for n in range(1,67) %}
 		<div id="psalm_verse_check_{{n}}" class="psalm_verse_check" hidden>
 		  <label for="PV{{n}}">V{{n}}</label>
-		  <input type="checkbox" id="PV{{n}}" name="PV{{n}}">
+		  <input class="psalm_check" type="checkbox" id="PV{{n}}" name="PV{{n}}" onchange="checkbox_change('psalm')">
 		</div>
 		{% endfor %}
 	  </td>
 	</form>
   </tr>
   <tr>
-	<form action="add_song">
+	<form id="hymn_form" action="add_song">
 	  <td>
-		<input type="submit" value="Add Hynm">
+		<input id="hymn_submit" type="submit" value="Add Hynm" disabled>
 	  </td>
 	  <td>
 		Hymn <input name="hymn_number" type="" min="1" max="150" id="hymn_select" oninput="search_change('hymn')">
@@ -65,11 +93,18 @@
 		{% for n in range(1,67) %}
 		<div id="hymn_verse_check_{{n}}" class="hymn_verse_check" hidden>
 		  <label for="HV{{n}}">V{{n}}</label>
-		  <input type="checkbox" id="HV{{n}}" name="HV{{n}}">
+		  <input class="psalm_check" type="checkbox" id="HV{{n}}" name="HV{{n}}" onchange="checkbox_change('hymn')">
 		</div>
 		{% endfor %}
 	  </td>
 	</form>
   </tr>
-</table>	
-</form>
+</table>
+{% if photo_list|length > 0 %}
+<button id='prev_butt' onclick='change_img(-1)'>Previous</button>
+<button id='next_butt' onclick='change_img(1)'>Next</button>
+<div>
+  <H1 id="song_title">{{photo_list[0]['title']}}</H1>
+  <img id="lyrics" src={{photo_list[0]['path']}}>
+</div>
+{% endif %}

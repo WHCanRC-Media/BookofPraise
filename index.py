@@ -33,9 +33,22 @@ def get_liturgy():
 @app.route("/")
 def home():
     current_liturgy = get_liturgy()
+
+    photo_list=[]
     for l in current_liturgy:
-        print(l)
-    resp = flask.make_response(flask.render_template('form.html',liturgy=current_liturgy))
+        song_dir = ("".join(l['song'].split())).lower()
+        for v in l['verses']:
+            verse_list = sorted(glob.glob('photos/'+song_dir+f"/{v}[a-z].png") +
+                                glob.glob('photos/'+song_dir+f"/{v}.png"))
+            
+            for vl in verse_list:                
+                photo_list.append({"title":l['song']+f": {v}",
+                                   "path":vl})
+
+    resp = flask.make_response(flask.render_template('form.html',
+                                                     liturgy=current_liturgy,
+                                                     photo_list=photo_list))
+    
     return resp
 @app.route("/add_song")
 def add_song():
@@ -55,16 +68,6 @@ def clear_liturgy():
 @app.route('/display')
 def display():
     current_liturgy = get_liturgy()
-    photo_list=[]
-    for l in current_liturgy:
-        song_dir = ("".join(l['song'].split())).lower()
-        for v in l['verses']:
-            verse_list = sorted(glob.glob('photos/'+song_dir+f"/{v}[a-z].png") +
-                                glob.glob('photos/'+song_dir+f"/{v}.png"))
-            
-            for vl in verse_list:                
-                photo_list.append({"title":l['song']+f": {v}",
-                                   "path":vl})
     resp = flask.make_response(flask.render_template('display.html',
                                                      liturgy=current_liturgy,
                                                      photo_list=photo_list))
