@@ -23,7 +23,14 @@ def get_resized_image(img_filename):
     
         new_img[pad:pad+img.shape[0],:,:] = img
     
-    new_img=cv2.resize(new_img,(640*2,480*2))
+    new_img=cv2.resize(new_img,(640*4,480*4))
+    #add 1px border
+    new_img[:,-1,:]=0
+    new_img[:,0,:]=0
+    new_img[-1,:,:]=0
+    new_img[0,:,:]=0
+    #invert black/white
+    #new_img=0xFF-new_img
     buf =cv2.imencode('.png',new_img)
     return buf[1].flatten().tobytes()
 
