@@ -74,7 +74,6 @@ def display():
     return resp
 @app.route('/photos/<path:path>')
 def photo_serve(path):
-    print(path)
     import resize
     return resize.get_resized_image('photos/'+path)
 @app.route("/verses.json")

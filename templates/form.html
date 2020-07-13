@@ -37,9 +37,10 @@
 		}else{
 			$('#next_butt').prop('disabled',false)
 		}
+		$("#photo"+current_index+"_div").hide()
 		current_index = next_index
-		$('#song_title').html(photo_list[current_index]['title'])
-		$('#lyrics').attr('src', photo_list[current_index]['path'])
+		$("#photo"+current_index+"_div").show()
+
 	}
 
   </script>
@@ -100,11 +101,13 @@
 	</form>
   </tr>
 </table>
-{% if photo_list|length > 0 %}
+{% if photo_list|length  %}
 <button id="prev_butt" onclick="change_img(-1)">Previous</button>
 <button id="next_butt" onclick="change_img(1)">Next</button>
-<div>
-  <H1 id="song_title">{{photo_list[0]['title']}}</H1>
-  <img height="60%" id="lyrics" src={{photo_list[0]['path']}}>
-</div>
 {% endif %}
+{% for photo in photo_list %}
+<div id=photo{{loop.index-1}}_div {% if loop.index != 1 %}hidden {% endif %}>
+  <H1 id="song_title">{{photo['title']}}</H1>
+  <img height="60%" id="lyrics" src={{photo['path']}}>
+</div>
+{% endfor %}
