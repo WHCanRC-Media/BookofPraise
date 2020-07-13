@@ -18,7 +18,7 @@
 	}
 	function checkbox_change(form_name){
 		nocheckbox_checked=$('input[type="checkbox"][class="'+form_name+'_check"]:checked').length==0
-		$("#psalm_submit").prop('disabled',nocheckbox_checked)		
+		$("#"+form_name+"_submit").prop('disabled',nocheckbox_checked)		
 	}
 	var photo_list = {{photo_list|tojson|safe}}
 	var current_index =0
@@ -93,7 +93,7 @@
 		{% for n in range(1,67) %}
 		<div id="hymn_verse_check_{{n}}" class="hymn_verse_check" hidden>
 		  <label for="HV{{n}}">V{{n}}</label>
-		  <input class="psalm_check" type="checkbox" id="HV{{n}}" name="HV{{n}}" onchange="checkbox_change('hymn')">
+		  <input class="hymn_check" type="checkbox" id="HV{{n}}" name="HV{{n}}" onchange="checkbox_change('hymn')">
 		</div>
 		{% endfor %}
 	  </td>
@@ -105,6 +105,6 @@
 <button id="next_butt" onclick="change_img(1)">Next</button>
 <div>
   <H1 id="song_title">{{photo_list[0]['title']}}</H1>
-  <img max-height="75%" id="lyrics" src={{photo_list[0]['path']}}>
+  <img height="60%" id="lyrics" src={{photo_list[0]['path']}}>
 </div>
 {% endif %}
