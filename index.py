@@ -74,8 +74,7 @@ def display():
     return resp
 @app.route('/photos/<path:path>')
 def photo_serve(path):
-    import resize
-    return resize.get_resized_image('photos/'+path)
+    return flask.send_from_directory('photos', path)
 @app.route("/verses.json")
 def verses_json():
     d = {
@@ -84,4 +83,4 @@ def verses_json():
         }
     return json.dumps(d)
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0",port=5000,debug=True) 

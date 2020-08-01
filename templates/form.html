@@ -44,70 +44,114 @@
 	}
 
   </script>
+  <style>
+	#everything {
+		width:90%;
+		position:absolute;
+		bottom:0;
+		left:5%;
+					 
+	}
+	#song-container {
+		padding-top:75%;
+		width:100%;
+		position:relative;
+	}
 
+	#song-border {
+		margin-top:30px;
+		margin-bottom:30px;
+		border-style: solid;
+		border-color: black;
+		position: absolute;
+		top: 0;
+		left: 0;
+		bottom: 0;
+		right: 0; 
+	}
+	h1.song-title{
+		height:5%;
+		text-align:center;
+	}
+	img{
+		margin:auto;
+		height:80%;
+		display:block;
+		max-width:100%;
+		object-fit: contain;
+	}
+  </style>
 </head>
 <title>Setup</title>
-<table id="liturgy table">
-  {% for s in liturgy %}
-  <tr>
-	<td>
-	  {{s['song']}}:
-	</td>
-	<td>
-	  {% for v in s['verses'] %}
-	  {{v}}
-	  {% endfor %}
-	</td>
-  </tr>
-  {% endfor %}
-</table>
-<button onclick="location.href='clear_liturgy'">Clear Liturgy</button>
-<table>
+<div id="everything">
 
-  <tr>
-	<form id="psalm_form" action="add_song">
+  <table id="liturgy table">
+	{% for s in liturgy %}
+	<tr>
 	  <td>
-		<input id="psalm_submit" type="submit" value="Add Psalm" disabled>
+		{{s['song']}}:
 	  </td>
 	  <td>
-		Psalm <input name="psalm_number" type="text" min="1" max="150" id="psalm_select" oninput="search_change('psalm')">
-	  </td>
-	  <td>
-		{% for n in range(1,67) %}
-		<div id="psalm_verse_check_{{n}}" class="psalm_verse_check" hidden>
-		  <label for="PV{{n}}">V{{n}}</label>
-		  <input class="psalm_check" type="checkbox" id="PV{{n}}" name="PV{{n}}" onchange="checkbox_change('psalm')">
-		</div>
+		{% for v in s['verses'] %}
+		{{v}}
 		{% endfor %}
 	  </td>
-	</form>
-  </tr>
-  <tr>
-	<form id="hymn_form" action="add_song">
-	  <td>
-		<input id="hymn_submit" type="submit" value="Add Hynm" disabled>
-	  </td>
-	  <td>
-		Hymn <input name="hymn_number" type="" min="1" max="150" id="hymn_select" oninput="search_change('hymn')">
-	  </td>
-	  <td>
-		{% for n in range(1,67) %}
-		<div id="hymn_verse_check_{{n}}" class="hymn_verse_check" hidden>
-		  <label for="HV{{n}}">V{{n}}</label>
-		  <input class="hymn_check" type="checkbox" id="HV{{n}}" name="HV{{n}}" onchange="checkbox_change('hymn')">
-		</div>
-		{% endfor %}
-	  </td>
-	</form>
-  </tr>
-</table>
-{% if photo_list|length  %}
-<button id="prev_butt" onclick="change_img(-1)">Previous</button>
-<button id="next_butt" onclick="change_img(1)">Next</button>
-{% endif %}
-{% for photo in photo_list %}
-<div id=photo{{loop.index-1}}_div {% if loop.index != 1 %}hidden {% endif %}>
-  <H1 id="song_title">{{photo['title']}}</H1>
-  <img height="60%" id="lyrics" src={{photo['path']}}>
+	</tr>
+	{% endfor %}
+  </table>
+  <button onclick="location.href='clear_liturgy'">Clear Liturgy</button>
+  <table>
+
+	<tr>
+	  <form id="psalm_form" action="add_song">
+		<td>
+		  <input id="psalm_submit" type="submit" value="Add Psalm" disabled>
+		</td>
+		<td>
+		  Psalm <input name="psalm_number" type="text" min="1" max="150" id="psalm_select" oninput="search_change('psalm')">
+		</td>
+		<td>
+		  {% for n in range(1,67) %}
+		  <div id="psalm_verse_check_{{n}}" class="psalm_verse_check" hidden>
+			<label for="PV{{n}}">V{{n}}</label>
+			<input class="psalm_check" type="checkbox" id="PV{{n}}" name="PV{{n}}" onchange="checkbox_change('psalm')">
+		  </div>
+		  {% endfor %}
+		</td>
+	  </form>
+	</tr>
+	<tr>
+	  <form id="hymn_form" action="add_song">
+		<td>
+		  <input id="hymn_submit" type="submit" value="Add Hynm" disabled>
+		</td>
+		<td>
+		  Hymn <input name="hymn_number" type="" min="1" max="150" id="hymn_select" oninput="search_change('hymn')">
+		</td>
+		<td>
+		  {% for n in range(1,67) %}
+		  <div id="hymn_verse_check_{{n}}" class="hymn_verse_check" hidden>
+			<label for="HV{{n}}">V{{n}}</label>
+			<input class="hymn_check" type="checkbox" id="HV{{n}}" name="HV{{n}}" onchange="checkbox_change('hymn')">
+		  </div>
+		  {% endfor %}
+		</td>
+	  </form>
+	</tr>
+  </table>
+  {% if photo_list|length  %}
+  <button id="prev_butt" onclick="change_img(-1)">Previous</button>
+  <button id="next_butt" onclick="change_img(1)">Next</button>
+  <div id="song-container">
+	<div id="song-border">
+	  {% endif %}
+	  {% for photo in photo_list %}
+	  <div id=photo{{loop.index-1}}_div {% if loop.index != 1 %}hidden {% endif %}>
+		<H1 class="song-title">{{photo['title']}}</H1>
+		<img id="lyrics{{loop.index-1}}" src={{photo['path']}}>
+		
+	  </div>
+	  {% endfor %}
+	</div>
+  </div>
 </div>
-{% endfor %}
