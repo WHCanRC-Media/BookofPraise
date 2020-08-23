@@ -72,9 +72,24 @@ def display():
                                                      liturgy=current_liturgy,
                                                      photo_list=photo_list))
     return resp
-@app.route('/photos/<path:path>')
+@app.route('/_photos/<path:path>')
 def photo_serve(path):
     return flask.send_from_directory('photos', path)
+@app.route('/photos/<path:path>')
+def cropped_photo_serve(path):
+    import photo,io
+    img = photo.crop_to_content(path)
+    #return flask.send_file(
+    #    io.BytesIO(img),
+    #    mimetype="image/png")
+        
+    response = flask.make_response(img)
+    response.headers.set('Content-Type', 'image/png')
+    #response.headers.set(
+    #    'Content-Disposition', 'attachment', filename=f'photos/{path}.jpg' )
+    return response
+    
+
 @app.route("/verses.json")
 def verses_json():
     d = {
