@@ -1,10 +1,15 @@
 import cv2
 import numpy as np
+import sys
+if getattr(sys,'frozen',False):
+    #running in bundle
+    work_dir = sys._MEIPASS
+else:
+    work_dir = os.path.dirname(__file__)
 
 def crop_to_content(filename):
-    img_filename="photos/"+filename
+    img_filename=work_dir+"/photos/"+filename
     img = cv2.imread(img_filename)
-    print(img_filename)
     top_row=0
     bot_row=-1
     for r in range(img.shape[1]):

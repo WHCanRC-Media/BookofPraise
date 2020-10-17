@@ -2,7 +2,16 @@ import flask
 import form
 import json
 import glob
-app = flask.Flask(__name__)
+import platform
+import os,sys
+if getattr(sys,'frozen',False):
+    #running in bundle
+    work_dir = sys._MEIPASS
+else:
+    work_dir = os.path.dirname(__file__)
+template_dir=os.path.join(work_dir,'templates')
+app = flask.Flask(__name__,
+                  template_folder=template_dir)
 
 def update_liturgy(current_liturgy,update_request):
     import re
@@ -38,13 +47,12 @@ def home():
     for l in current_liturgy:
         song_dir = ("".join(l['song'].split())).lower()
         for v in l['verses']:
-            verse_list = sorted(glob.glob('photos/'+song_dir+f"/{v}[a-z].png") +
-                                glob.glob('photos/'+song_dir+f"/{v}.png"))
-            
+            verse_list = sorted(glob.glob(work_dir+'/photos/'+song_dir+f"/{v}[a-z].png") +
+                                glob.glob(work_dir+'/photos/'+song_dir+f"/{v}.png"))
+            verse_list = [ v[len(work_dir):] for v in verse_list]
             for vl in verse_list:                
                 photo_list.append({"title":l['song']+f": {v}",
                                    "path":vl})
-
     resp = flask.make_response(flask.render_template('form.html',
                                                      liturgy=current_liturgy,
                                                      photo_list=photo_list))
@@ -97,5 +105,17 @@ def verses_json():
         'psalms':form.psalm_array
         }
     return json.dumps(d)
+def runwebview():
+    import time
+    import webbrowser
+    time.sleep(3)
+    webbrowser.open_new_tab('http://localhost:5000')
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0",port=5000) 
+    import threading
+    t=threading.Thread(target=runwebview)
+    t.start()
+    try:
+        app.run(port=5000)
+    except OSError:
+        t.join()
