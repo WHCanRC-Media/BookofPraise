@@ -1,1 +1,4 @@
-rm -rf dist ; pyinstaller -F  --add-data templates:templates --add-data photos:photos index.py 
+rm -rf dist ; pyinstaller -F  --add-data templates:templates --add-data photos:photos index.py
+
+pyinstaller -n BookofPraise -i icon.ico -F -w --add-data "photos;photos" --add-data "templates;templates" index.py
+

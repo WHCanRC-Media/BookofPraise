@@ -9,7 +9,7 @@ if getattr(sys,'frozen',False):
     #running in bundle
     work_dir = sys._MEIPASS
 else:
-    work_dir = os.path.dirname(__file__)
+    work_dir = os.path.dirname(os.path.abspath(__file__))
 for i,p in enumerate(psalm_array):
     for v in range(70):#at least 66 (psalm119)
         if glob.glob(f'{work_dir}/photos/psalm{i+1}/{v}.png'):

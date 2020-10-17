@@ -1,11 +1,11 @@
 import cv2
 import numpy as np
-import sys
+import os,sys
 if getattr(sys,'frozen',False):
     #running in bundle
     work_dir = sys._MEIPASS
 else:
-    work_dir = os.path.dirname(__file__)
+    work_dir = os.path.dirname(os.path.abspath(__file__))
 
 def crop_to_content(filename):
     img_filename=work_dir+"/photos/"+filename

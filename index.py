@@ -8,7 +8,8 @@ if getattr(sys,'frozen',False):
     #running in bundle
     work_dir = sys._MEIPASS
 else:
-    work_dir = os.path.dirname(__file__)
+    work_dir = os.path.dirname(os.path.abspath(__file__))
+
 template_dir=os.path.join(work_dir,'templates')
 app = flask.Flask(__name__,
                   template_folder=template_dir)
