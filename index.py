@@ -51,8 +51,9 @@ def home():
             verse_list = sorted(glob.glob(work_dir+'/photos/'+song_dir+f"/{v}[a-z].png") +
                                 glob.glob(work_dir+'/photos/'+song_dir+f"/{v}.png"))
             verse_list = [ v[len(work_dir):] for v in verse_list]
-            for vl in verse_list:                
-                photo_list.append({"title":l['song']+f": {v}",
+            for vl in verse_list:
+                verse_name = os.path.splitext(os.path.basename(vl))[0]
+                photo_list.append({"title":f"{l['song']}: {verse_name}",
                                    "path":vl})
     resp = flask.make_response(flask.render_template('form.html',
                                                      liturgy=current_liturgy,
@@ -106,17 +107,19 @@ def verses_json():
         'psalms':form.psalm_array
         }
     return json.dumps(d)
+
+PORT=5000
 def runwebview():
     import time
     import webbrowser
     time.sleep(3)
-    webbrowser.open_new_tab('http://localhost:5000')
+    webbrowser.open_new_tab('http://localhost:{}'.format(PORT))
 
 if __name__ == "__main__":
     import threading
     t=threading.Thread(target=runwebview)
     t.start()
     try:
-        app.run(port=5000)
+        app.run(host='0.0.0.0',port=PORT)
     except OSError:
         t.join()
