@@ -4,6 +4,7 @@ import json
 import glob
 import platform
 import os,sys
+import argparse
 if getattr(sys,'frozen',False):
     #running in bundle
     work_dir = sys._MEIPASS
@@ -116,9 +117,14 @@ def runwebview():
     webbrowser.open_new_tab('http://localhost:{}'.format(PORT))
 
 if __name__ == "__main__":
-    import threading
-    t=threading.Thread(target=runwebview)
-    t.start()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--no-window',action='store_true')
+    args = parser.parse_args()
+    print(args)
+    if not args.no_window:
+        import threading
+        t=threading.Thread(target=runwebview)
+        t.start()        
     try:
         app.run(host='0.0.0.0',port=PORT)
     except OSError:
