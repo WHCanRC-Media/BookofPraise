@@ -29,7 +29,8 @@ def update_liturgy(current_liturgy,update_request):
     liturgy_line= { 'song' : song,
                     'verses' : []
                     }
-    for v in range(66):
+    MAX_VERSES=66
+    for v in range(MAX_VERSES+1):
         k = f"{ph}V{v}"
         if k in update_request.args and update_request.args.get(k) == 'on':
             liturgy_line['verses'].append(str(v))
