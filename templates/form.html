@@ -107,7 +107,9 @@
 	height:5%;
 	text-align:center;
     }
-
+    .verselistnotcurrent{
+        color : grey;
+    }
     img{
 	margin:auto;
 	height:80%;
@@ -183,7 +185,11 @@
     {% endif %}
     {% for photo in photo_list %}
     <div id=photo{{loop.index-1}}_div {% if loop.index != 1 %}hidden {% endif %}>
-      <H1 class="song-title">{{photo['title']}}</H1>
+      <H1 class="song-title">{{photo['title']}}
+        <span class="verselistnotcurrent">{{photo['verselistbefore']}}</span>
+        <span class="verselistcurrent">{{photo['verselistcurrent']}}</span>
+        <span class="verselistnotcurrent">{{photo['verselistafter']}}</span>
+      </H1>
       <img id="lyrics{{loop.index-1}}" src={{photo['path']}}>
       
     </div>

@@ -6,6 +6,7 @@ import platform
 import os,sys
 import argparse
 import time
+import string
 if getattr(sys,'frozen',False):
     #running in bundle
     work_dir = sys._MEIPASS
@@ -63,13 +64,19 @@ def home():
     photo_list=[]
     for l in current_liturgy:
         song_dir = ("".join(l['song'].split())).lower()
-        for v in l['verses']:
+        for i,v in enumerate(l['verses']):
+            
+            verses_before = [_ for _ in l['verses'][:i] ]
+            verses_after = [_ for _ in l['verses'][i+1:]]
             verse_list = sorted(glob.glob(work_dir+'/photos/'+song_dir+f"/{v}[a-z].png") +
                                 glob.glob(work_dir+'/photos/'+song_dir+f"/{v}.png"))
             verse_list = [ v[len(work_dir):] for v in verse_list]
             for vl in verse_list:
-                verse_name = os.path.splitext(os.path.basename(vl))[0]
-                photo_list.append({"title":f"{l['song']}: {verse_name}",
+                current_verse = os.path.splitext(os.path.basename(vl))[0]
+                photo_list.append({"title":f"{l['song']}: ",
+                                   "verselistbefore":" ".join(verses_before),
+                                   "verselistcurrent":current_verse,
+                                   "verselistafter":" ".join(verses_after),
                                    "path":vl})
     resp = flask.make_response(flask.render_template('form.html',
                                                      liturgy=current_liturgy,
