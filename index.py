@@ -5,6 +5,7 @@ import glob
 import platform
 import os,sys
 import argparse
+import time
 if getattr(sys,'frozen',False):
     #running in bundle
     work_dir = sys._MEIPASS
@@ -14,18 +15,31 @@ else:
 template_dir=os.path.join(work_dir,'templates')
 app = flask.Flask(__name__,
                   template_folder=template_dir)
-
+def record_hymn_usage(h_num):
+    record_file=os.path.expanduser("~/Desktop/HymnUsage.txt")
+    try:
+        lines=open(record_file).readlines()
+    except FileNotFoundError:
+        lines=[]
+    use_line = time.strftime(f"%b-%d-%Y H{h_num}\n")
+    if use_line not in lines:
+        lines.append(use_line)
+    with open(record_file,"w") as of:
+        of.writelines(lines)
 def update_liturgy(current_liturgy,update_request):
     import re
     if 'psalm_number' in update_request.args:
         ph = 'P'
         song = 'Psalm '+ update_request.args.get('psalm_number')
     elif 'hymn_number' in update_request.args:
-        ph = 'H'        
-        song = 'Hymn '+update_request.args.get('hymn_number')
+        ph = 'H'
+        song_num = int(update_request.args.get('hymn_number'))
+        song = f'Hymn {song_num}'
+        if song_num in (38,50,66,79):
+            record_hymn_usage(song_num)
     else:
         return
-
+    
     liturgy_line= { 'song' : song,
                     'verses' : []
                     }
@@ -110,7 +124,7 @@ def verses_json():
         }
     return json.dumps(d)
 
-PORT=5000
+PORT=5001
 def runwebview():
     import time
     import webbrowser
