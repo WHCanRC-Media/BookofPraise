@@ -158,12 +158,12 @@
   <tr>
     <form id="hymn_form" action="add_song">
       <td>
-	<input id="hymn_submit" type="submit" value="Add Hynm" disabled>
+	<input id="hymn_submit" type="submit" value="Add Hymn" disabled>
       </td>
       <td>
 	Hymn <input name="hymn_number" type="" min="1" max="150" id="hymn_select" oninput="search_change('hymn')">
       </td>
-      <td><input id="h_all" type="button" value="All" style="display: none;" onclick="enable_all('hymn')"></td>
+      <td><input id="hymn_all" type="button" value="All" style="display: none;" onclick="enable_all('hymn')"></td>
       <td>
 	{% for n in range(1,67) %}
 	<div id="hymn_verse_check_{{n}}" class="hymn_verse_check" style="display: none;">
