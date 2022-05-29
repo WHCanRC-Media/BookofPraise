@@ -26,14 +26,10 @@
             return
         }
         var v = {"psalm":"PV","hymn":"HV"}[form_name]
-        var check = true
-        if ($("#"+v+1).prop("checked")){
-            check = false
-        }
 	vs_json[form_name+'s'][p-1].forEach(function(v_num){
-	    $("#"+v+v_num).prop("checked",check)
+	    $("#"+v+v_num).prop("checked",true)
 	})
-        checkbox_change(form_name)
+	$("#"+form_name+"_form").submit()
     }
     function checkbox_change(form_name){
 	nocheckbox_checked=$('input[type="checkbox"][class="'+form_name+'_check"]:checked').length==0
