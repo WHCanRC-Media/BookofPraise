@@ -108,6 +108,10 @@ def display():
 @app.route('/_photos/<path:path>')
 def photo_serve(path):
     return flask.send_from_directory('photos', path)
+@app.route('/jquery.min.js')
+def jquery_serve():
+    return flask.send_file("jquery.min.js")
+
 @app.route('/photos/<path:path>')
 def cropped_photo_serve(path):
     import photo,io
