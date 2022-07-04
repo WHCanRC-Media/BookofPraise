@@ -71,8 +71,12 @@ def home():
             verse_list = sorted(glob.glob(work_dir+'/photos/'+song_dir+f"/{v}[a-z].png") +
                                 glob.glob(work_dir+'/photos/'+song_dir+f"/{v}.png"))
             verse_list = [ v[len(work_dir):] for v in verse_list]
+            denom = {1:'',2:'⁄₂',3:'⁄₃'}[len(verse_list)]
             for vl in verse_list:
                 current_verse = os.path.splitext(os.path.basename(vl))[0]
+                current_verse=current_verse.replace('a','¹'+denom)
+                current_verse=current_verse.replace('b','²'+denom)
+                current_verse=current_verse.replace('c','³'+denom)
                 photo_list.append({"title":f"{l['song']}: ",
                                    "verselistbefore":" ".join(verses_before),
                                    "verselistcurrent":current_verse,
