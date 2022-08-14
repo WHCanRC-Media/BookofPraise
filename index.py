@@ -17,7 +17,10 @@ template_dir=os.path.join(work_dir,'templates')
 app = flask.Flask(__name__,
                   template_folder=template_dir)
 def record_hymn_usage(h_num):
-    record_file=os.path.expanduser("~/Desktop/HymnUsage.txt")
+    record_file="~/Desktop/HymnUsage.txt"
+    if os.environ.get('HYMN_USAGE_TXT') is not None:
+        record_file=os.environ.get('HYMN_USAGE_TXT')        
+    record_file = os.path.expanduser(record_file)
     try:
         lines=open(record_file).readlines()
     except FileNotFoundError:
