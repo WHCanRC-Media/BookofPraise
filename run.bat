@@ -5,9 +5,7 @@ cd %SCRIPT_DIR%
 py -m venv venv
 
 call venv\bin\activate.bat
-py -m pip install --upgrade pip
-py -m pip install opencv-python
-py -m pip install flask
+py -m pip install --quiet --upgrade pip opencv-python flask
 
-set HYMN_USAGE_TXT=~/test.txt
+REM set HYMN_USAGE_TXT=~/test.txt
 py index.py

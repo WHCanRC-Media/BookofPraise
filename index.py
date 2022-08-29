@@ -150,6 +150,9 @@ def runwebview():
     webbrowser.open_new_tab('http://localhost:{}'.format(PORT))
 
 if __name__ == "__main__":
+    if os.environ.get('HYMN_USAGE_TXT') is None:
+        sys.stderr.write("ERROR: environment varible HYMN_USAGE_TXT is not set\n")
+        sys.exit(1)
     parser = argparse.ArgumentParser()
     parser.add_argument('--no-window',action='store_true')
     args = parser.parse_args()
