@@ -17,7 +17,6 @@ import numpy as np
 # Add parent dir so we can find audiveris
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(SCRIPT_DIR)
-AUDIVERIS_DIR = os.path.join(REPO_DIR, "audiveris")
 
 sys.path.insert(0, SCRIPT_DIR)
 from png2ly import (
@@ -74,7 +73,7 @@ def find_psalm_input(psalm_dir):
 
 def process_psalm(args):
     """Run the full png2ly pipeline on a single image. Returns (psalm_name, status, elapsed)."""
-    png_path, out_ly, audiveris_dir, concat_save_path = args
+    png_path, out_ly, concat_save_path = args
     psalm_name = os.path.basename(os.path.dirname(
         out_ly if not concat_save_path else out_ly
     ))
@@ -88,7 +87,7 @@ def process_psalm(args):
         all_line_data = []
         for line_path in line_paths:
             try:
-                mxl_path = run_audiveris(line_path, tmpdir, audiveris_dir)
+                mxl_path = run_audiveris(line_path, tmpdir)
                 xml_path = extract_mxl(mxl_path, tmpdir)
                 notes, key_fifths = parse_musicxml(xml_path)
                 all_line_data.append((notes, key_fifths))
@@ -155,9 +154,9 @@ def main():
             os.makedirs(out_dir, exist_ok=True)
             concat_path = os.path.join(out_dir, "1.png")
             concatenate_images_vertically(parts, concat_path)
-            work.append((concat_path, out_ly, AUDIVERIS_DIR, concat_path))
+            work.append((concat_path, out_ly, concat_path))
         elif png_path:
-            work.append((png_path, out_ly, AUDIVERIS_DIR, None))
+            work.append((png_path, out_ly, None))
         else:
             print(f"  SKIP {psalm_name} (no 1.png or 1a.png)")
 

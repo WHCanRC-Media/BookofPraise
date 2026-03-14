@@ -146,19 +146,22 @@ def crop_lines(img_path, systems, img_height, output_dir, pad=40):
     return paths
 
 
-def run_audiveris(line_path, output_dir, audiveris_dir):
+AUDIVERIS_BIN = "/opt/audiveris/bin/Audiveris"
+
+
+def run_audiveris(line_path, output_dir, audiveris_dir=None):
     """Run Audiveris on a single line image, return path to .mxl file."""
     cmd = [
-        os.path.join(audiveris_dir, "gradlew"),
-        "--no-daemon",
-        "run",
-        f"--args=-batch -export -output {output_dir} {line_path}",
+        AUDIVERIS_BIN,
+        "-batch",
+        "-export",
+        "-output", output_dir,
+        line_path,
     ]
     result = subprocess.run(
-        cmd, capture_output=True, text=True, cwd=audiveris_dir, timeout=120
+        cmd, capture_output=True, text=True, timeout=120
     )
     if result.returncode != 0:
-        # Check for common errors
         stderr = result.stdout + result.stderr
         if "Could not find file" in stderr:
             raise FileNotFoundError(f"Audiveris could not find: {line_path}")
@@ -440,11 +443,6 @@ def main():
     parser.add_argument("-o", "--output", help="Output .ly file path")
     parser.add_argument("--lyrics", help="Path to lyrics text file (LilyPond lyricmode format)")
     parser.add_argument("--no-lyrics", action="store_true", help="Skip lyrics extraction")
-    parser.add_argument(
-        "--audiveris-dir",
-        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "audiveris"),
-        help="Path to Audiveris source directory (default: ./audiveris)",
-    )
     parser.add_argument("--render", action="store_true", help="Render SVG via lilypond")
     parser.add_argument("--composer", help="Composer attribution (auto-extracted if not provided)")
     parser.add_argument("--pad", type=int, default=40, help="Padding pixels above/below staff (default: 40)")
@@ -454,11 +452,6 @@ def main():
     input_path = os.path.abspath(args.input)
     if not os.path.exists(input_path):
         print(f"Error: {input_path} not found", file=sys.stderr)
-        sys.exit(1)
-
-    audiveris_dir = os.path.abspath(args.audiveris_dir)
-    if not os.path.exists(os.path.join(audiveris_dir, "gradlew")):
-        print(f"Error: Audiveris not found at {audiveris_dir}", file=sys.stderr)
         sys.exit(1)
 
     if args.output:
@@ -495,7 +488,7 @@ def main():
             t0 = time.time()
             print(f"  Processing line {i + 1}/{len(line_paths)}...", end="", flush=True)
             try:
-                mxl_path = run_audiveris(line_path, tmpdir, audiveris_dir)
+                mxl_path = run_audiveris(line_path, tmpdir)
                 xml_path = extract_mxl(mxl_path, tmpdir)
                 notes, key_fifths = parse_musicxml(xml_path)
                 all_line_data.append((notes, key_fifths))
