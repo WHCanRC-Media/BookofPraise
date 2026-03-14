@@ -42,7 +42,7 @@ def extract_composer_with_claude(img_path):
         ["claude", "-p", f"Read the image at {img_path} and then: {prompt}"],
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=120,
     )
     if result.returncode != 0:
         return None
@@ -73,7 +73,7 @@ def extract_lyrics_with_claude(img_path, num_notes_per_line):
         ["claude", "-p", f"Read the image at {img_path} and then: {prompt}"],
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=120,
     )
     if result.returncode != 0:
         print(f"  Warning: claude failed: {result.stderr}", file=sys.stderr)
