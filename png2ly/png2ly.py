@@ -395,6 +395,7 @@ verse = \\lyricmode {{
   \\clef treble
   {key_str}
   \\cadenzaOn
+  \\omit Staff.TimeSignature
 
 {melody_block}}}
 {lyrics_block}
