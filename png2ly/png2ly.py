@@ -30,6 +30,29 @@ import cv2
 import numpy as np
 
 
+def extract_composer_with_claude(img_path):
+    """Use claude CLI to extract the composer/tune attribution from the image."""
+    prompt = (
+        "Look at this hymn/psalm sheet music image. "
+        "Extract ONLY the composer or tune attribution text "
+        "(usually in the top right corner, e.g. 'Strasbourg, 1539 / Geneva, 1551'). "
+        "Output nothing except the attribution text. No explanation."
+    )
+    result = subprocess.run(
+        ["claude", "-p", f"Read the image at {img_path} and then: {prompt}"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        return None
+    text = result.stdout.strip()
+    # Strip quotes if wrapped
+    if text.startswith('"') and text.endswith('"'):
+        text = text[1:-1]
+    return text if text else None
+
+
 def extract_lyrics_with_claude(img_path, num_notes_per_line):
     """Use claude CLI to extract lyrics from the image in LilyPond lyricmode format."""
     notes_info = ", ".join(str(n) for n in num_notes_per_line)
@@ -352,7 +375,7 @@ def relative_header(fifths):
     return "c''"
 
 
-def build_lilypond(all_lines, key_fifths, title=None, composer=None, lyrics=None):
+def build_lilypond(all_lines, key_fifths, composer=None, lyrics=None):
     """Assemble all lines into a complete LilyPond file."""
     key_str = fifths_to_lilypond_key(key_fifths)
 
@@ -368,14 +391,11 @@ def build_lilypond(all_lines, key_fifths, title=None, composer=None, lyrics=None
     melody_block = "\n".join(lines_ly)
 
     header = ""
-    if title or composer:
-        header_items = []
-        if title:
-            header_items.append(f'  title = "{title}"')
-        if composer:
-            header_items.append(f'  composer = "{composer}"')
-        header_items.append("  tagline = ##f")
-        header = "\\header {\n" + "\n".join(header_items) + "\n}\n\n"
+    header_items = []
+    if composer:
+        header_items.append(f'  composer = "{composer}"')
+    header_items.append("  tagline = ##f")
+    header = "\\header {\n" + "\n".join(header_items) + "\n}\n\n"
 
     lyrics_block = ""
     if lyrics:
@@ -426,8 +446,7 @@ def main():
         help="Path to Audiveris source directory (default: ./audiveris)",
     )
     parser.add_argument("--render", action="store_true", help="Render PDF via lilypond")
-    parser.add_argument("--title", help="Title for the score")
-    parser.add_argument("--composer", help="Composer attribution")
+    parser.add_argument("--composer", help="Composer attribution (auto-extracted if not provided)")
     parser.add_argument("--pad", type=int, default=40, help="Padding pixels above/below staff (default: 40)")
     parser.add_argument("--keep-temp", action="store_true", help="Keep temporary files for debugging")
     args = parser.parse_args()
@@ -495,7 +514,18 @@ def main():
             corrected = apply_key_signature(notes, global_key)
             all_lines.append(corrected)
 
-        # Step 5b: Extract lyrics with Claude if not provided
+        # Step 5b: Extract composer with Claude if not provided
+        composer = args.composer
+        if composer is None:
+            t0 = time.time()
+            print("Extracting composer with Claude...", end="", flush=True)
+            composer = extract_composer_with_claude(input_path)
+            if composer:
+                print(f" '{composer}' [{time.time() - t0:.1f}s]")
+            else:
+                print(f" not found [{time.time() - t0:.1f}s]")
+
+        # Step 5c: Extract lyrics with Claude if not provided
         if lyrics is None and not args.no_lyrics:
             t0 = time.time()
             print("Extracting lyrics with Claude...", end="", flush=True)
@@ -514,8 +544,7 @@ def main():
         ly_content = build_lilypond(
             all_lines,
             global_key,
-            title=args.title,
-            composer=args.composer,
+            composer=composer,
             lyrics=lyrics,
         )
 
