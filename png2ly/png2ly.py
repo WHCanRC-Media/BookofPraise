@@ -445,7 +445,7 @@ def main():
         default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "audiveris"),
         help="Path to Audiveris source directory (default: ./audiveris)",
     )
-    parser.add_argument("--render", action="store_true", help="Render PDF via lilypond")
+    parser.add_argument("--render", action="store_true", help="Render SVG via lilypond")
     parser.add_argument("--composer", help="Composer attribution (auto-extracted if not provided)")
     parser.add_argument("--pad", type=int, default=40, help="Padding pixels above/below staff (default: 40)")
     parser.add_argument("--keep-temp", action="store_true", help="Keep temporary files for debugging")
@@ -551,20 +551,20 @@ def main():
         with open(output_path, "w") as f:
             f.write(ly_content)
 
-        # Step 8: Render PDF
+        # Step 8: Render SVG
         if args.render:
             t0 = time.time()
-            print("Rendering PDF...", end="", flush=True)
+            print("Rendering SVG...", end="", flush=True)
             abs_output = os.path.abspath(output_path)
             result = subprocess.run(
-                ["lilypond", abs_output],
+                ["lilypond", "-dbackend=svg", abs_output],
                 capture_output=True,
                 text=True,
                 cwd=os.path.dirname(abs_output),
             )
             if result.returncode == 0:
-                pdf_path = os.path.splitext(output_path)[0] + ".pdf"
-                print(f" {pdf_path} [{time.time() - t0:.1f}s]")
+                svg_path = os.path.splitext(output_path)[0] + ".svg"
+                print(f" {svg_path} [{time.time() - t0:.1f}s]")
             else:
                 print(f" error [{time.time() - t0:.1f}s]", file=sys.stderr)
                 print(f"  LilyPond error: {result.stderr}", file=sys.stderr)
