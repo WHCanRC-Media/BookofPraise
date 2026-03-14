@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import xml.etree.ElementTree as ET
 
 import cv2
@@ -46,7 +47,7 @@ def extract_lyrics_with_claude(img_path, num_notes_per_line):
         "- Output nothing except the lyricmode content (no \\lyricmode wrapper, no explanation)"
     )
     result = subprocess.run(
-        ["claude", "-p", prompt, img_path],
+        ["claude", "-p", f"Read the image at {img_path} and then: {prompt}"],
         capture_output=True,
         text=True,
         timeout=60,
@@ -56,13 +57,30 @@ def extract_lyrics_with_claude(img_path, num_notes_per_line):
         return None
     text = result.stdout.strip()
     # Strip markdown code fences if present
-    for fence in ["```lilypond", "```ly", "```"]:
-        if text.startswith(fence):
-            text = text[len(fence):]
-            break
-    if text.endswith("```"):
-        text = text[:-3]
-    return text.strip()
+    # Find the last code fence block if there is one
+    if "```" in text:
+        blocks = text.split("```")
+        # Look for the content between the last pair of fences
+        # blocks alternate: text, code, text, code, ...
+        for i in range(len(blocks) - 1, 0, -1):
+            candidate = blocks[i].strip()
+            # Skip fence language markers
+            for prefix in ["lilypond", "ly", "text"]:
+                if candidate.startswith(prefix):
+                    candidate = candidate[len(prefix):].strip()
+            if candidate and "--" in candidate:
+                return candidate
+    # If no code fences, try to extract just the lyrics lines
+    # Filter out lines that look like explanation rather than lyrics
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        # Skip empty lines, bullet points, explanations
+        if not line or line.startswith("-") or line.startswith("*") or ":" in line[:20]:
+            continue
+        lines.append(line)
+    return "\n".join(lines) if lines else text
+
 
 
 def detect_staff_systems(img_path):
@@ -341,18 +359,9 @@ def build_lilypond(all_lines, key_fifths, title=None, composer=None, lyrics=None
     lines_ly = []
     for i, line_notes in enumerate(all_lines):
         ly = notes_to_lilypond_relative(line_notes)
-        # Use double barline between lines, final barline at end
         if i < len(all_lines) - 1:
-            # Check if line already ends with rest (breve rest = phrase end)
-            if line_notes and line_notes[-1]["is_rest"]:
-                # Remove trailing rest and add double barline
-                tokens = ly.rsplit(" ", 1)
-                ly = tokens[0] if len(tokens) > 1 else ly
-            ly += ' \\bar "||" \\break'
+            ly += ' \\break'
         else:
-            if line_notes and line_notes[-1]["is_rest"]:
-                tokens = ly.rsplit(" ", 1)
-                ly = tokens[0] if len(tokens) > 1 else ly
             ly += ' \\bar "|."'
         lines_ly.append(f"  % Line {i + 1}\n  {ly}\n")
 
@@ -445,29 +454,36 @@ def main():
 
     # Create temp directory for intermediate files
     tmpdir = tempfile.mkdtemp(prefix="png2ly_")
+    total_start = time.time()
     try:
         # Step 1: Detect staff systems
+        t0 = time.time()
         print(f"Detecting staff lines in {input_path}...")
         systems, img_height = detect_staff_systems(input_path)
-        print(f"  Found {len(systems)} staff systems")
+        print(f"  Found {len(systems)} staff systems [{time.time() - t0:.1f}s]")
 
         # Step 2: Crop each line
+        t0 = time.time()
         print("Cropping lines...")
         line_paths = crop_lines(input_path, systems, img_height, tmpdir, pad=args.pad)
+        print(f"  [{time.time() - t0:.1f}s]")
 
         # Step 3-4: Run Audiveris on each line and parse MusicXML
+        t_omr_start = time.time()
         all_line_data = []  # list of (notes, key_fifths)
         for i, line_path in enumerate(line_paths):
-            print(f"  Processing line {i + 1}/{len(line_paths)}...")
+            t0 = time.time()
+            print(f"  Processing line {i + 1}/{len(line_paths)}...", end="", flush=True)
             try:
                 mxl_path = run_audiveris(line_path, tmpdir, audiveris_dir)
                 xml_path = extract_mxl(mxl_path, tmpdir)
                 notes, key_fifths = parse_musicxml(xml_path)
                 all_line_data.append((notes, key_fifths))
-                print(f"    -> {len(notes)} notes, key fifths={key_fifths}")
+                print(f" {len(notes)} notes, key={key_fifths} [{time.time() - t0:.1f}s]")
             except Exception as e:
-                print(f"    Error on line {i + 1}: {e}", file=sys.stderr)
+                print(f" Error: {e} [{time.time() - t0:.1f}s]", file=sys.stderr)
                 all_line_data.append(([], None))
+        print(f"  OMR total [{time.time() - t_omr_start:.1f}s]")
 
         # Step 5: Determine global key and apply to all lines
         global_key = detect_key_fifths(all_line_data)
@@ -480,16 +496,17 @@ def main():
 
         # Step 5b: Extract lyrics with Claude if not provided
         if lyrics is None and not args.no_lyrics:
-            print("Extracting lyrics with Claude...")
+            t0 = time.time()
+            print("Extracting lyrics with Claude...", end="", flush=True)
             num_notes = [
                 len([n for n in notes if not n["is_rest"]])
                 for notes, _ in all_line_data
             ]
             lyrics = extract_lyrics_with_claude(input_path, num_notes)
             if lyrics:
-                print(f"  Lyrics extracted ({len(lyrics)} chars)")
+                print(f" {len(lyrics)} chars [{time.time() - t0:.1f}s]")
             else:
-                print("  No lyrics extracted")
+                print(f" failed [{time.time() - t0:.1f}s]")
 
         # Step 6-7: Build LilyPond
         print(f"Generating LilyPond -> {output_path}")
@@ -506,7 +523,8 @@ def main():
 
         # Step 8: Render PDF
         if args.render:
-            print("Rendering PDF...")
+            t0 = time.time()
+            print("Rendering PDF...", end="", flush=True)
             abs_output = os.path.abspath(output_path)
             result = subprocess.run(
                 ["lilypond", abs_output],
@@ -516,11 +534,12 @@ def main():
             )
             if result.returncode == 0:
                 pdf_path = os.path.splitext(output_path)[0] + ".pdf"
-                print(f"  PDF: {pdf_path}")
+                print(f" {pdf_path} [{time.time() - t0:.1f}s]")
             else:
+                print(f" error [{time.time() - t0:.1f}s]", file=sys.stderr)
                 print(f"  LilyPond error: {result.stderr}", file=sys.stderr)
 
-        print("Done.")
+        print(f"Done. Total: {time.time() - total_start:.1f}s")
 
     finally:
         if args.keep_temp:
