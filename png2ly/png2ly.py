@@ -463,10 +463,23 @@ def build_notes_ly(all_lines, key_fifths):
 """
 
 
+def sanitize_lyrics(lyrics):
+    """Clean up lyrics for LilyPond lyricmode compatibility."""
+    # Replace smart quotes with straight quotes
+    lyrics = lyrics.replace("\u201c", '"').replace("\u201d", '"')
+    lyrics = lyrics.replace("\u2018", "'").replace("\u2019", "'")
+    # Remove invalid LilyPond commands that Claude sometimes inserts
+    lyrics = re.sub(r'\\(left|right|textit|textbf|emph)\s*', '', lyrics)
+    # Remove unicode escapes
+    lyrics = re.sub(r'\\u[0-9a-fA-F]{4}', '', lyrics)
+    return lyrics
+
+
 def build_lyrics_ly(lyrics):
     """Generate LilyPond verse definition."""
     if not lyrics:
         return ""
+    lyrics = sanitize_lyrics(lyrics)
     return f"""verse = \\lyricmode {{
   {lyrics}
 }}
