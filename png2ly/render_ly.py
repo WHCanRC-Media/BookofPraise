@@ -24,9 +24,12 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
     header_items.append("  tagline = ##f")
     header_block = "\\header {\n" + "\n".join(header_items) + "\n}"
 
-    # Read notes
+    # Read notes, hide clef after first line
     with open(notes_path) as f:
         notes_content = f.read()
+    notes_content = notes_content.replace(
+        "\\break", "\\break\n  \\omit Staff.Clef", 1
+    )
 
     # Read lyrics if provided, sanitize for LilyPond
     lyrics_content = ""
@@ -65,7 +68,6 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
   \\layout {{
     indent = 0
   }}
-  \\midi {{ \\tempo 2 = 72 }}
 }}
 """
 
@@ -122,13 +124,18 @@ def main():
     """Render all psalms in the lilypond directory."""
     parser = argparse.ArgumentParser(description="Render all psalm SVGs")
     parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count(), help="Parallel workers (default: nproc)")
+    parser.add_argument("--psalm", help="Process only this psalm (e.g. psalm102)")
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_dir = os.path.dirname(script_dir)
     lilypond_dir = os.path.join(repo_dir, "lilypond")
 
-    lyrics_files = sorted(glob.glob(os.path.join(lilypond_dir, "psalm*", "lyrics_*.ly")))
+    if args.psalm:
+        pattern = os.path.join(lilypond_dir, args.psalm, "lyrics_*.ly")
+    else:
+        pattern = os.path.join(lilypond_dir, "psalm*", "lyrics_*.ly")
+    lyrics_files = sorted(glob.glob(pattern))
     print(f"Found {len(lyrics_files)} lyrics files")
 
     work = [(lf,) for lf in lyrics_files]
