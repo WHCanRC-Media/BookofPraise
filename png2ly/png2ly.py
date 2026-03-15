@@ -122,7 +122,19 @@ def detect_staff_systems(img_path):
         raise ValueError("No staff lines detected in image")
 
     gaps = np.diff(staff_rows)
-    breaks = np.where(gaps > 20)[0]
+    # Use adaptive threshold: find the gap between staff lines within a system
+    # vs gaps between systems. Staff-line gaps cluster around one value,
+    # system gaps are much larger.
+    sorted_gaps = np.sort(gaps)
+    # The break threshold should be midway between intra-staff and inter-system gaps
+    if len(sorted_gaps) > 5:
+        # Find the first large jump in gap sizes
+        gap_diffs = np.diff(sorted_gaps)
+        big_jump = np.argmax(gap_diffs) + 1
+        gap_threshold = (sorted_gaps[big_jump - 1] + sorted_gaps[big_jump]) // 2
+    else:
+        gap_threshold = 20
+    breaks = np.where(gaps > gap_threshold)[0]
     groups = np.split(staff_rows, breaks + 1)
 
     systems = []
@@ -133,16 +145,36 @@ def detect_staff_systems(img_path):
     return systems, h
 
 
+MIN_INTERLINE_PX = 14  # Audiveris needs at least ~14px interline
+
+
+def estimate_interline(systems):
+    """Estimate interline spacing from detected staff systems."""
+    if len(systems) == 0:
+        return 0
+    # Each system spans ~4 interlines (5 staff lines)
+    spans = [bot - top for top, bot in systems]
+    median_span = np.median(spans)
+    return median_span / 4
+
+
 def crop_lines(img_path, systems, img_height, output_dir, pad=40):
-    """Crop each staff system into a separate image file, 2x nearest-neighbor upscale."""
+    """Crop each staff system, upscaling only if interline is too small."""
     img = cv2.imread(img_path)
+    interline = estimate_interline(systems)
+    scale = 1
+    if interline < MIN_INTERLINE_PX:
+        scale = int(np.ceil(MIN_INTERLINE_PX / interline))
+        scale = max(2, min(scale, 4))
+
     paths = []
     for i, (top, bot) in enumerate(systems):
         y1 = max(0, top - pad)
         y2 = min(img_height, bot + pad)
         crop = img[y1:y2, :]
-        # 2x nearest-neighbor upscale (each pixel becomes 4 pixels)
-        crop = cv2.resize(crop, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
+        if scale > 1:
+            crop = cv2.resize(crop, None, fx=scale, fy=scale,
+                              interpolation=cv2.INTER_NEAREST)
         path = os.path.join(output_dir, f"line{i + 1}.png")
         cv2.imwrite(path, crop)
         paths.append(path)
