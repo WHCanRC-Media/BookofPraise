@@ -429,8 +429,8 @@ def relative_header(fifths):
     return "c''"
 
 
-def build_lilypond(all_lines, key_fifths, composer=None, lyrics=None):
-    """Assemble all lines into a complete LilyPond file."""
+def build_notes_ly(all_lines, key_fifths):
+    """Generate LilyPond melody definition."""
     key_str = fifths_to_lilypond_key(key_fifths)
 
     lines_ly = []
@@ -444,44 +444,22 @@ def build_lilypond(all_lines, key_fifths, composer=None, lyrics=None):
 
     melody_block = "\n".join(lines_ly)
 
-    header = ""
-    header_items = []
-    if composer:
-        header_items.append(f'  composer = "{composer}"')
-    header_items.append("  tagline = ##f")
-    header = "\\header {\n" + "\n".join(header_items) + "\n}\n\n"
-
-    lyrics_block = ""
-    if lyrics:
-        lyrics_block = f"""
-verse = \\lyricmode {{
-  {lyrics}
-}}
-"""
-
-    lyrics_score = ""
-    if lyrics:
-        lyrics_score = '    \\new Lyrics \\lyricsto "melody" { \\verse }'
-
-    return f"""\\version "2.24.0"
-
-{header}melody = \\relative {relative_header(key_fifths)} {{
+    return f"""melody = \\relative {relative_header(key_fifths)} {{
   \\clef treble
   {key_str}
   \\cadenzaOn
   \\omit Staff.TimeSignature
 
 {melody_block}}}
-{lyrics_block}
-\\score {{
-  <<
-    \\new Voice = "melody" {{ \\melody }}
-{lyrics_score}
-  >>
-  \\layout {{
-    indent = 0
-  }}
-  \\midi {{ \\tempo 2 = 72 }}
+"""
+
+
+def build_lyrics_ly(lyrics):
+    """Generate LilyPond verse definition."""
+    if not lyrics:
+        return ""
+    return f"""verse = \\lyricmode {{
+  {lyrics}
 }}
 """
 
@@ -583,36 +561,42 @@ def main():
             else:
                 print(f" failed [{time.time() - t0:.1f}s]")
 
-        # Step 6-7: Build LilyPond
-        print(f"Generating LilyPond -> {output_path}")
-        ly_content = build_lilypond(
-            all_lines,
-            global_key,
-            composer=composer,
-            lyrics=lyrics,
-        )
+        # Step 6-7: Write notes and lyrics files
+        out_dir = os.path.dirname(os.path.abspath(output_path))
+        os.makedirs(out_dir, exist_ok=True)
+        notes_path = os.path.join(out_dir, "notes.ly")
+        lyrics_path = os.path.join(out_dir, "lyrics.ly")
 
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        with open(output_path, "w") as f:
-            f.write(ly_content)
+        notes_content = build_notes_ly(all_lines, global_key)
+        lyrics_content = build_lyrics_ly(lyrics)
+
+        print(f"Writing notes -> {notes_path}")
+        with open(notes_path, "w") as f:
+            f.write(notes_content)
+
+        if lyrics_content:
+            print(f"Writing lyrics -> {lyrics_path}")
+            with open(lyrics_path, "w") as f:
+                f.write(lyrics_content)
+
+        # Write composer to a file for render_ly to use
+        if composer:
+            composer_path = os.path.join(out_dir, "composer.txt")
+            with open(composer_path, "w") as f:
+                f.write(composer)
 
         # Step 8: Render SVG
         if args.render:
+            from render_ly import render_svg
             t0 = time.time()
             print("Rendering SVG...", end="", flush=True)
-            abs_output = os.path.abspath(output_path)
-            result = subprocess.run(
-                ["lilypond", "-dbackend=svg", abs_output],
-                capture_output=True,
-                text=True,
-                cwd=os.path.dirname(abs_output),
-            )
-            if result.returncode == 0:
-                svg_path = os.path.splitext(output_path)[0] + ".svg"
+            svg_path = os.path.join(out_dir, "1.svg")
+            ok = render_svg(notes_path, lyrics_path if lyrics_content else None,
+                            svg_path, composer=composer)
+            if ok:
                 print(f" {svg_path} [{time.time() - t0:.1f}s]")
             else:
                 print(f" error [{time.time() - t0:.1f}s]", file=sys.stderr)
-                print(f"  LilyPond error: {result.stderr}", file=sys.stderr)
 
         print(f"Done. Total: {time.time() - total_start:.1f}s")
 

@@ -29,8 +29,10 @@ from png2ly import (
     apply_key_signature,
     extract_composer_with_claude,
     extract_lyrics_with_claude,
-    build_lilypond,
+    build_notes_ly,
+    build_lyrics_ly,
 )
+from render_ly import render_svg
 
 
 def concatenate_images_vertically(paths, output_path):
@@ -106,19 +108,28 @@ def process_psalm(args):
         ]
         lyrics = extract_lyrics_with_claude(png_path, num_notes)
 
-        ly_content = build_lilypond(all_lines, global_key, composer=composer, lyrics=lyrics)
-        os.makedirs(os.path.dirname(out_ly), exist_ok=True)
-        with open(out_ly, "w") as f:
-            f.write(ly_content)
+        out_dir = os.path.dirname(out_ly)
+        os.makedirs(out_dir, exist_ok=True)
+
+        notes_path = os.path.join(out_dir, "notes.ly")
+        lyrics_path = os.path.join(out_dir, "lyrics.ly")
+
+        with open(notes_path, "w") as f:
+            f.write(build_notes_ly(all_lines, global_key))
+
+        lyrics_content = build_lyrics_ly(lyrics)
+        if lyrics_content:
+            with open(lyrics_path, "w") as f:
+                f.write(lyrics_content)
+
+        if composer:
+            with open(os.path.join(out_dir, "composer.txt"), "w") as f:
+                f.write(composer)
 
         # Render SVG
-        abs_ly = os.path.abspath(out_ly)
-        subprocess.run(
-            ["lilypond", "-dbackend=svg", abs_ly],
-            capture_output=True,
-            text=True,
-            cwd=os.path.dirname(abs_ly),
-        )
+        svg_path = os.path.join(out_dir, "1.svg")
+        render_svg(notes_path, lyrics_path if lyrics_content else None,
+                   svg_path, composer=composer)
         return (psalm_name, "OK", time.time() - t0)
     except Exception as e:
         return (psalm_name, f"FAILED: {e}", time.time() - t0)
