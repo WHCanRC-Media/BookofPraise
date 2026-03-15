@@ -31,23 +31,46 @@ import cv2
 import numpy as np
 
 
+def run_claude(prompt, retries=3, timeout=120):
+    """Run claude -p with retries on timeout, adding entropy each attempt."""
+    import random
+    for attempt in range(retries):
+        if attempt > 0:
+            fillers = [
+                f" [attempt {attempt + 1}]",
+                f" (please respond concisely, try #{attempt + 1})",
+                f" — retry {attempt + 1}, be brief",
+            ]
+            varied_prompt = prompt + random.choice(fillers)
+        else:
+            varied_prompt = prompt
+        try:
+            result = subprocess.run(
+                ["claude", "-p", varied_prompt],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except subprocess.TimeoutExpired:
+            if attempt < retries - 1:
+                print(f" (retry {attempt + 2}/{retries})", end="", flush=True)
+    return None
+
+
 def extract_composer_with_claude(img_path):
     """Use claude CLI to extract the composer/tune attribution from the image."""
     prompt = (
+        f"Read the image at {img_path} and then: "
         "Look at this hymn/psalm sheet music image. "
         "Extract ONLY the composer or tune attribution text "
         "(usually in the top right corner, e.g. 'Strasbourg, 1539 / Geneva, 1551'). "
         "Output nothing except the attribution text. No explanation."
     )
-    result = subprocess.run(
-        ["claude", "-p", f"Read the image at {img_path} and then: {prompt}"],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    if result.returncode != 0:
+    text = run_claude(prompt)
+    if not text:
         return None
-    text = result.stdout.strip()
     # Strip quotes if wrapped
     if text.startswith('"') and text.endswith('"'):
         text = text[1:-1]
@@ -70,16 +93,9 @@ def extract_lyrics_with_claude(img_path, num_notes_per_line):
         "(melisma), use '_' for the extra notes after the syllable.\n"
         "- Output nothing except the lyricmode content (no \\lyricmode wrapper, no explanation)"
     )
-    result = subprocess.run(
-        ["claude", "-p", f"Read the image at {img_path} and then: {prompt}"],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    if result.returncode != 0:
-        print(f"  Warning: claude failed: {result.stderr}", file=sys.stderr)
+    text = run_claude(f"Read the image at {img_path} and then: {prompt}")
+    if not text:
         return None
-    text = result.stdout.strip()
     # Strip markdown code fences if present
     # Find the last code fence block if there is one
     if "```" in text:
