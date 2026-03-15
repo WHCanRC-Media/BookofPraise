@@ -19,6 +19,7 @@ Usage:
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -133,13 +134,15 @@ def detect_staff_systems(img_path):
 
 
 def crop_lines(img_path, systems, img_height, output_dir, pad=40):
-    """Crop each staff system into a separate image file."""
+    """Crop each staff system into a separate image file, 2x nearest-neighbor upscale."""
     img = cv2.imread(img_path)
     paths = []
     for i, (top, bot) in enumerate(systems):
         y1 = max(0, top - pad)
         y2 = min(img_height, bot + pad)
         crop = img[y1:y2, :]
+        # 2x nearest-neighbor upscale (each pixel becomes 4 pixels)
+        crop = cv2.resize(crop, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
         path = os.path.join(output_dir, f"line{i + 1}.png")
         cv2.imwrite(path, crop)
         paths.append(path)
@@ -541,6 +544,7 @@ def main():
             lyrics=lyrics,
         )
 
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         with open(output_path, "w") as f:
             f.write(ly_content)
 
