@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Render LilyPond SVG from separate notes and lyrics files."""
 
+import glob
 import os
 import subprocess
-import tempfile
 
 
 def render_svg(notes_path, lyrics_path, output_svg, composer=None):
@@ -77,3 +77,49 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
         os.remove(combined_ly)
 
     return result.returncode == 0
+
+
+def main():
+    """Render all psalms in the lilypond directory."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_dir = os.path.dirname(script_dir)
+    lilypond_dir = os.path.join(repo_dir, "lilypond")
+
+    psalm_dirs = sorted(glob.glob(os.path.join(lilypond_dir, "psalm*")))
+    print(f"Found {len(psalm_dirs)} psalm directories")
+
+    ok = 0
+    failed = 0
+    skipped = 0
+
+    for psalm_dir in psalm_dirs:
+        psalm_name = os.path.basename(psalm_dir)
+        notes_path = os.path.join(psalm_dir, "notes.ly")
+        lyrics_path = os.path.join(psalm_dir, "lyrics_1.ly")
+        composer_path = os.path.join(psalm_dir, "composer.txt")
+        svg_path = os.path.join(psalm_dir, "1.svg")
+
+        if not os.path.exists(notes_path):
+            print(f"  SKIP {psalm_name} (no notes.ly)")
+            skipped += 1
+            continue
+
+        composer = None
+        if os.path.exists(composer_path):
+            with open(composer_path) as f:
+                composer = f.read().strip()
+
+        lyrics = lyrics_path if os.path.exists(lyrics_path) else None
+
+        if render_svg(notes_path, lyrics, svg_path, composer=composer):
+            print(f"  OK {psalm_name}")
+            ok += 1
+        else:
+            print(f"  FAILED {psalm_name}")
+            failed += 1
+
+    print(f"Done. {ok} ok, {failed} failed, {skipped} skipped")
+
+
+if __name__ == "__main__":
+    main()

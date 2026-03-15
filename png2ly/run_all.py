@@ -112,7 +112,7 @@ def process_psalm(args):
         os.makedirs(out_dir, exist_ok=True)
 
         notes_path = os.path.join(out_dir, "notes.ly")
-        lyrics_path = os.path.join(out_dir, "lyrics.ly")
+        lyrics_path = os.path.join(out_dir, "lyrics_1.ly")
 
         with open(notes_path, "w") as f:
             f.write(build_notes_ly(all_lines, global_key))

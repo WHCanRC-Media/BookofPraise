@@ -565,7 +565,7 @@ def main():
         out_dir = os.path.dirname(os.path.abspath(output_path))
         os.makedirs(out_dir, exist_ok=True)
         notes_path = os.path.join(out_dir, "notes.ly")
-        lyrics_path = os.path.join(out_dir, "lyrics.ly")
+        lyrics_path = os.path.join(out_dir, "lyrics_1.ly")
 
         notes_content = build_notes_ly(all_lines, global_key)
         lyrics_content = build_lyrics_ly(lyrics)
