@@ -85,37 +85,40 @@ def main():
     repo_dir = os.path.dirname(script_dir)
     lilypond_dir = os.path.join(repo_dir, "lilypond")
 
-    psalm_dirs = sorted(glob.glob(os.path.join(lilypond_dir, "psalm*")))
-    print(f"Found {len(psalm_dirs)} psalm directories")
+    # Find all lyrics files, derive psalm dirs and verse numbers
+    lyrics_files = sorted(glob.glob(os.path.join(lilypond_dir, "psalm*", "lyrics_*.ly")))
+    print(f"Found {len(lyrics_files)} lyrics files")
 
     ok = 0
     failed = 0
     skipped = 0
 
-    for psalm_dir in psalm_dirs:
+    for lyrics_path in lyrics_files:
+        psalm_dir = os.path.dirname(lyrics_path)
         psalm_name = os.path.basename(psalm_dir)
         notes_path = os.path.join(psalm_dir, "notes.ly")
-        lyrics_path = os.path.join(psalm_dir, "lyrics_1.ly")
-        composer_path = os.path.join(psalm_dir, "composer.txt")
-        svg_path = os.path.join(psalm_dir, "1.svg")
 
         if not os.path.exists(notes_path):
             print(f"  SKIP {psalm_name} (no notes.ly)")
             skipped += 1
             continue
 
+        # Extract verse number from lyrics_N.ly
+        basename = os.path.basename(lyrics_path)
+        verse_num = basename.replace("lyrics_", "").replace(".ly", "")
+        svg_path = os.path.join(psalm_dir, f"{verse_num}.svg")
+
         composer = None
+        composer_path = os.path.join(psalm_dir, "composer.txt")
         if os.path.exists(composer_path):
             with open(composer_path) as f:
                 composer = f.read().strip()
 
-        lyrics = lyrics_path if os.path.exists(lyrics_path) else None
-
-        if render_svg(notes_path, lyrics, svg_path, composer=composer):
-            print(f"  OK {psalm_name}")
+        if render_svg(notes_path, lyrics_path, svg_path, composer=composer):
+            print(f"  OK {psalm_name} v{verse_num}")
             ok += 1
         else:
-            print(f"  FAILED {psalm_name}")
+            print(f"  FAILED {psalm_name} v{verse_num}")
             failed += 1
 
     print(f"Done. {ok} ok, {failed} failed, {skipped} skipped")
