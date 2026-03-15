@@ -50,6 +50,8 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
   >>
   \\layout {{
     indent = 0
+    line-width = 14\\cm
+    ragged-right = ##f
   }}
   \\midi {{ \\tempo 2 = 72 }}
 }}

@@ -436,6 +436,15 @@ def build_notes_ly(all_lines, key_fifths):
     lines_ly = []
     for i, line_notes in enumerate(all_lines):
         ly = notes_to_lilypond_relative(line_notes)
+
+        # Reserve space at start for rest (spacer if no rest present)
+        if not line_notes or not line_notes[0]["is_rest"]:
+            ly = "s4 " + ly
+
+        # Reserve space at end for rest (spacer if no rest present)
+        if not line_notes or not line_notes[-1]["is_rest"]:
+            ly += " s2"
+
         if i < len(all_lines) - 1:
             ly += ' \\break'
         else:
