@@ -49,7 +49,7 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
     combined = f"""\\version "2.24.0"
 
 \\paper {{
-  line-width = 14\\cm
+  line-width = 13\\cm
   left-margin = 0\\cm
   right-margin = 0\\cm
 }}
@@ -67,6 +67,10 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
   >>
   \\layout {{
     indent = 0
+    \\context {{
+      \\Lyrics
+      \\override LyricText.self-alignment-X = #LEFT
+    }}
   }}
 }}
 """

@@ -433,17 +433,21 @@ def build_notes_ly(all_lines, key_fifths):
     """Generate LilyPond melody definition."""
     key_str = fifths_to_lilypond_key(key_fifths)
 
+    # Check if any line starts or ends with a rest
+    any_start_rest = any(ln and ln[0]["is_rest"] for ln in all_lines)
+    any_end_rest = any(ln and ln[-1]["is_rest"] for ln in all_lines)
+
     lines_ly = []
     for i, line_notes in enumerate(all_lines):
         ly = notes_to_lilypond_relative(line_notes)
 
-        # Reserve space at start for rest (spacer if no rest present)
-        if not line_notes or not line_notes[0]["is_rest"]:
-            ly = "s4 " + ly
+        # Hidden rest at start for alignment (if other lines have rests)
+        if any_start_rest and (not line_notes or not line_notes[0]["is_rest"]):
+            ly = "\\once \\hide Rest r4 " + ly
 
-        # Reserve space at end for rest (spacer if no rest present)
-        if not line_notes or not line_notes[-1]["is_rest"]:
-            ly += " s2"
+        # Hidden rest at end for alignment (if other lines have rests)
+        if any_end_rest and (not line_notes or not line_notes[-1]["is_rest"]):
+            ly += " \\once \\hide Rest r2"
 
         if i < len(all_lines) - 1:
             ly += ' \\break'
