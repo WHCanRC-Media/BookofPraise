@@ -50,6 +50,7 @@ def run_claude(prompt, retries=3, timeout=120):
                 ["claude", "-p", varied_prompt],
                 capture_output=True,
                 text=True,
+                stdin=subprocess.DEVNULL,
                 timeout=timeout,
             )
             if result.returncode == 0:
