@@ -18,6 +18,7 @@ Usage:
 """
 
 import argparse
+import glob
 import os
 import re
 import shutil
@@ -433,21 +434,9 @@ def build_notes_ly(all_lines, key_fifths):
     """Generate LilyPond melody definition."""
     key_str = fifths_to_lilypond_key(key_fifths)
 
-    # Check if any line starts or ends with a rest
-    any_start_rest = any(ln and ln[0]["is_rest"] for ln in all_lines)
-    any_end_rest = any(ln and ln[-1]["is_rest"] for ln in all_lines)
-
     lines_ly = []
     for i, line_notes in enumerate(all_lines):
         ly = notes_to_lilypond_relative(line_notes)
-
-        # Hidden rest at start for alignment (if other lines have rests)
-        if any_start_rest and (not line_notes or not line_notes[0]["is_rest"]):
-            ly = "\\once \\hide Rest r4 " + ly
-
-        # Hidden rest at end for alignment (if other lines have rests)
-        if any_end_rest and (not line_notes or not line_notes[-1]["is_rest"]):
-            ly += " \\once \\hide Rest r2"
 
         if i < len(all_lines) - 1:
             ly += ' \\break'
@@ -490,147 +479,187 @@ def build_lyrics_ly(lyrics):
 """
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Convert a scanned psalm image to LilyPond notation using Audiveris OMR"
-    )
-    parser.add_argument("input", help="Path to input PNG image")
-    parser.add_argument("-o", "--output", help="Output .ly file path")
-    parser.add_argument("--lyrics", help="Path to lyrics text file (LilyPond lyricmode format)")
-    parser.add_argument("--no-lyrics", action="store_true", help="Skip lyrics extraction")
-    parser.add_argument("--render", action="store_true", help="Render SVG via lilypond")
-    parser.add_argument("--composer", help="Composer attribution (auto-extracted if not provided)")
-    parser.add_argument("--pad", type=int, default=40, help="Padding pixels above/below staff (default: 40)")
-    parser.add_argument("--keep-temp", action="store_true", help="Keep temporary files for debugging")
-    args = parser.parse_args()
+def concatenate_images_vertically(paths, output_path):
+    """Concatenate multiple PNG images vertically."""
+    images = [cv2.imread(p) for p in paths]
+    if any(img is None for img in images):
+        raise ValueError(f"Could not read one of: {paths}")
+    max_w = max(img.shape[1] for img in images)
+    padded = []
+    for img in images:
+        h, w = img.shape[:2]
+        if w < max_w:
+            pad = np.ones((h, max_w - w, 3), dtype=np.uint8) * 255
+            img = np.hstack([img, pad])
+        padded.append(img)
+    combined = np.vstack(padded)
+    cv2.imwrite(output_path, combined)
+    return output_path
 
-    input_path = os.path.abspath(args.input)
-    if not os.path.exists(input_path):
-        print(f"Error: {input_path} not found", file=sys.stderr)
-        sys.exit(1)
 
-    if args.output:
-        output_path = args.output
-    else:
-        output_path = os.path.splitext(input_path)[0] + ".ly"
+def find_psalm_input(psalm_dir):
+    """Determine the input PNG for a psalm directory.
 
-    # Load lyrics if provided, otherwise extract with Claude later
-    lyrics = None
-    if args.lyrics:
-        with open(args.lyrics) as f:
-            lyrics = f.read().strip()
+    Returns (png_path, needs_concat, parts).
+    """
+    single = os.path.join(psalm_dir, "1.png")
+    if os.path.exists(single):
+        return single, False, []
 
-    # Create temp directory for intermediate files
+    parts = sorted(glob.glob(os.path.join(psalm_dir, "1[a-z].png")))
+    if parts:
+        return None, True, parts
+
+    return None, False, []
+
+
+def process_psalm(png_path, out_dir):
+    """Run the full png2ly pipeline on a single image. Returns (notes, lyrics, composer)."""
+    from render_ly import render_svg
+
     tmpdir = tempfile.mkdtemp(prefix="png2ly_")
-    total_start = time.time()
     try:
-        # Step 1: Detect staff systems
-        t0 = time.time()
-        print(f"Detecting staff lines in {input_path}...")
-        systems, img_height = detect_staff_systems(input_path)
-        print(f"  Found {len(systems)} staff systems [{time.time() - t0:.1f}s]")
+        systems, img_height = detect_staff_systems(png_path)
+        line_paths = crop_lines(png_path, systems, img_height, tmpdir)
 
-        # Step 2: Crop each line
-        t0 = time.time()
-        print("Cropping lines...")
-        line_paths = crop_lines(input_path, systems, img_height, tmpdir, pad=args.pad)
-        print(f"  [{time.time() - t0:.1f}s]")
-
-        # Step 3-4: Run Audiveris on each line and parse MusicXML
-        t_omr_start = time.time()
-        all_line_data = []  # list of (notes, key_fifths)
-        for i, line_path in enumerate(line_paths):
-            t0 = time.time()
-            print(f"  Processing line {i + 1}/{len(line_paths)}...", end="", flush=True)
+        all_line_data = []
+        for line_path in line_paths:
             try:
                 mxl_path = run_audiveris(line_path, tmpdir)
                 xml_path = extract_mxl(mxl_path, tmpdir)
                 notes, key_fifths = parse_musicxml(xml_path)
                 all_line_data.append((notes, key_fifths))
-                print(f" {len(notes)} notes, key={key_fifths} [{time.time() - t0:.1f}s]")
-            except Exception as e:
-                print(f" Error: {e} [{time.time() - t0:.1f}s]", file=sys.stderr)
+            except Exception:
                 all_line_data.append(([], None))
-        print(f"  OMR total [{time.time() - t_omr_start:.1f}s]")
 
-        # Step 5: Determine global key and apply to all lines
         global_key = detect_key_fifths(all_line_data)
-        print(f"Global key signature: {global_key} fifths")
-
         all_lines = []
-        for notes, line_key in all_line_data:
-            corrected = apply_key_signature(notes, global_key)
-            all_lines.append(corrected)
+        for notes, _ in all_line_data:
+            all_lines.append(apply_key_signature(notes, global_key))
 
-        # Step 5b: Extract composer with Claude if not provided
-        composer = args.composer
-        if composer is None:
-            t0 = time.time()
-            print("Extracting composer with Claude...", end="", flush=True)
-            composer = extract_composer_with_claude(input_path)
-            if composer:
-                print(f" '{composer}' [{time.time() - t0:.1f}s]")
-            else:
-                print(f" not found [{time.time() - t0:.1f}s]")
+        composer = extract_composer_with_claude(png_path)
+        num_notes = [
+            len([n for n in notes if not n["is_rest"]])
+            for notes, _ in all_line_data
+        ]
+        lyrics = extract_lyrics_with_claude(png_path, num_notes)
 
-        # Step 5c: Extract lyrics with Claude if not provided
-        if lyrics is None and not args.no_lyrics:
-            t0 = time.time()
-            print("Extracting lyrics with Claude...", end="", flush=True)
-            num_notes = [
-                len([n for n in notes if not n["is_rest"]])
-                for notes, _ in all_line_data
-            ]
-            lyrics = extract_lyrics_with_claude(input_path, num_notes)
-            if lyrics:
-                print(f" {len(lyrics)} chars [{time.time() - t0:.1f}s]")
-            else:
-                print(f" failed [{time.time() - t0:.1f}s]")
-
-        # Step 6-7: Write notes and lyrics files
-        out_dir = os.path.dirname(os.path.abspath(output_path))
         os.makedirs(out_dir, exist_ok=True)
+
         notes_path = os.path.join(out_dir, "notes.ly")
         lyrics_path = os.path.join(out_dir, "lyrics_1.ly")
 
-        notes_content = build_notes_ly(all_lines, global_key)
-        lyrics_content = build_lyrics_ly(lyrics)
-
-        print(f"Writing notes -> {notes_path}")
         with open(notes_path, "w") as f:
-            f.write(notes_content)
+            f.write(build_notes_ly(all_lines, global_key))
 
+        lyrics_content = build_lyrics_ly(lyrics)
         if lyrics_content:
-            print(f"Writing lyrics -> {lyrics_path}")
             with open(lyrics_path, "w") as f:
                 f.write(lyrics_content)
 
-        # Write composer to a file for render_ly to use
         if composer:
-            composer_path = os.path.join(out_dir, "composer.txt")
-            with open(composer_path, "w") as f:
+            with open(os.path.join(out_dir, "composer.txt"), "w") as f:
                 f.write(composer)
 
-        # Step 8: Render SVG
-        if args.render:
-            from render_ly import render_svg
-            t0 = time.time()
-            print("Rendering SVG...", end="", flush=True)
-            svg_path = os.path.join(out_dir, "1.svg")
-            ok = render_svg(notes_path, lyrics_path if lyrics_content else None,
-                            svg_path, composer=composer)
-            if ok:
-                print(f" {svg_path} [{time.time() - t0:.1f}s]")
-            else:
-                print(f" error [{time.time() - t0:.1f}s]", file=sys.stderr)
-
-        print(f"Done. Total: {time.time() - total_start:.1f}s")
-
+        svg_path = os.path.join(out_dir, "1.svg")
+        render_svg(notes_path, lyrics_path if lyrics_content else None,
+                   svg_path, composer=composer)
     finally:
-        if args.keep_temp:
-            print(f"Temp files kept at: {tmpdir}")
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _process_psalm_worker(args):
+    """Worker wrapper for process_psalm. Returns (psalm_name, status, elapsed)."""
+    png_path, out_dir, psalm_name = args
+    t0 = time.time()
+    try:
+        process_psalm(png_path, out_dir)
+        return (psalm_name, "OK", time.time() - t0)
+    except Exception as e:
+        return (psalm_name, f"FAILED: {e}", time.time() - t0)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Convert scanned psalm images to LilyPond notation using Audiveris OMR"
+    )
+    parser.add_argument("input", nargs="?", help="Path to input PNG image (single mode)")
+    parser.add_argument("-o", "--output", help="Output directory (single mode)")
+    parser.add_argument("--all", action="store_true", help="Batch process all psalms")
+    parser.add_argument("-n", "--limit", type=int, help="Max number of psalms to process (batch mode)")
+    parser.add_argument("-j", "--jobs", type=int, default=4, help="Parallel workers for batch mode (default: 4)")
+    parser.add_argument("--psalm", help="Process only this psalm (e.g. psalm6)")
+    args = parser.parse_args()
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_dir = os.path.dirname(script_dir)
+
+    if args.all or args.psalm:
+        # Batch mode
+        from multiprocessing.pool import ThreadPool
+
+        photos_dir = os.path.join(repo_dir, "photos")
+        lilypond_dir = os.path.join(repo_dir, "lilypond")
+
+        if args.psalm:
+            psalm_dirs = [os.path.join(photos_dir, args.psalm)]
         else:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+            psalm_dirs = sorted(glob.glob(os.path.join(photos_dir, "psalm*")))
+
+        print(f"Found {len(psalm_dirs)} psalm directories")
+
+        work = []
+        for psalm_dir in psalm_dirs:
+            psalm_name = os.path.basename(psalm_dir)
+            out_dir = os.path.join(lilypond_dir, psalm_name)
+            notes_path = os.path.join(out_dir, "notes.ly")
+
+            if os.path.exists(notes_path):
+                print(f"  SKIP {psalm_name} (already exists)")
+                continue
+
+            png_path, needs_concat, parts = find_psalm_input(psalm_dir)
+
+            if needs_concat and parts:
+                os.makedirs(out_dir, exist_ok=True)
+                concat_path = os.path.join(out_dir, "1.png")
+                concatenate_images_vertically(parts, concat_path)
+                work.append((concat_path, out_dir, psalm_name))
+            elif png_path:
+                work.append((png_path, out_dir, psalm_name))
+            else:
+                print(f"  SKIP {psalm_name} (no 1.png or 1a.png)")
+
+        if args.limit:
+            work = work[:args.limit]
+
+        print(f"Processing {len(work)} psalms with {args.jobs} workers")
+        t_total = time.time()
+
+        with ThreadPool(args.jobs) as pool:
+            for psalm_name, status, elapsed in pool.imap_unordered(_process_psalm_worker, work):
+                print(f"  {psalm_name}: {status} [{elapsed:.0f}s]")
+
+        print(f"Done. Total: {time.time() - t_total:.0f}s")
+
+    elif args.input:
+        # Single image mode
+        input_path = os.path.abspath(args.input)
+        if not os.path.exists(input_path):
+            print(f"Error: {input_path} not found", file=sys.stderr)
+            sys.exit(1)
+
+        if args.output:
+            out_dir = args.output
+        else:
+            out_dir = os.path.splitext(input_path)[0]
+
+        t0 = time.time()
+        process_psalm(input_path, out_dir)
+        print(f"Done. Total: {time.time() - t0:.1f}s")
+
+    else:
+        parser.print_help()
 
 
 if __name__ == "__main__":

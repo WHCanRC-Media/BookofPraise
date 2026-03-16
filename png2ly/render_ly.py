@@ -24,12 +24,61 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
     header_items.append("  tagline = ##f")
     header_block = "\\header {\n" + "\n".join(header_items) + "\n}"
 
-    # Read notes, hide clef after first line
+    # Read notes and add visual adjustments
     with open(notes_path) as f:
         notes_content = f.read()
+
+    # Hide clef after first line
     notes_content = notes_content.replace(
         "\\break", "\\break\n  \\omit Staff.Clef", 1
     )
+
+    # Add hidden rests for line alignment
+    # Check if any line starts/ends with a rest
+    lines = notes_content.split("\\break")
+    any_start_rest = any(re.search(r'^\s*r[0-9]', l.split("\n")[-1].strip() if "\n" in l else l.strip()) for l in lines)
+    any_end_rest = any(re.search(r'r[0-9]\s*$', l.strip().rstrip("\\bar \"|.\"")) for l in lines)
+    if not any_end_rest:
+        any_end_rest = any("r2" in l.split("\\break")[0][-10:] if "\\break" not in l else "r2" in l[-10:] for l in lines)
+
+    # Simpler: scan for r4 at line starts and r2 at line ends
+    note_lines = [l.strip() for l in notes_content.split("\\break")]
+    # Check start rests (look for r4 or r2 as first token after % Line comment)
+    def line_content(l):
+        """Extract note content, skipping comments and clef overrides."""
+        result = []
+        for part in l.split("\n"):
+            part = part.strip()
+            if part.startswith("%") or part.startswith("\\omit") or not part:
+                continue
+            result.append(part)
+        return " ".join(result)
+
+    line_contents = [line_content(l) for l in note_lines if line_content(l)]
+    any_start_rest = any(lc.startswith("r") for lc in line_contents)
+    any_end_rest = any(re.search(r'r[12]\s*$', lc) for lc in line_contents)
+
+    if any_start_rest or any_end_rest:
+        new_lines = []
+        for segment in notes_content.split("\n"):
+            stripped = segment.strip()
+            # Skip non-note lines
+            if stripped.startswith("%") or stripped.startswith("\\") or not stripped or stripped == "}":
+                new_lines.append(segment)
+                continue
+            # Check if this line has notes
+            if not re.search(r'[a-g]', stripped):
+                new_lines.append(segment)
+                continue
+            # Add hidden rest at start if needed
+            if any_start_rest and not stripped.startswith("r"):
+                segment = segment.replace(stripped, "\\once \\hide Rest r4 " + stripped, 1)
+                stripped = "\\once \\hide Rest r4 " + stripped
+            # Add hidden rest at end if needed
+            if any_end_rest and not re.search(r'r[12]\s*(\\break|\\bar)', stripped):
+                segment = re.sub(r'(\s*\\break|\s*\\bar)', r' \\once \\hide Rest r2\1', segment, count=1)
+            new_lines.append(segment)
+        notes_content = "\n".join(new_lines)
 
     # Read lyrics if provided, sanitize for LilyPond
     lyrics_content = ""
