@@ -9,6 +9,62 @@ import subprocess
 from multiprocessing.pool import ThreadPool
 
 
+def _extract_line_contents(notes_content):
+    """Extract note content per line, skipping comments and overrides."""
+    result = []
+    for segment in notes_content.split("\\break"):
+        parts = []
+        for line in segment.split("\n"):
+            line = line.strip()
+            if line.startswith("%") or line.startswith("\\omit") or not line:
+                continue
+            parts.append(line)
+        content = " ".join(parts)
+        if content:
+            result.append(content)
+    return result
+
+
+def modify_notes(notes_content):
+    """Apply visual adjustments to notes content for rendering.
+
+    - Hide clef after first line
+    - Add hidden rests at start/end of lines for alignment
+    """
+    # Hide clef after first line
+    notes_content = notes_content.replace(
+        "\\break", "\\break\n  \\omit Staff.Clef", 1
+    )
+
+    # Check if any line starts/ends with a rest
+    line_contents = _extract_line_contents(notes_content)
+
+    new_lines = []
+    for segment in notes_content.split("\n"):
+        stripped = segment.strip()
+        # Skip non-note lines (comments, overrides, braces, melody= header, empty)
+        if (stripped.startswith("%") or stripped.startswith("\\") or
+                not stripped or stripped == "}" or "melody" in stripped or
+                "=" in stripped):
+            new_lines.append(segment)
+            continue
+        # Check if this line has actual note patterns (letter followed by digit)
+        if not re.search(r'[a-g](is|es)?[0-9]', stripped):
+            new_lines.append(segment)
+            continue
+        # Add hidden rest at start if needed
+        if not stripped.startswith("r"):
+            segment = segment.replace(stripped, "\\once \\hide Rest r4 " + stripped, 1)
+            stripped = "\\once \\hide Rest r4 " + stripped
+        # Add hidden rest at end if needed
+        if not re.search(r'r[12]\s*(\\break|\\bar)', stripped):
+            segment = re.sub(r'(\s*\\break|\s*\\bar)', r' \\once \\hide Rest r2\1', segment, count=1)
+        new_lines.append(segment)
+    notes_content = "\n".join(new_lines)
+
+    return notes_content
+
+
 def render_svg(notes_path, lyrics_path, output_svg, composer=None):
     """Combine notes and lyrics files with header/footer and render to SVG.
 
@@ -24,61 +80,9 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
     header_items.append("  tagline = ##f")
     header_block = "\\header {\n" + "\n".join(header_items) + "\n}"
 
-    # Read notes and add visual adjustments
     with open(notes_path) as f:
         notes_content = f.read()
-
-    # Hide clef after first line
-    notes_content = notes_content.replace(
-        "\\break", "\\break\n  \\omit Staff.Clef", 1
-    )
-
-    # Add hidden rests for line alignment
-    # Check if any line starts/ends with a rest
-    lines = notes_content.split("\\break")
-    any_start_rest = any(re.search(r'^\s*r[0-9]', l.split("\n")[-1].strip() if "\n" in l else l.strip()) for l in lines)
-    any_end_rest = any(re.search(r'r[0-9]\s*$', l.strip().rstrip("\\bar \"|.\"")) for l in lines)
-    if not any_end_rest:
-        any_end_rest = any("r2" in l.split("\\break")[0][-10:] if "\\break" not in l else "r2" in l[-10:] for l in lines)
-
-    # Simpler: scan for r4 at line starts and r2 at line ends
-    note_lines = [l.strip() for l in notes_content.split("\\break")]
-    # Check start rests (look for r4 or r2 as first token after % Line comment)
-    def line_content(l):
-        """Extract note content, skipping comments and clef overrides."""
-        result = []
-        for part in l.split("\n"):
-            part = part.strip()
-            if part.startswith("%") or part.startswith("\\omit") or not part:
-                continue
-            result.append(part)
-        return " ".join(result)
-
-    line_contents = [line_content(l) for l in note_lines if line_content(l)]
-    any_start_rest = any(lc.startswith("r") for lc in line_contents)
-    any_end_rest = any(re.search(r'r[12]\s*$', lc) for lc in line_contents)
-
-    if any_start_rest or any_end_rest:
-        new_lines = []
-        for segment in notes_content.split("\n"):
-            stripped = segment.strip()
-            # Skip non-note lines
-            if stripped.startswith("%") or stripped.startswith("\\") or not stripped or stripped == "}":
-                new_lines.append(segment)
-                continue
-            # Check if this line has notes
-            if not re.search(r'[a-g]', stripped):
-                new_lines.append(segment)
-                continue
-            # Add hidden rest at start if needed
-            if any_start_rest and not stripped.startswith("r"):
-                segment = segment.replace(stripped, "\\once \\hide Rest r4 " + stripped, 1)
-                stripped = "\\once \\hide Rest r4 " + stripped
-            # Add hidden rest at end if needed
-            if any_end_rest and not re.search(r'r[12]\s*(\\break|\\bar)', stripped):
-                segment = re.sub(r'(\s*\\break|\s*\\bar)', r' \\once \\hide Rest r2\1', segment, count=1)
-            new_lines.append(segment)
-        notes_content = "\n".join(new_lines)
+    notes_content = modify_notes(notes_content)
 
     # Read lyrics if provided, sanitize for LilyPond
     lyrics_content = ""
@@ -142,9 +146,10 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
         cwd=out_dir,
     )
 
-    # Clean up temp file
-    if os.path.exists(combined_ly):
-        os.remove(combined_ly)
+    # Clean up temp file on success, keep on failure for debugging
+    if result.returncode == 0:
+        if os.path.exists(combined_ly):
+            os.remove(combined_ly)
 
     return result.returncode == 0
 
