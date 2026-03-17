@@ -1,0 +1,10 @@
+[package]
+name = "bop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gtk4 = { version = "0.9", features = ["v4_8"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+clap = { version = "4", features = ["derive"] }
+resvg = "0.45"
