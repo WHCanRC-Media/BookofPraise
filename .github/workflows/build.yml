@@ -22,10 +22,20 @@ jobs:
       - name: Build
         run: cargo build --release
 
+      - name: Assemble distribution
+        run: |
+          mkdir -p dist/lilypond dist/photos
+          cp target/release/bop dist/
+          find lilypond -name '*.ly' -o -name 'composer.txt' | while read f; do
+            mkdir -p "dist/$(dirname "$f")"
+            cp "$f" "dist/$f"
+          done
+          cp -r photos/ dist/photos/
+
       - uses: actions/upload-artifact@v4
         with:
           name: bop-linux
-          path: target/release/bop
+          path: dist/
 
   build-windows:
     runs-on: windows-latest
@@ -47,7 +57,17 @@ jobs:
       - name: Build
         run: cargo build --release
 
+      - name: Assemble distribution
+        run: |
+          mkdir -p dist/lilypond dist/photos
+          cp target/release/bop.exe dist/
+          find lilypond -name '*.ly' -o -name 'composer.txt' | while read f; do
+            mkdir -p "dist/$(dirname "$f")"
+            cp "$f" "dist/$f"
+          done
+          cp -r photos/ dist/photos/
+
       - uses: actions/upload-artifact@v4
         with:
           name: bop-windows
-          path: target/release/bop.exe
+          path: dist/
