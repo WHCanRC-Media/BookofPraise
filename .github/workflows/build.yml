@@ -78,6 +78,17 @@ jobs:
         run: |
           mkdir -p dist/photos
           cp target/release/bop.exe dist/
+
+          # Bundle GTK4 and dependency DLLs
+          ldd target/release/bop.exe | grep ucrt64 | awk '{print $3}' | while read dll; do
+            cp "$dll" dist/
+          done
+
+          # Bundle GDK pixbuf loaders and GTK schemas
+          cp -r /$MSYSTEM/lib/gdk-pixbuf-2.0 dist/lib/gdk-pixbuf-2.0 2>/dev/null || true
+          mkdir -p dist/share/glib-2.0
+          cp -r /$MSYSTEM/share/glib-2.0/schemas dist/share/glib-2.0/ 2>/dev/null || true
+
           cp -r "lilypond-${LILYPOND_VERSION}" dist/lilypond-bin
           find lilypond -name '*.ly' -o -name 'composer.txt' | while read f; do
             mkdir -p "dist/$(dirname "$f")"

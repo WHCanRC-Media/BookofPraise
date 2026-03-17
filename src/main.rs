@@ -257,10 +257,15 @@ impl AppState {
     }
 }
 
+fn exe_dir() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
+}
+
 fn base_dir(use_svg: bool) -> PathBuf {
-    std::env::current_dir()
-        .unwrap_or_default()
-        .join(if use_svg { "lilypond" } else { "photos" })
+    exe_dir().join(if use_svg { "lilypond" } else { "photos" })
 }
 
 /// Find image files for a verse number, sorted (handles multi-part: 1a.svg, 1b.svg).
