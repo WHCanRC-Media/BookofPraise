@@ -22,7 +22,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(SCRIPT_DIR)
 
 sys.path.insert(0, SCRIPT_DIR)
-from png2ly import run_claude, build_lyrics_ly
+from png2ly import run_claude, build_lyrics_ly, detect_staff_systems, extract_lyrics_with_claude
 from render_ly import render_svg
 
 
@@ -91,11 +91,24 @@ def split_line_syllables(text_line, note_line, note_count):
 
 
 def extract_lyrics_from_image(img_path, num_notes_per_line, note_lines, raw_text_path=None):
-    """Extract lyrics from an image in two stages.
+    """Extract lyrics from an image.
 
-    Stage 1: haiku reads the text from the image (fast OCR)
-    Stage 2: sonnet splits each line into syllables matching note count
+    If the image has staff lines (music notation), extract lyrics directly
+    using Claude (same approach as png2ly for verse 1).
+    Otherwise, use two stages: haiku OCR + sonnet syllable splitting.
     """
+    # Check if image has music notation
+    try:
+        systems, _ = detect_staff_systems(img_path)
+        has_staves = len(systems) > 0
+    except (ValueError, Exception):
+        has_staves = False
+
+    if has_staves:
+        # Extract lyrics directly from music image (like png2ly)
+        return extract_lyrics_with_claude(img_path, num_notes_per_line)
+
+    # Text-only image: two-stage approach
     # Stage 1: Extract raw text with haiku
     ocr_prompt = (
         f"Read the image at {img_path} and then: "
