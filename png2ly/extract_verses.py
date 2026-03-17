@@ -100,7 +100,7 @@ def extract_lyrics_from_image(img_path, num_notes_per_line, note_lines, raw_text
     # Check if image has music notation
     try:
         systems, _ = detect_staff_systems(img_path)
-        has_staves = len(systems) > 0
+        has_staves = len(systems) >= 3
     except (ValueError, Exception):
         has_staves = False
 
