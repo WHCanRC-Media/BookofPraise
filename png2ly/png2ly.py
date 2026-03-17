@@ -136,7 +136,12 @@ def detect_staff_systems(img_path):
         raise ValueError(f"Could not read image: {img_path}")
 
     h, w = img.shape
-    row_darkness = np.sum(img < 128, axis=1)
+
+    # Horizontal blur to suppress vertical features (barlines, stems, text)
+    # keeping only long horizontal features (staff lines)
+    kernel_size = max(w // 8, 50)
+    blurred = cv2.blur(img, (kernel_size, 1))
+    row_darkness = np.sum(blurred < 160, axis=1)
     threshold = w * 0.3
     staff_rows = np.where(row_darkness > threshold)[0]
 
@@ -144,18 +149,11 @@ def detect_staff_systems(img_path):
         raise ValueError("No staff lines detected in image")
 
     gaps = np.diff(staff_rows)
-    # Use adaptive threshold: find the gap between staff lines within a system
-    # vs gaps between systems. Staff-line gaps cluster around one value,
-    # system gaps are much larger.
-    sorted_gaps = np.sort(gaps)
-    # The break threshold should be midway between intra-staff and inter-system gaps
-    if len(sorted_gaps) > 5:
-        # Find the first large jump in gap sizes
-        gap_diffs = np.diff(sorted_gaps)
-        big_jump = np.argmax(gap_diffs) + 1
-        gap_threshold = (sorted_gaps[big_jump - 1] + sorted_gaps[big_jump]) // 2
-    else:
-        gap_threshold = 20
+    # Adaptive threshold: intra-staff gaps are small (~10-15px),
+    # inter-system gaps are much larger (~40+px).
+    # Use 2x the median gap as threshold — median will be an intra-staff gap.
+    median_gap = np.median(gaps)
+    gap_threshold = max(median_gap * 2, 20)
     breaks = np.where(gaps > gap_threshold)[0]
     groups = np.split(staff_rows, breaks + 1)
 
@@ -288,12 +286,25 @@ def parse_musicxml(xml_path):
             type_elem = note_elem.find("type")
             note_type = type_elem.text if type_elem is not None else "quarter"
 
+            # Check for slurs
+            slur_start = False
+            slur_stop = False
+            notations_elem = note_elem.find("notations")
+            if notations_elem is not None:
+                for slur_elem in notations_elem.findall("slur"):
+                    if slur_elem.get("type") == "start":
+                        slur_start = True
+                    elif slur_elem.get("type") == "stop":
+                        slur_stop = True
+
             notes.append({
                 "is_rest": False,
                 "step": step,
                 "octave": octave,
                 "alter": alter,
                 "type": note_type,
+                "slur_start": slur_start,
+                "slur_stop": slur_stop,
             })
 
     return notes, key_fifths
@@ -355,59 +366,50 @@ def note_to_lilypond(note):
     return f"{step}{dur}"
 
 
-def notes_to_lilypond_relative(notes):
-    """Convert notes to LilyPond in \\relative mode, adding octave marks."""
+def note_to_lilypond_fixed(note):
+    """Convert a single note dict to LilyPond string with absolute octave."""
+    if note["is_rest"]:
+        duration_map = {"whole": "1", "half": "2", "quarter": "4", "eighth": "8"}
+        dur = duration_map.get(note["type"], "4")
+        return f"r{dur}"
+
+    step = note["step"].lower()
+    alter = note["alter"]
+    if alter == 1:
+        step += "is"
+    elif alter == -1:
+        step += "es"
+
+    # LilyPond fixed mode: c = C3, c' = C4, c'' = C5
+    # Octave marks: octave 3 = no mark, 4 = ', 5 = '', etc.
+    octave = note["octave"]
+    if octave >= 4:
+        step += "'" * (octave - 3)
+    elif octave < 3:
+        step += "," * (3 - octave)
+
+    duration_map = {
+        "breve": "\\breve",
+        "whole": "1",
+        "half": "2",
+        "quarter": "4",
+        "eighth": "8",
+    }
+    dur = duration_map.get(note["type"], "4")
+
+    result = f"{step}{dur}"
+    if note.get("slur_start"):
+        result += "("
+    if note.get("slur_stop"):
+        result += ")"
+    return result
+
+
+def notes_to_lilypond_fixed(notes):
+    """Convert notes to LilyPond in \\fixed mode with absolute octaves."""
     if not notes:
         return ""
-
-    # Find first pitched note to set the reference
-    first_pitched = None
-    for n in notes:
-        if not n["is_rest"]:
-            first_pitched = n
-            break
-
-    if first_pitched is None:
-        return " ".join(note_to_lilypond(n) for n in notes)
-
-    result = []
-    prev_octave = first_pitched["octave"]
-    prev_step_idx = "CDEFGAB".index(first_pitched["step"])
-
-    for note in notes:
-        ly = note_to_lilypond(note)
-
-        if not note["is_rest"]:
-            cur_step_idx = "CDEFGAB".index(note["step"])
-            cur_octave = note["octave"]
-
-            # Calculate the expected octave in relative mode
-            # LilyPond relative: choose the closest note
-            interval = cur_step_idx - prev_step_idx
-            if interval > 3:
-                expected_octave = prev_octave - 1
-            elif interval < -3:
-                expected_octave = prev_octave + 1
-            else:
-                expected_octave = prev_octave
-
-            diff = cur_octave - expected_octave
-            if diff > 0:
-                ly = ly.replace(note["step"].lower(), note["step"].lower() + "'" * diff, 1)
-            elif diff < 0:
-                step_with_alter = note["step"].lower()
-                if note["alter"] == 1:
-                    step_with_alter += "is"
-                elif note["alter"] == -1:
-                    step_with_alter += "es"
-                ly = ly.replace(step_with_alter, step_with_alter + "," * abs(diff), 1)
-
-            prev_octave = cur_octave
-            prev_step_idx = cur_step_idx
-
-        result.append(ly)
-
-    return " ".join(result)
+    return " ".join(note_to_lilypond_fixed(n) for n in notes)
 
 
 def detect_key_fifths(all_line_notes):
@@ -441,7 +443,7 @@ def build_notes_ly(all_lines, key_fifths):
 
     lines_ly = []
     for i, line_notes in enumerate(all_lines):
-        ly = notes_to_lilypond_relative(line_notes)
+        ly = notes_to_lilypond_fixed(line_notes)
 
         if i < len(all_lines) - 1:
             ly += ' \\break'
@@ -451,7 +453,7 @@ def build_notes_ly(all_lines, key_fifths):
 
     melody_block = "\n".join(lines_ly)
 
-    return f"""melody = \\relative {relative_header(key_fifths)} {{
+    return f"""melody = \\fixed c {{
   \\clef treble
   {key_str}
   \\cadenzaOn
@@ -518,36 +520,42 @@ def find_psalm_input(psalm_dir):
     return None, False, []
 
 
-def process_psalm(png_path, out_dir):
-    """Run the full png2ly pipeline on a single image. Returns (notes, lyrics, composer)."""
+def process_psalm(png_path, out_dir, no_lyrics=False):
+    """Run the full png2ly pipeline on a single image."""
     from render_ly import render_svg
 
     tmpdir = tempfile.mkdtemp(prefix="png2ly_")
     try:
         systems, img_height = detect_staff_systems(png_path)
+        print(f"  Found {len(systems)} staff systems")
         line_paths = crop_lines(png_path, systems, img_height, tmpdir)
 
         all_line_data = []
-        for line_path in line_paths:
+        for i, line_path in enumerate(line_paths):
             try:
                 mxl_path = run_audiveris(line_path, tmpdir)
                 xml_path = extract_mxl(mxl_path, tmpdir)
                 notes, key_fifths = parse_musicxml(xml_path)
                 all_line_data.append((notes, key_fifths))
-            except Exception:
+                print(f"  Line {i+1}: {len(notes)} notes, key={key_fifths}")
+            except Exception as e:
+                print(f"  Line {i+1}: FAILED {e}")
                 all_line_data.append(([], None))
 
         global_key = detect_key_fifths(all_line_data)
+        print(f"  Key: {global_key} fifths")
         all_lines = []
         for notes, _ in all_line_data:
             all_lines.append(apply_key_signature(notes, global_key))
 
         composer = extract_composer_with_claude(png_path)
-        num_notes = [
-            len([n for n in notes if not n["is_rest"]])
-            for notes, _ in all_line_data
-        ]
-        lyrics = extract_lyrics_with_claude(png_path, num_notes)
+        lyrics = None
+        if not no_lyrics:
+            num_notes = [
+                len([n for n in notes if not n["is_rest"]])
+                for notes, _ in all_line_data
+            ]
+            lyrics = extract_lyrics_with_claude(png_path, num_notes)
 
         os.makedirs(out_dir, exist_ok=True)
 
@@ -594,6 +602,7 @@ def main():
     parser.add_argument("-n", "--limit", type=int, help="Max number of psalms to process (batch mode)")
     parser.add_argument("-j", "--jobs", type=int, default=4, help="Parallel workers for batch mode (default: 4)")
     parser.add_argument("--psalm", help="Process only this psalm (e.g. psalm6)")
+    parser.add_argument("--no-lyrics", action="store_true", help="Skip lyrics extraction")
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -660,7 +669,7 @@ def main():
             out_dir = os.path.splitext(input_path)[0]
 
         t0 = time.time()
-        process_psalm(input_path, out_dir)
+        process_psalm(input_path, out_dir, no_lyrics=args.no_lyrics)
         print(f"Done. Total: {time.time() - t0:.1f}s")
 
     else:
