@@ -218,10 +218,7 @@ def run_audiveris(line_path, output_dir, audiveris_dir=None):
     )
     if result.returncode != 0:
         stderr = result.stdout + result.stderr
-        if "Could not find file" in stderr:
-            raise FileNotFoundError(f"Audiveris could not find: {line_path}")
-        print(f"  Warning: Audiveris returned code {result.returncode}", file=sys.stderr)
-        print(f"  {stderr[-200:]}", file=sys.stderr)
+        raise RuntimeError(f"Audiveris failed on {line_path}: {stderr[-200:]}")
 
     basename = os.path.splitext(os.path.basename(line_path))[0]
     mxl_path = os.path.join(output_dir, f"{basename}.mxl")
