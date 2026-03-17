@@ -6,8 +6,22 @@
 
 use regex::Regex;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+
+/// Find the lilypond binary: check next to our executable first, then PATH.
+fn lilypond_bin() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            // Check for bundled lilypond: <exe_dir>/lilypond/bin/lilypond
+            let bundled = dir.join("lilypond").join("bin").join("lilypond");
+            if bundled.exists() {
+                return bundled;
+            }
+        }
+    }
+    PathBuf::from("lilypond")
+}
 
 fn is_up_to_date(output: &Path, sources: &[&Path]) -> bool {
     let out_mtime = match fs::metadata(output).and_then(|m| m.modified()) {
@@ -178,7 +192,7 @@ pub fn ensure_svg(song_dir: &Path, verse: u32) -> bool {
     }
 
     let stem = song_dir.join(format!("{verse}"));
-    let result = Command::new("lilypond")
+    let result = Command::new(lilypond_bin())
         .args(["-dbackend=svg", "-dcrop", "-o"])
         .arg(&stem)
         .arg(&combined_ly)

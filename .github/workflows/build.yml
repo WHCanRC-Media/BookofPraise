@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [master]
 
+env:
+  LILYPOND_VERSION: "2.24.4"
+
 jobs:
   build-linux:
     runs-on: ubuntu-latest
@@ -22,10 +25,17 @@ jobs:
       - name: Build
         run: cargo build --release
 
+      - name: Download LilyPond
+        run: |
+          curl -L -o lilypond.tar.gz \
+            "https://gitlab.com/lilypond/lilypond/-/releases/v${LILYPOND_VERSION}/downloads/lilypond-${LILYPOND_VERSION}-linux-x86_64.tar.gz"
+          tar xzf lilypond.tar.gz
+
       - name: Assemble distribution
         run: |
-          mkdir -p dist/lilypond dist/photos
+          mkdir -p dist/photos
           cp target/release/bop dist/
+          cp -r "lilypond-${LILYPOND_VERSION}-linux-x86_64" dist/lilypond
           find lilypond -name '*.ly' -o -name 'composer.txt' | while read f; do
             mkdir -p "dist/$(dirname "$f")"
             cp "$f" "dist/$f"
@@ -53,14 +63,22 @@ jobs:
             mingw-w64-ucrt-x86_64-gtk4
             mingw-w64-ucrt-x86_64-rust
             mingw-w64-ucrt-x86_64-pkg-config
+            unzip
 
       - name: Build
         run: cargo build --release
 
+      - name: Download LilyPond
+        run: |
+          curl -L -o lilypond.zip \
+            "https://gitlab.com/lilypond/lilypond/-/releases/v${LILYPOND_VERSION}/downloads/lilypond-${LILYPOND_VERSION}-mingw-x86_64.zip"
+          unzip -q lilypond.zip
+
       - name: Assemble distribution
         run: |
-          mkdir -p dist/lilypond dist/photos
+          mkdir -p dist/photos
           cp target/release/bop.exe dist/
+          cp -r "lilypond-${LILYPOND_VERSION}-mingw-x86_64" dist/lilypond
           find lilypond -name '*.ly' -o -name 'composer.txt' | while read f; do
             mkdir -p "dist/$(dirname "$f")"
             cp "$f" "dist/$f"
