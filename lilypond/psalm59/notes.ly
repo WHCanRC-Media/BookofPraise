@@ -1,18 +1,18 @@
-melody = \fixed c {
+melody = \relative c' {
   \clef treble
   \key bes \major
   \cadenzaOn
   \omit Staff.TimeSignature
 
   % Line 1
-  c''2 g'4 g'4 c''4 c''4 bes'4 bes'4 a'2 g'2 r2 \break
+  c'2 g4 g4 c4 c4 bes4 bes4 a2 g2 r2 \break
 
   % Line 2
-  g'2 a'4 c''4 bes'4 g'4 bes'4 bes'4 a'2 g'2 r2 \break
+  g2 a4 c4 bes4 g4 bes4 bes4 a2 g2 r2 \break
 
   % Line 3
-  ees'2 f'4 aes'4 g'4 ees'4 g'2 f'2 ees'2 r2 \break
+  ees2 f4 aes4 g4 ees4 g2 f2 ees2 r2 \break
 
   % Line 4
-  g'2 ees'4 ees'4 c'4 ees'4 f'2 d'2 c'2 r2 \bar "|."
+  g2 ees4 ees4 c4 ees4 f2 d2 c2 r2 \bar "|."
 }
