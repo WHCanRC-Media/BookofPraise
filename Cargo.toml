@@ -9,3 +9,6 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 clap = { version = "4", features = ["derive"] }
 regex = "1"
 resvg = "0.45"
+
+[build-dependencies]
+winres = "0.1"
