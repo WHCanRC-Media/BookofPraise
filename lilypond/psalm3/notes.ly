@@ -11,7 +11,7 @@ melody = \relative c'' {
   d2 cis4 b4 a4 g4 a2 r2 \break
 
   % Line 3
-   \break
+  a2 a4 d4 g4 f4 e2 d2 r2 \break
 
   % Line 4
   a2 a4 b4 a4 g4 fis2 r2 \break
@@ -38,5 +38,5 @@ melody = \relative c'' {
   a2 b4 d4 r4 d4 cis4 d2 r2 \break
 
   % Line 12
-   \bar "|."
+  d2 b4 a4 g4 f4 e2 d2 \bar "|."
 }
