@@ -138,7 +138,7 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
 
     # Render
     result = subprocess.run(
-        ["lilypond", "-dbackend=svg", "-o",
+        ["lilypond", "-dbackend=svg", "-dcrop", "-o",
          os.path.splitext(os.path.abspath(output_svg))[0],
          combined_ly],
         capture_output=True,
@@ -146,8 +146,15 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
         cwd=out_dir,
     )
 
-    # Clean up temp file on success, keep on failure for debugging
     if result.returncode == 0:
+        # Replace full-page SVG with cropped version
+        abs_svg = os.path.abspath(output_svg)
+        cropped_svg = os.path.splitext(abs_svg)[0] + ".cropped.svg"
+        if os.path.exists(cropped_svg):
+            os.replace(cropped_svg, abs_svg)
+        # Remove uncropped full-page SVG if still present
+        full_svg = abs_svg  # already replaced above
+        # Clean up temp file
         if os.path.exists(combined_ly):
             os.remove(combined_ly)
 

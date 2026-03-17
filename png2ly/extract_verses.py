@@ -44,69 +44,93 @@ def concatenate_images_vertically(paths, output_path):
     return output_path
 
 
-def ocr_image(img_path):
-    """Run Tesseract OCR on an image and return the text."""
-    result = subprocess.run(
-        ["tesseract", img_path, "-"],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        return None
-    return result.stdout.strip()
+def get_note_lines(notes_path):
+    """Get the pitched note content (excluding rests) for each line from a notes.ly file."""
+    with open(notes_path) as f:
+        all_lines = f.readlines()
+
+    result = []
+    for i, line in enumerate(all_lines):
+        if re.match(r'\s*%\s*Line\s+\d+', line):
+            # Next line has the notes
+            if i + 1 < len(all_lines):
+                note_line = all_lines[i + 1]
+                notes = re.findall(r'(?<![a-z])[a-g](?:is|es)?[0-9\',]+', note_line)
+                result.append(" ".join(notes))
+    return result
 
 
-def text_to_lyricmode(text, num_notes_per_line):
-    """Convert plain text lyrics to LilyPond lyricmode format using Claude."""
-    notes_info = ", ".join(str(n) for n in num_notes_per_line)
+def split_line_syllables(text_line, note_line, note_count):
+    """Ask sonnet to split one line of text into syllables matching note count."""
     prompt = (
-        "Convert these hymn lyrics to LilyPond \\lyricmode format.\n\n"
-        f"Lyrics:\n{text}\n\n"
+        f"Split this hymn lyric line into exactly {note_count} syllables for LilyPond.\n\n"
+        f"Text: {text_line}\n"
+        f"Notes: {note_line}\n"
+        f"Required syllable count: {note_count}\n\n"
         "Rules:\n"
-        "- Use ' -- ' (space-dash-dash-space) between syllables of the same word\n"
-        "- Use spaces between separate words\n"
-        "- Do not include verse numbers\n"
-        "- Include all punctuation as it appears\n"
-        f"- The melody has {len(num_notes_per_line)} lines with this many notes per line: {notes_info}\n"
-        "- Each syllable should align with one note. If a syllable spans multiple notes "
-        "(melisma), use '_' for the extra notes after the syllable.\n"
-        "- Output nothing except the lyricmode content (no \\lyricmode wrapper, no explanation)"
+        "- Use ' -- ' (space-dash-dash-space) between syllables of the SAME word\n"
+        "- Use spaces between DIFFERENT words\n"
+        "- Each syllable gets one note\n"
+        f"- Count must be exactly {note_count}\n"
+        "- Standalone punctuation like dashes (– —) should be attached to the preceding word, not counted as a separate syllable\n"
+        "- Include punctuation (commas, periods, semicolons, etc.) attached to the syllable, not as separate tokens\n"
+        "- Output ONLY the syllable-split text, nothing else"
     )
-    text = run_claude(prompt)
-    if not text:
-        return None
-    # Strip markdown code fences
-    if "```" in text:
-        blocks = text.split("```")
-        for i in range(len(blocks) - 1, 0, -1):
-            candidate = blocks[i].strip()
-            for prefix in ["lilypond", "ly", "text"]:
-                if candidate.startswith(prefix):
-                    candidate = candidate[len(prefix):].strip()
-            if candidate and "--" in candidate:
-                return candidate
-    # Filter out explanation lines
-    lines = []
-    for line in text.splitlines():
+    result = run_claude(prompt, model="sonnet", timeout=30)
+    if not result:
+        return text_line
+    # Clean up — take first non-empty line that isn't explanation
+    for line in result.splitlines():
         line = line.strip()
-        if not line or line.startswith("-") or line.startswith("*") or ":" in line[:20]:
-            continue
-        lines.append(line)
-    return "\n".join(lines) if lines else text
+        if line and not line.startswith("-") and ":" not in line[:15]:
+            # Remove standalone dashes (not syllable separators)
+            line = re.sub(r'\s+[–—]\s*$', '', line)
+            line = re.sub(r'\s+[–—]\s+', ' ', line)
+            return line
+    return result.strip()
+
+
+def extract_lyrics_from_image(img_path, num_notes_per_line, note_lines, raw_text_path=None):
+    """Extract lyrics from an image in two stages.
+
+    Stage 1: haiku reads the text from the image (fast OCR)
+    Stage 2: sonnet splits each line into syllables matching note count
+    """
+    # Stage 1: Extract raw text with haiku
+    ocr_prompt = (
+        f"Read the image at {img_path} and then: "
+        "Extract ALL the text from this image. "
+        "Keep each line of text on a separate line. "
+        "Output only the text, nothing else. "
+        "Do not include verse numbers."
+    )
+    raw_text = run_claude(ocr_prompt, model="haiku")
+    if raw_text and raw_text_path:
+        with open(raw_text_path, "w") as f:
+            f.write(raw_text)
+    if not raw_text:
+        return None
+
+    # Stage 2: Split each line into syllables
+    text_lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+
+    # Match text lines to note lines
+    result_lines = []
+    for i, note_count in enumerate(num_notes_per_line):
+        if i < len(text_lines):
+            text_line = text_lines[i]
+        else:
+            text_line = ""
+        note_line = note_lines[i] if i < len(note_lines) else ""
+        split = split_line_syllables(text_line, note_line, note_count)
+        result_lines.append(split)
+
+    return "\n".join(result_lines)
 
 
 def count_notes_per_line(notes_path):
     """Count pitched notes (not rests) per line from a notes.ly file."""
-    with open(notes_path) as f:
-        content = f.read()
-
-    counts = []
-    for segment in content.split("\\break"):
-        notes = re.findall(r'(?<![a-z])[a-g](?:is|es)?[0-9\',]*', segment)
-        if notes:
-            counts.append(len(notes))
-    return counts
+    return [len(nl.split()) for nl in get_note_lines(notes_path)]
 
 
 def find_verse_pngs(psalm_photo_dir):
@@ -121,7 +145,7 @@ def find_verse_pngs(psalm_photo_dir):
         m = re.match(r'^(\d+)\.png$', f)
         if m:
             num = int(m.group(1))
-            if num >= 2:
+            if num >= 1:
                 verses[num] = [os.path.join(psalm_photo_dir, f)]
 
     for f in sorted(os.listdir(psalm_photo_dir)):
@@ -145,6 +169,7 @@ def process_verse(args):
     try:
         notes_path = os.path.join(out_dir, "notes.ly")
         notes_per_line = count_notes_per_line(notes_path)
+        note_lines = get_note_lines(notes_path)
         if not notes_per_line:
             return (psalm_name, verse_num, "FAILED: no notes found", time.time() - t0)
 
@@ -156,12 +181,9 @@ def process_verse(args):
         else:
             img_path = png_paths[0]
 
-        # OCR then format with Claude
-        raw_text = ocr_image(img_path)
-        if not raw_text:
-            return (psalm_name, verse_num, "FAILED: OCR failed", time.time() - t0)
-
-        lyrics = text_to_lyricmode(raw_text, notes_per_line)
+        # Extract lyrics: haiku OCR then sonnet syllable splitting per line
+        raw_text_path = os.path.join(out_dir, f"raw_text_{verse_num}.txt")
+        lyrics = extract_lyrics_from_image(img_path, notes_per_line, note_lines, raw_text_path)
         if not lyrics:
             return (psalm_name, verse_num, "FAILED: no lyrics", time.time() - t0)
 

@@ -32,7 +32,7 @@ import cv2
 import numpy as np
 
 
-def run_claude(prompt, retries=3, timeout=120):
+def run_claude(prompt, retries=3, timeout=120, model=None):
     """Run claude -p with retries on timeout, adding entropy each attempt."""
     import random
     for attempt in range(retries):
@@ -46,8 +46,11 @@ def run_claude(prompt, retries=3, timeout=120):
         else:
             varied_prompt = prompt
         try:
+            cmd = ["claude", "-p", varied_prompt]
+            if model:
+                cmd.extend(["--model", model])
             result = subprocess.run(
-                ["claude", "-p", varied_prompt],
+                cmd,
                 capture_output=True,
                 text=True,
                 stdin=subprocess.DEVNULL,
@@ -92,7 +95,8 @@ def extract_lyrics_with_claude(img_path, num_notes_per_line):
         "- Include all punctuation as it appears\n"
         f"- The music has {len(num_notes_per_line)} lines with this many notes per line: {notes_info}\n"
         "- Each syllable should align with one note. If a syllable spans multiple notes "
-        "(melisma), use '_' for the extra notes after the syllable.\n"
+        "(melisma), use '_' for the extra notes after the syllable. \n"
+        "- The number of notes in a line should match the number of syllables in a line\n"
         "- Output nothing except the lyricmode content (no \\lyricmode wrapper, no explanation)"
     )
     text = run_claude(f"Read the image at {img_path} and then: {prompt}")
