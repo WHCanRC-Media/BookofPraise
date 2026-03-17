@@ -1,2 +1,4 @@
 __pycache__
 venv/
+lilypond/*/*.svg
+lilypond/*/*.png
