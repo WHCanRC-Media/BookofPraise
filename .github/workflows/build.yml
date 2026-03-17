@@ -35,7 +35,7 @@ jobs:
         run: |
           mkdir -p dist/photos
           cp target/release/bop dist/
-          cp -r "lilypond-${LILYPOND_VERSION}-linux-x86_64" dist/lilypond
+          cp -r "lilypond-${LILYPOND_VERSION}" dist/lilypond-bin
           find lilypond -name '*.ly' -o -name 'composer.txt' | while read f; do
             mkdir -p "dist/$(dirname "$f")"
             cp "$f" "dist/$f"
@@ -78,7 +78,7 @@ jobs:
         run: |
           mkdir -p dist/photos
           cp target/release/bop.exe dist/
-          cp -r "lilypond-${LILYPOND_VERSION}-mingw-x86_64" dist/lilypond
+          cp -r "lilypond-${LILYPOND_VERSION}" dist/lilypond-bin
           find lilypond -name '*.ly' -o -name 'composer.txt' | while read f; do
             mkdir -p "dist/$(dirname "$f")"
             cp "$f" "dist/$f"

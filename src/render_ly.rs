@@ -13,8 +13,8 @@ use std::process::{Command, Stdio};
 fn lilypond_bin() -> PathBuf {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            // Check for bundled lilypond: <exe_dir>/lilypond/bin/lilypond
-            let bundled = dir.join("lilypond").join("bin").join("lilypond");
+            // Check for bundled lilypond: <exe_dir>/lilypond-bin/bin/lilypond
+            let bundled = dir.join("lilypond-bin").join("bin").join("lilypond");
             if bundled.exists() {
                 return bundled;
             }
