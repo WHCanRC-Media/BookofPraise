@@ -7,4 +7,5 @@ edition = "2024"
 gtk4 = { version = "0.9", features = ["v4_8"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 clap = { version = "4", features = ["derive"] }
+regex = "1"
 resvg = "0.45"
