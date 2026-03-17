@@ -39,6 +39,7 @@ def modify_notes(notes_content):
     # Check if any line starts/ends with a rest
     line_contents = _extract_line_contents(notes_content)
 
+    first_note_line = True
     new_lines = []
     for segment in notes_content.split("\n"):
         stripped = segment.strip()
@@ -48,12 +49,14 @@ def modify_notes(notes_content):
                 "=" in stripped):
             new_lines.append(segment)
             continue
-        # Check if this line has actual note patterns (letter followed by digit)
-        if not re.search(r'[a-g](is|es)?[0-9]', stripped):
+        # Check if this line has actual note patterns (letter with optional octave marks and digit)
+        if not re.search(r"[a-g](is|es)?[',]*[0-9]", stripped):
             new_lines.append(segment)
             continue
-        # Add hidden rest at start if needed
-        if not stripped.startswith("r"):
+        # Add hidden rest at start (skip first line)
+        if first_note_line:
+            first_note_line = False
+        elif not stripped.startswith("r"):
             segment = segment.replace(stripped, "\\once \\hide Rest r4 " + stripped, 1)
             stripped = "\\once \\hide Rest r4 " + stripped
         # Add hidden rest at end if needed
@@ -152,8 +155,6 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
         cropped_svg = os.path.splitext(abs_svg)[0] + ".cropped.svg"
         if os.path.exists(cropped_svg):
             os.replace(cropped_svg, abs_svg)
-        # Remove uncropped full-page SVG if still present
-        full_svg = abs_svg  # already replaced above
         # Clean up temp file
         if os.path.exists(combined_ly):
             os.remove(combined_ly)
