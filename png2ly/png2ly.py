@@ -136,7 +136,12 @@ def detect_staff_systems(img_path):
         raise ValueError(f"Could not read image: {img_path}")
 
     h, w = img.shape
-    row_darkness = np.sum(img < 128, axis=1)
+
+    # Horizontal blur to suppress vertical features (barlines, stems, text)
+    # keeping only long horizontal features (staff lines)
+    kernel_size = max(w // 8, 50)
+    blurred = cv2.blur(img, (kernel_size, 1))
+    row_darkness = np.sum(blurred < 160, axis=1)
     threshold = w * 0.3
     staff_rows = np.where(row_darkness > threshold)[0]
 
@@ -144,18 +149,11 @@ def detect_staff_systems(img_path):
         raise ValueError("No staff lines detected in image")
 
     gaps = np.diff(staff_rows)
-    # Use adaptive threshold: find the gap between staff lines within a system
-    # vs gaps between systems. Staff-line gaps cluster around one value,
-    # system gaps are much larger.
-    sorted_gaps = np.sort(gaps)
-    # The break threshold should be midway between intra-staff and inter-system gaps
-    if len(sorted_gaps) > 5:
-        # Find the first large jump in gap sizes
-        gap_diffs = np.diff(sorted_gaps)
-        big_jump = np.argmax(gap_diffs) + 1
-        gap_threshold = (sorted_gaps[big_jump - 1] + sorted_gaps[big_jump]) // 2
-    else:
-        gap_threshold = 20
+    # Adaptive threshold: intra-staff gaps are small (~10-15px),
+    # inter-system gaps are much larger (~40+px).
+    # Use 2x the median gap as threshold — median will be an intra-staff gap.
+    median_gap = np.median(gaps)
+    gap_threshold = max(median_gap * 2, 20)
     breaks = np.where(gaps > gap_threshold)[0]
     groups = np.split(staff_rows, breaks + 1)
 
@@ -518,36 +516,42 @@ def find_psalm_input(psalm_dir):
     return None, False, []
 
 
-def process_psalm(png_path, out_dir):
-    """Run the full png2ly pipeline on a single image. Returns (notes, lyrics, composer)."""
+def process_psalm(png_path, out_dir, no_lyrics=False):
+    """Run the full png2ly pipeline on a single image."""
     from render_ly import render_svg
 
     tmpdir = tempfile.mkdtemp(prefix="png2ly_")
     try:
         systems, img_height = detect_staff_systems(png_path)
+        print(f"  Found {len(systems)} staff systems")
         line_paths = crop_lines(png_path, systems, img_height, tmpdir)
 
         all_line_data = []
-        for line_path in line_paths:
+        for i, line_path in enumerate(line_paths):
             try:
                 mxl_path = run_audiveris(line_path, tmpdir)
                 xml_path = extract_mxl(mxl_path, tmpdir)
                 notes, key_fifths = parse_musicxml(xml_path)
                 all_line_data.append((notes, key_fifths))
-            except Exception:
+                print(f"  Line {i+1}: {len(notes)} notes, key={key_fifths}")
+            except Exception as e:
+                print(f"  Line {i+1}: FAILED {e}")
                 all_line_data.append(([], None))
 
         global_key = detect_key_fifths(all_line_data)
+        print(f"  Key: {global_key} fifths")
         all_lines = []
         for notes, _ in all_line_data:
             all_lines.append(apply_key_signature(notes, global_key))
 
         composer = extract_composer_with_claude(png_path)
-        num_notes = [
-            len([n for n in notes if not n["is_rest"]])
-            for notes, _ in all_line_data
-        ]
-        lyrics = extract_lyrics_with_claude(png_path, num_notes)
+        lyrics = None
+        if not no_lyrics:
+            num_notes = [
+                len([n for n in notes if not n["is_rest"]])
+                for notes, _ in all_line_data
+            ]
+            lyrics = extract_lyrics_with_claude(png_path, num_notes)
 
         os.makedirs(out_dir, exist_ok=True)
 
@@ -594,6 +598,7 @@ def main():
     parser.add_argument("-n", "--limit", type=int, help="Max number of psalms to process (batch mode)")
     parser.add_argument("-j", "--jobs", type=int, default=4, help="Parallel workers for batch mode (default: 4)")
     parser.add_argument("--psalm", help="Process only this psalm (e.g. psalm6)")
+    parser.add_argument("--no-lyrics", action="store_true", help="Skip lyrics extraction")
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -660,7 +665,7 @@ def main():
             out_dir = os.path.splitext(input_path)[0]
 
         t0 = time.time()
-        process_psalm(input_path, out_dir)
+        process_psalm(input_path, out_dir, no_lyrics=args.no_lyrics)
         print(f"Done. Total: {time.time() - t0:.1f}s")
 
     else:
