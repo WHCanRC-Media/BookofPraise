@@ -11,4 +11,3 @@ regex = "1"
 resvg = "0.45"
 
 [build-dependencies]
-winres = "0.1"

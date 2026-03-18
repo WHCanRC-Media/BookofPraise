@@ -8,13 +8,16 @@ use regex::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 /// Find the lilypond binary: check next to our executable first, then PATH.
 fn lilypond_bin() -> PathBuf {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             // Check for bundled lilypond: <exe_dir>/lilypond-bin/bin/lilypond
-            let bundled = dir.join("lilypond-bin").join("bin").join("lilypond");
+            let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
+            let bundled = dir.join("lilypond-bin").join("bin").join(format!("lilypond{exe_suffix}"));
             if bundled.exists() {
                 return bundled;
             }
@@ -192,14 +195,17 @@ pub fn ensure_svg(song_dir: &Path, verse: u32) -> bool {
     }
 
     let stem = song_dir.join(format!("{verse}"));
-    let result = Command::new(lilypond_bin())
-        .args(["-dbackend=svg", "-dcrop", "-o"])
+    #[allow(unused_mut)]
+    let mut cmd = Command::new(lilypond_bin());
+    cmd.args(["-dbackend=svg", "-dcrop", "-o"])
         .arg(&stem)
         .arg(&combined_ly)
         .current_dir(song_dir)
         .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .output();
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    let result = cmd.output();
 
     match result {
         Ok(out) if out.status.success() => {

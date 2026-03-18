@@ -544,7 +544,6 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
         .default_width(1024)
         .default_height(768)
         .build();
-
     // Image display
     let picture = gtk::Picture::new();
     picture.set_can_shrink(true);
