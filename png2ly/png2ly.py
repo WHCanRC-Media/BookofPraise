@@ -137,13 +137,23 @@ def detect_staff_systems(img_path):
 
     h, w = img.shape
 
+    # Crop whitespace from left and right for accurate width-based threshold
+    col_darkness = np.sum(img < 200, axis=0)
+    content_cols = np.where(col_darkness > 0)[0]
+    if len(content_cols) > 0:
+        content_width = content_cols[-1] - content_cols[0] + 1
+    else:
+        content_width = w
+
     # Horizontal blur to suppress vertical features (barlines, stems, text)
-    # keeping only long horizontal features (staff lines)
     kernel_size = max(w // 8, 50)
     blurred = cv2.blur(img, (kernel_size, 1))
-    row_darkness = np.sum(blurred < 160, axis=1)
-    threshold = w * 0.3
-    staff_rows = np.where(row_darkness > threshold)[0]
+    # Vertical derivative to find rising edges (top of staff lines)
+    # Each staff line becomes exactly 1 row
+    deriv = blurred[:-1].astype(np.int16) - blurred[1:].astype(np.int16)
+    row_edge = np.sum(deriv > 40, axis=1)
+    threshold = content_width * 0.75
+    staff_rows = np.where(row_edge > threshold)[0]
 
     if len(staff_rows) == 0:
         raise ValueError("No staff lines detected in image")
@@ -218,10 +228,7 @@ def run_audiveris(line_path, output_dir, audiveris_dir=None):
     )
     if result.returncode != 0:
         stderr = result.stdout + result.stderr
-        if "Could not find file" in stderr:
-            raise FileNotFoundError(f"Audiveris could not find: {line_path}")
-        print(f"  Warning: Audiveris returned code {result.returncode}", file=sys.stderr)
-        print(f"  {stderr[-200:]}", file=sys.stderr)
+        raise RuntimeError(f"Audiveris failed on {line_path}: {stderr[-200:]}")
 
     basename = os.path.splitext(os.path.basename(line_path))[0]
     mxl_path = os.path.join(output_dir, f"{basename}.mxl")
@@ -524,26 +531,21 @@ def process_psalm(png_path, out_dir, no_lyrics=False):
     """Run the full png2ly pipeline on a single image."""
     from render_ly import render_svg
 
+    lines_dir = os.path.join(out_dir, "lines")
+    os.makedirs(lines_dir, exist_ok=True)
     tmpdir = tempfile.mkdtemp(prefix="png2ly_")
     try:
         systems, img_height = detect_staff_systems(png_path)
-        print(f"  Found {len(systems)} staff systems")
-        line_paths = crop_lines(png_path, systems, img_height, tmpdir)
+        line_paths = crop_lines(png_path, systems, img_height, lines_dir)
 
         all_line_data = []
-        for i, line_path in enumerate(line_paths):
-            try:
-                mxl_path = run_audiveris(line_path, tmpdir)
-                xml_path = extract_mxl(mxl_path, tmpdir)
-                notes, key_fifths = parse_musicxml(xml_path)
-                all_line_data.append((notes, key_fifths))
-                print(f"  Line {i+1}: {len(notes)} notes, key={key_fifths}")
-            except Exception as e:
-                print(f"  Line {i+1}: FAILED {e}")
-                all_line_data.append(([], None))
+        for line_path in line_paths:
+            mxl_path = run_audiveris(line_path, tmpdir)
+            xml_path = extract_mxl(mxl_path, tmpdir)
+            notes, key_fifths = parse_musicxml(xml_path)
+            all_line_data.append((notes, key_fifths))
 
         global_key = detect_key_fifths(all_line_data)
-        print(f"  Key: {global_key} fifths")
         all_lines = []
         for notes, _ in all_line_data:
             all_lines.append(apply_key_signature(notes, global_key))

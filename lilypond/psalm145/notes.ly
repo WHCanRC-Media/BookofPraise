@@ -1,11 +1,11 @@
-melody = \relative c'' {
+melody = \relative c' {
   \clef treble
   \key g \major
   \cadenzaOn
   \omit Staff.TimeSignature
 
   % Line 1
-  a2 b4 g4 a2 d2 c4 a4 b4 b4 a2 r2 \break
+  a'2 b4 g4 a2 d2 c4 a4 b4 b4 a2 r2 \break
 
   % Line 2
   a2 b4 a4 fis2 a2 g4 fis4 e4 e4 d2 r2 \break

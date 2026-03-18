@@ -1,4 +1,4 @@
-melody = \relative c'' {
+melody = \relative c' {
   \clef treble
   \key c \major
   \cadenzaOn
@@ -14,7 +14,7 @@ melody = \relative c'' {
   a2 bes4 a4 f4 a4 g4 f4 e2 d2 r2 \break
 
   % Line 4
-  a2 bes4 a4 f4 a4 g4 f4 e2 d2 r2 \break
+  a'2 bes4 a4 f4 a4 g4 f4 e2 d2 r2 \break
 
   % Line 5
   f2 g2 a4 b4 c4 b4 a2 \break

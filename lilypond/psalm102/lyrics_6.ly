@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  LORD you will a -- rise in pi -- ty
+  LORD, you will a -- rise in pi -- ty
 on your house and ho -- ly ci -- ty.
 It is time to show your face,
 the ap -- point -- ed time for grace.

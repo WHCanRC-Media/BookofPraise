@@ -1,7 +1,7 @@
 __pycache__
 venv/
-
-
 # Added by cargo
-
 /target
+
+lilypond/*/*.svg
+lilypond/*/*.png
