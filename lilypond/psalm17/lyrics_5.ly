@@ -1,0 +1,10 @@
+verse = \lyricmode {
+  They like a li -- on crave their prey.
+Rise up, O LORD, rise up to show them
+the sword you drew to o -- ver -- throw them.
+Now with your hand snatch me a -- way
+from those who trust in earth -- ly trea -- sure,
+who have in this life their re -- ward.
+O gorge them and their off -- spring, LORD,
+with bit -- ter fruits in full -- est mea -- sure.
+}
