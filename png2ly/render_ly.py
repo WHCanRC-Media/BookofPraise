@@ -92,11 +92,7 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
     if lyrics_path and os.path.exists(lyrics_path):
         with open(lyrics_path) as f:
             lyrics_content = f.read()
-        # Sanitize
-        lyrics_content = lyrics_content.replace("\u201c", '"').replace("\u201d", '"')
-        lyrics_content = lyrics_content.replace("\u2018", "'").replace("\u2019", "'")
-        lyrics_content = re.sub(r'\\(left|right|textit|textbf|emph)\s*', '', lyrics_content)
-        lyrics_content = re.sub(r'\\u[0-9a-fA-F]{4}', '', lyrics_content)
+        lyrics_content = lyrics_content.replace('\\"', '\u201c')
 
     lyrics_score = ""
     if lyrics_content.strip():

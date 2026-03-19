@@ -80,11 +80,8 @@ fn modify_notes(notes: &str) -> String {
 }
 
 fn sanitize_lyrics(content: &str) -> String {
-    let s = content
-        .replace('\u{201c}', "\"")
-        .replace('\u{201d}', "\"")
-        .replace('\u{2018}', "'")
-        .replace('\u{2019}', "'");
+    // Replace escaped straight quotes with curly quotes (safe in lyricmode)
+    let s = content.replace("\\\"", "\u{201c}");
     let s = Regex::new(r"\\(left|right|textit|textbf|emph)\s*")
         .unwrap()
         .replace_all(&s, "");
@@ -140,10 +137,8 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>) -> Strin
     )
 }
 
-/// Ensure the SVG for a given verse exists and is up to date.
-///
-/// Returns `true` if the SVG is available after this call.
-pub fn ensure_svg(song_dir: &Path, verse: u32) -> bool {
+/// Check whether the SVG needs rendering (returns true if up to date).
+pub fn is_svg_current(song_dir: &Path, verse: u32) -> bool {
     let svg = song_dir.join(format!("{verse}.svg"));
     let notes = song_dir.join("notes.ly");
     let lyrics = song_dir.join(format!("lyrics_{verse}.ly"));
@@ -160,8 +155,24 @@ pub fn ensure_svg(song_dir: &Path, verse: u32) -> bool {
     if composer_file.exists() {
         sources.push(&composer_file);
     }
-    if is_up_to_date(&svg, &sources) {
-        return true;
+    is_up_to_date(&svg, &sources)
+}
+
+/// Render the SVG for a given verse. Returns `Ok(())` on success,
+/// `Err(message)` with the LilyPond error output on failure.
+/// This function is safe to call from a background thread.
+pub fn render_svg(song_dir: &Path, verse: u32) -> Result<(), String> {
+    let svg = song_dir.join(format!("{verse}.svg"));
+    let notes = song_dir.join("notes.ly");
+    let lyrics = song_dir.join(format!("lyrics_{verse}.ly"));
+    let composer_file = song_dir.join("composer.txt");
+
+    if !notes.exists() {
+        return if svg.exists() {
+            Ok(())
+        } else {
+            Err("notes.ly not found".into())
+        };
     }
 
     let dir_name = song_dir
@@ -170,10 +181,9 @@ pub fn ensure_svg(song_dir: &Path, verse: u32) -> bool {
         .to_string_lossy();
     eprintln!("Rendering {dir_name}/{verse}...");
 
-    let notes_content = match fs::read_to_string(&notes) {
-        Ok(s) => modify_notes(&s),
-        Err(_) => return false,
-    };
+    let notes_content = fs::read_to_string(&notes)
+        .map(|s| modify_notes(&s))
+        .map_err(|e| format!("Failed to read notes.ly: {e}"))?;
     let lyrics_content = if lyrics.exists() {
         sanitize_lyrics(&fs::read_to_string(&lyrics).unwrap_or_default())
     } else {
@@ -190,9 +200,8 @@ pub fn ensure_svg(song_dir: &Path, verse: u32) -> bool {
     );
 
     let combined_ly = song_dir.join(format!("_combined_{verse}.ly"));
-    if fs::write(&combined_ly, &combined).is_err() {
-        return false;
-    }
+    fs::write(&combined_ly, &combined)
+        .map_err(|e| format!("Failed to write combined .ly: {e}"))?;
 
     let stem = song_dir.join(format!("{verse}"));
     #[allow(unused_mut)]
@@ -214,18 +223,17 @@ pub fn ensure_svg(song_dir: &Path, verse: u32) -> bool {
                 let _ = fs::rename(&cropped, &svg);
             }
             let _ = fs::remove_file(&combined_ly);
-            true
+            Ok(())
         }
         Ok(out) => {
-            eprintln!(
-                "lilypond failed for {dir_name}/{verse}: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-            false
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            eprintln!("lilypond failed for {dir_name}/{verse}: {stderr}");
+            Err(stderr)
         }
         Err(e) => {
-            eprintln!("Failed to run lilypond: {e}");
-            false
+            let msg = format!("Failed to run lilypond: {e}");
+            eprintln!("{msg}");
+            Err(msg)
         }
     }
 }

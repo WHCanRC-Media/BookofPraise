@@ -8,7 +8,7 @@ use gtk::gdk;
 use gtk::glib;
 use gtk::prelude::*;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -142,6 +142,8 @@ struct AppState {
     current_slide: usize,
     use_svg: bool,
     texture_cache: HashMap<(PathBuf, u32), gdk::Texture>,
+    rendering: HashSet<(PathBuf, u32)>,
+    render_errors: HashMap<(PathBuf, u32), String>,
 }
 
 impl AppState {
@@ -158,6 +160,8 @@ impl AppState {
             current_slide: 0,
             use_svg,
             texture_cache: HashMap::new(),
+            rendering: HashSet::new(),
+            render_errors: HashMap::new(),
         };
 
         // Load songs from CLI, defaulting to Psalm 1
@@ -204,6 +208,8 @@ impl AppState {
         let prev = self.slides.get(self.current_slide).cloned();
         self.slides.clear();
         self.texture_cache.clear();
+        self.rendering.clear();
+        self.render_errors.clear();
         self.current_slide = 0;
 
         for entry in &self.liturgy {
@@ -227,16 +233,6 @@ impl AppState {
                         path,
                         song_dir: dir.clone(),
                     });
-                }
-            }
-        }
-
-        // Warm the texture cache for all slides
-        for slide in &self.slides {
-            let key = (slide.path.clone(), slide.current_verse);
-            if !self.texture_cache.contains_key(&key) {
-                if let Some(tex) = load_slide_texture(slide) {
-                    self.texture_cache.insert(key, tex);
                 }
             }
         }
@@ -457,7 +453,6 @@ fn load_slide_texture(slide: &Slide) -> Option<gdk::Texture> {
         .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
 
     let raw = if is_svg {
-        render_ly::ensure_svg(&slide.song_dir, slide.current_verse);
         load_svg_pixmap(&slide.path)?
     } else {
         load_png_pixmap(&slide.path)?
@@ -510,17 +505,108 @@ fn save_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_vie
     }
 }
 
-fn refresh_display(state: &mut AppState, picture: &gtk::Picture, nav_label: &gtk::Label) {
-    if let Some(slide) = state.slides.get(state.current_slide) {
-        let key = (slide.path.clone(), slide.current_verse);
+fn needs_render(slide: &Slide) -> bool {
+    let is_svg = slide
+        .path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
+    is_svg && !render_ly::is_svg_current(&slide.song_dir, slide.current_verse)
+}
+
+fn refresh_display(
+    state_rc: &Rc<RefCell<AppState>>,
+    picture: &gtk::Picture,
+    nav_label: &gtk::Label,
+    spinner: &gtk::Spinner,
+    error_label: &gtk::Label,
+) {
+    let mut state = state_rc.borrow_mut();
+    spinner.stop();
+    spinner.set_visible(false);
+    error_label.set_visible(false);
+
+    let slide_info = state.slides.get(state.current_slide).map(|slide| {
+        (
+            (slide.path.clone(), slide.current_verse),
+            slide.song_dir.clone(),
+            slide.current_verse,
+            state.current_slide,
+            state.slides.len(),
+        )
+    });
+
+    if let Some((key, song_dir, verse, idx, total)) = slide_info {
+        nav_label.set_text(&format!("{}/{}", idx + 1, total));
+
+        // Check for render error
+        if let Some(err) = state.render_errors.get(&key) {
+            picture.set_paintable(None::<&gdk::Texture>);
+            error_label.set_text(err);
+            error_label.set_visible(true);
+            return;
+        }
+
+        // Try loading from cache or disk
         let tex = state.texture_cache.get(&key).cloned().or_else(|| {
-            load_slide_texture(&state.slides[state.current_slide])
+            load_slide_texture(&state.slides[idx])
         });
         if let Some(tex) = tex {
             picture.set_paintable(Some(&tex));
             state.texture_cache.insert(key, tex);
+            return;
         }
-        nav_label.set_text(&format!("{}/{}", state.current_slide + 1, state.slides.len()));
+
+        // Need to render — show spinner and spawn background thread
+        let should_render = !state.rendering.contains(&key) && needs_render(&state.slides[idx]);
+        if should_render {
+            state.rendering.insert(key.clone());
+            let render_key = key.clone();
+
+            // Must drop the borrow before setting up the callback
+            drop(state);
+
+            spinner.set_visible(true);
+            spinner.start();
+            picture.set_paintable(None::<&gdk::Texture>);
+
+            let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+            std::thread::spawn(move || {
+                let result = render_ly::render_svg(&song_dir, verse);
+                let _ = tx.send(result);
+            });
+
+            // Poll for completion from the main thread
+            let state_rc2 = state_rc.clone();
+            let picture2 = picture.clone();
+            let nav_label2 = nav_label.clone();
+            let spinner2 = spinner.clone();
+            let error_label2 = error_label.clone();
+            glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+                match rx.try_recv() {
+                    Ok(result) => {
+                        {
+                            let mut state = state_rc2.borrow_mut();
+                            state.rendering.remove(&render_key);
+                            if let Err(err) = result {
+                                state.render_errors.insert(render_key.clone(), err);
+                            }
+                        }
+                        refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2);
+                        glib::ControlFlow::Break
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    Err(_) => glib::ControlFlow::Break, // sender dropped
+                }
+            });
+            return;
+        }
+
+        // Rendering in progress
+        if state.rendering.contains(&key) {
+            spinner.set_visible(true);
+            spinner.start();
+            picture.set_paintable(None::<&gdk::Texture>);
+        }
     } else {
         picture.set_paintable(None::<&gdk::Texture>);
         nav_label.set_text("0/0");
@@ -604,8 +690,31 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     picture.set_content_fit(gtk::ContentFit::Contain);
     picture.add_css_class("slide-image");
 
+    // Loading spinner (centered over picture area)
+    let spinner = gtk::Spinner::new();
+    spinner.set_width_request(48);
+    spinner.set_height_request(48);
+    spinner.set_halign(gtk::Align::Center);
+    spinner.set_valign(gtk::Align::Center);
+    spinner.set_visible(false);
+
+    // Error label (centered over picture area, wrapping)
+    let error_label = gtk::Label::new(None);
+    error_label.set_wrap(true);
+    error_label.set_halign(gtk::Align::Center);
+    error_label.set_valign(gtk::Align::Center);
+    error_label.set_visible(false);
+    error_label.set_selectable(true);
+    error_label.set_margin_start(24);
+    error_label.set_margin_end(24);
+
+    let overlay = gtk::Overlay::new();
+    overlay.set_child(Some(&picture));
+    overlay.add_overlay(&spinner);
+    overlay.add_overlay(&error_label);
+
     let scroll = gtk::ScrolledWindow::new();
-    scroll.set_child(Some(&picture));
+    scroll.set_child(Some(&overlay));
     scroll.set_vexpand(true);
     scroll.set_hexpand(true);
 
@@ -738,7 +847,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     window.set_child(Some(&vbox));
 
     // Initial display
-    refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+    refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
     refresh_liturgy(&state.borrow(), &liturgy_label);
 
     // ── Helpers for signal closures ──
@@ -784,25 +893,25 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     });
 
     // Prev / Next
-    connect!(prev_btn, connect_clicked, [state, picture, nav_label, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
+    connect!(prev_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
         state.borrow_mut().navigate(-1);
-        refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
         if editor_panel.is_visible() {
             load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
         }
     });
-    connect!(next_btn, connect_clicked, [state, picture, nav_label, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
+    connect!(next_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
         state.borrow_mut().navigate(1);
-        refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
         if editor_panel.is_visible() {
             load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
         }
     });
 
     // Clear
-    connect!(clear_btn, connect_clicked, [state, picture, nav_label, liturgy_label], move |_| {
+    connect!(clear_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, liturgy_label], move |_| {
         { let mut s = state.borrow_mut(); s.liturgy.clear(); s.rebuild_slides(); }
-        refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
         refresh_liturgy(&state.borrow(), &liturgy_label);
     });
 
@@ -816,55 +925,56 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     });
 
     // Save & Re-render
-    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, picture, nav_label], move |_| {
+    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, picture, nav_label, spinner, error_label], move |_| {
         save_editor_contents(&state.borrow(), &notes_view, &lyrics_view);
         {
             let mut s = state.borrow_mut();
-            // Remove cached texture so it re-renders
+            // Remove cached texture and errors so it re-renders
             if let Some(slide) = s.slides.get(s.current_slide) {
                 let key = (slide.path.clone(), slide.current_verse);
                 let svg_path = slide.path.clone();
                 s.texture_cache.remove(&key);
+                s.render_errors.remove(&key);
                 // Delete the SVG so lilypond re-renders it
                 let _ = std::fs::remove_file(&svg_path);
             }
         }
-        refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
     });
 
     // SVG/PNG toggle
-    connect!(svg_switch, connect_active_notify, [state, picture, nav_label, liturgy_label, number_entry, verse_box, edit_btn, editor_panel], move |sw| {
+    connect!(svg_switch, connect_active_notify, [state, picture, nav_label, spinner, error_label, liturgy_label, number_entry, verse_box, edit_btn, editor_panel], move |sw| {
         state.borrow_mut().set_use_svg(sw.is_active());
         edit_btn.set_active(false);
         edit_btn.set_visible(sw.is_active());
         editor_panel.set_visible(false);
         number_entry.set_text("");
         rebuild_verse_checks(&verse_box, &[]);
-        refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
         refresh_liturgy(&state.borrow(), &liturgy_label);
     });
 
     // All button — check all and add immediately
-    connect!(all_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, liturgy_label], move |_| {
+    connect!(all_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, liturgy_label], move |_| {
         check_all(&verse_box);
         if let Ok(num) = number_entry.text().parse::<u32>() {
             let verses = checked_verses(&verse_box);
             state.borrow_mut().add_song_with_verses(song_type(), num, verses);
             number_entry.set_text("");
             rebuild_verse_checks(&verse_box, &[]);
-            refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+            refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
             refresh_liturgy(&state.borrow(), &liturgy_label);
         }
     });
 
     // Add button
-    connect!(add_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, liturgy_label], move |_| {
+    connect!(add_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, liturgy_label], move |_| {
         if let Ok(num) = number_entry.text().parse::<u32>() {
             let verses = checked_verses(&verse_box);
             state.borrow_mut().add_song_with_verses(song_type(), num, verses);
             number_entry.set_text("");
             rebuild_verse_checks(&verse_box, &[]);
-            refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+            refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
             refresh_liturgy(&state.borrow(), &liturgy_label);
         }
     });
@@ -874,6 +984,8 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
         let state = state.clone();
         let picture = picture.clone();
         let nav_label = nav_label.clone();
+        let spinner = spinner.clone();
+        let error_label = error_label.clone();
         let editor_panel = editor_panel.clone();
         let notes_view = notes_view.clone();
         let lyrics_view = lyrics_view.clone();
@@ -888,16 +1000,17 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
                         let key = (slide.path.clone(), slide.current_verse);
                         let svg_path = slide.path.clone();
                         s.texture_cache.remove(&key);
+                        s.render_errors.remove(&key);
                         let _ = std::fs::remove_file(&svg_path);
                     }
                 }
-                refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+                refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
                 return glib::Propagation::Stop;
             }
             match key {
                 gdk::Key::Left => {
                     state.borrow_mut().navigate(-1);
-                    refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
                     if editor_panel.is_visible() {
                         load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
                     }
@@ -905,7 +1018,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
                 }
                 gdk::Key::Right => {
                     state.borrow_mut().navigate(1);
-                    refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
                     if editor_panel.is_visible() {
                         load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
                     }
@@ -932,18 +1045,16 @@ fn main() -> glib::ExitCode {
     let app = gtk::Application::builder()
         .application_id("org.bop.bookofpraise")
         .build();
+    #[cfg(target_os = "windows")]
     app.connect_startup(|_| {
         let display = gdk::Display::default().expect("Could not connect to a display");
-        #[cfg(target_os = "windows")]
-        {
-            let provider = gtk::CssProvider::new();
-            provider.load_from_data(include_str!("win10.css"));
-            gtk::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
+        let provider = gtk::CssProvider::new();
+        provider.load_from_data(include_str!("win10.css"));
+        gtk::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
     });
     let cli = Rc::new(cli);
     app.connect_activate(move |app| build_ui(app, &cli));
