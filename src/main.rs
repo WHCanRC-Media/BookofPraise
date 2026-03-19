@@ -568,6 +568,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     picture.set_vexpand(true);
     picture.set_hexpand(true);
     picture.set_content_fit(gtk::ContentFit::Contain);
+    picture.add_css_class("slide-image");
 
     let scroll = gtk::ScrolledWindow::new();
     scroll.set_child(Some(&picture));

@@ -2938,3 +2938,8 @@ read if you used those and something break with a version upgrade you're on your
 @define-color wm_button_active_color_b shade(#FFFFFF, 0.89);
 @define-color wm_button_active_color_c shade(#FFFFFF, 0.9);
 @define-color content_view_bg #FFFFFF;
+
+/* Slide image border */
+.slide-image {
+  border: 1px solid #000000;
+}

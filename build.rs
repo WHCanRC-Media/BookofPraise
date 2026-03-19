@@ -22,6 +22,7 @@ fn main() {
     }
 
     copy_data_dirs(&manifest);
+    fetch_lilypond(&manifest);
 }
 
 #[cfg(target_os = "windows")]
@@ -108,6 +109,86 @@ fn copy_data_dirs(manifest: &str) {
         }
     }
     println!("cargo:warning=Copied {copied} data files (lilypond + photos) to {}", target_dir.display());
+}
+
+fn fetch_lilypond(manifest: &str) {
+    const VERSION: &str = "2.24.4";
+
+    let profile = std::env::var("PROFILE").unwrap();
+    let target_dir = PathBuf::from(manifest).join("target").join(&profile);
+    let dest = target_dir.join("lilypond-bin");
+
+    // Skip if already present
+    if dest.join("bin").exists() {
+        println!("cargo:warning=LilyPond already present at {}", dest.display());
+        return;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let url = format!(
+            "https://gitlab.com/lilypond/lilypond/-/releases/v{VERSION}/downloads/lilypond-{VERSION}-mingw-x86_64.zip"
+        );
+        let zip_path = target_dir.join("lilypond.zip");
+        let status = std::process::Command::new("curl")
+            .args(["-L", "-o"])
+            .arg(&zip_path)
+            .arg(&url)
+            .status();
+        if !status.is_ok_and(|s| s.success()) {
+            println!("cargo:warning=Failed to download LilyPond");
+            return;
+        }
+        let status = std::process::Command::new("unzip")
+            .args(["-q", "-o"])
+            .arg(&zip_path)
+            .arg("-d")
+            .arg(&target_dir)
+            .status();
+        if !status.is_ok_and(|s| s.success()) {
+            println!("cargo:warning=Failed to extract LilyPond");
+            return;
+        }
+        let extracted = target_dir.join(format!("lilypond-{VERSION}"));
+        if extracted.exists() {
+            let _ = std::fs::rename(&extracted, &dest);
+        }
+        let _ = std::fs::remove_file(&zip_path);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let url = format!(
+            "https://gitlab.com/lilypond/lilypond/-/releases/v{VERSION}/downloads/lilypond-{VERSION}-linux-x86_64.tar.gz"
+        );
+        let tar_path = target_dir.join("lilypond.tar.gz");
+        let status = std::process::Command::new("curl")
+            .args(["-L", "-o"])
+            .arg(&tar_path)
+            .arg(&url)
+            .status();
+        if !status.is_ok_and(|s| s.success()) {
+            println!("cargo:warning=Failed to download LilyPond");
+            return;
+        }
+        let status = std::process::Command::new("tar")
+            .args(["xzf"])
+            .arg(&tar_path)
+            .arg("-C")
+            .arg(&target_dir)
+            .status();
+        if !status.is_ok_and(|s| s.success()) {
+            println!("cargo:warning=Failed to extract LilyPond");
+            return;
+        }
+        let extracted = target_dir.join(format!("lilypond-{VERSION}"));
+        if extracted.exists() {
+            let _ = std::fs::rename(&extracted, &dest);
+        }
+        let _ = std::fs::remove_file(&tar_path);
+    }
+
+    println!("cargo:warning=LilyPond {VERSION} installed to {}", dest.display());
 }
 
 fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> usize {
