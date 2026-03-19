@@ -476,6 +476,40 @@ fn load_slide_texture(slide: &Slide) -> Option<gdk::Texture> {
 
 // ── UI helpers ──────────────────────────────────────────────────────
 
+fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, lyrics_label: &gtk::Label) {
+    if let Some(slide) = state.slides.get(state.current_slide) {
+        let notes_path = slide.song_dir.join("notes.ly");
+        let lyrics_path = slide.song_dir.join(format!("lyrics_{}.ly", slide.current_verse));
+
+        let notes_text = std::fs::read_to_string(&notes_path).unwrap_or_default();
+        notes_view.buffer().set_text(&notes_text);
+
+        let lyrics_text = std::fs::read_to_string(&lyrics_path).unwrap_or_default();
+        lyrics_view.buffer().set_text(&lyrics_text);
+
+        lyrics_label.set_text(&format!("lyrics_{}.ly", slide.current_verse));
+    } else {
+        notes_view.buffer().set_text("");
+        lyrics_view.buffer().set_text("");
+        lyrics_label.set_text("lyrics.ly");
+    }
+}
+
+fn save_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView) {
+    if let Some(slide) = state.slides.get(state.current_slide) {
+        let notes_path = slide.song_dir.join("notes.ly");
+        let lyrics_path = slide.song_dir.join(format!("lyrics_{}.ly", slide.current_verse));
+
+        let buf = notes_view.buffer();
+        let notes_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
+        let _ = std::fs::write(&notes_path, notes_text.as_str());
+
+        let buf = lyrics_view.buffer();
+        let lyrics_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
+        let _ = std::fs::write(&lyrics_path, lyrics_text.as_str());
+    }
+}
+
 fn refresh_display(state: &mut AppState, picture: &gtk::Picture, nav_label: &gtk::Label) {
     if let Some(slide) = state.slides.get(state.current_slide) {
         let key = (slide.path.clone(), slide.current_verse);
@@ -573,6 +607,52 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     let scroll = gtk::ScrolledWindow::new();
     scroll.set_child(Some(&picture));
     scroll.set_vexpand(true);
+    scroll.set_hexpand(true);
+
+    // Editor panel (right side, hidden by default)
+    let notes_view = gtk::TextView::new();
+    notes_view.set_monospace(true);
+    notes_view.set_wrap_mode(gtk::WrapMode::Word);
+
+    let notes_scroll = gtk::ScrolledWindow::new();
+    notes_scroll.set_child(Some(&notes_view));
+    notes_scroll.set_vexpand(true);
+
+    let lyrics_view = gtk::TextView::new();
+    lyrics_view.set_monospace(true);
+    lyrics_view.set_wrap_mode(gtk::WrapMode::Word);
+
+    let lyrics_scroll = gtk::ScrolledWindow::new();
+    lyrics_scroll.set_child(Some(&lyrics_view));
+    lyrics_scroll.set_vexpand(true);
+
+    let notes_label = gtk::Label::new(Some("notes.ly"));
+    notes_label.set_xalign(0.0);
+    let lyrics_label = gtk::Label::new(Some("lyrics.ly"));
+    lyrics_label.set_xalign(0.0);
+
+    let save_btn = gtk::Button::with_label("Save & Re-render");
+
+    let editor_panel = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    editor_panel.set_margin_start(4);
+    editor_panel.set_margin_end(4);
+    editor_panel.set_margin_top(4);
+    editor_panel.set_margin_bottom(4);
+    editor_panel.append(&notes_label);
+    editor_panel.append(&notes_scroll);
+    editor_panel.append(&lyrics_label);
+    editor_panel.append(&lyrics_scroll);
+    editor_panel.append(&save_btn);
+    editor_panel.set_visible(false);
+    editor_panel.set_hexpand(true);
+
+    // Horizontal paned: image left, editor right
+    let hpaned = gtk::Paned::new(gtk::Orientation::Horizontal);
+    hpaned.set_start_child(Some(&scroll));
+    hpaned.set_end_child(Some(&editor_panel));
+    hpaned.set_resize_start_child(true);
+    hpaned.set_resize_end_child(true);
+    hpaned.set_vexpand(true);
 
     // Liturgy label
     let liturgy_label = gtk::Label::new(None);
@@ -584,6 +664,8 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     let nav_label = gtk::Label::new(Some("0/0"));
     let next_btn = gtk::Button::with_label("Next");
     let clear_btn = gtk::Button::with_label("Clear liturgy");
+    let edit_btn = gtk::ToggleButton::with_label("Edit");
+    edit_btn.set_visible(!cli.png); // only show in SVG mode
     let png_label = gtk::Label::new(Some("PNG"));
     let svg_switch = gtk::Switch::new();
     svg_switch.set_active(!cli.png);
@@ -602,6 +684,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
         png_label.upcast_ref(),
         svg_switch.upcast_ref(),
         svg_label.upcast_ref(),
+        edit_btn.upcast_ref(),
     ] {
         nav_row.append(w);
     }
@@ -650,7 +733,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
 
     // Main layout
     let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    vbox.append(&scroll);
+    vbox.append(&hpaned);
     vbox.append(&controls);
     window.set_child(Some(&vbox));
 
@@ -701,13 +784,19 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     });
 
     // Prev / Next
-    connect!(prev_btn, connect_clicked, [state, picture, nav_label], move |_| {
+    connect!(prev_btn, connect_clicked, [state, picture, nav_label, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
         state.borrow_mut().navigate(-1);
         refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+        if editor_panel.is_visible() {
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+        }
     });
-    connect!(next_btn, connect_clicked, [state, picture, nav_label], move |_| {
+    connect!(next_btn, connect_clicked, [state, picture, nav_label, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
         state.borrow_mut().navigate(1);
         refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+        if editor_panel.is_visible() {
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+        }
     });
 
     // Clear
@@ -717,9 +806,38 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
         refresh_liturgy(&state.borrow(), &liturgy_label);
     });
 
+    // Edit toggle
+    connect!(edit_btn, connect_toggled, [state, editor_panel, notes_view, lyrics_view, lyrics_label], move |btn| {
+        let active = btn.is_active();
+        editor_panel.set_visible(active);
+        if active {
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+        }
+    });
+
+    // Save & Re-render
+    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, picture, nav_label], move |_| {
+        save_editor_contents(&state.borrow(), &notes_view, &lyrics_view);
+        {
+            let mut s = state.borrow_mut();
+            // Remove cached texture so it re-renders
+            if let Some(slide) = s.slides.get(s.current_slide) {
+                let key = (slide.path.clone(), slide.current_verse);
+                let svg_path = slide.path.clone();
+                s.texture_cache.remove(&key);
+                // Delete the SVG so lilypond re-renders it
+                let _ = std::fs::remove_file(&svg_path);
+            }
+        }
+        refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+    });
+
     // SVG/PNG toggle
-    connect!(svg_switch, connect_active_notify, [state, picture, nav_label, liturgy_label, number_entry, verse_box], move |sw| {
+    connect!(svg_switch, connect_active_notify, [state, picture, nav_label, liturgy_label, number_entry, verse_box, edit_btn, editor_panel], move |sw| {
         state.borrow_mut().set_use_svg(sw.is_active());
+        edit_btn.set_active(false);
+        edit_btn.set_visible(sw.is_active());
+        editor_panel.set_visible(false);
         number_entry.set_text("");
         rebuild_verse_checks(&verse_box, &[]);
         refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
@@ -756,19 +874,45 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
         let state = state.clone();
         let picture = picture.clone();
         let nav_label = nav_label.clone();
+        let editor_panel = editor_panel.clone();
+        let notes_view = notes_view.clone();
+        let lyrics_view = lyrics_view.clone();
+        let lyrics_label = lyrics_label.clone();
         let kc = gtk::EventControllerKey::new();
-        kc.connect_key_pressed(move |_, key, _, _| match key {
-            gdk::Key::Left => {
-                state.borrow_mut().navigate(-1);
+        kc.connect_key_pressed(move |_, key, _, modifiers| {
+            if key == gdk::Key::s && modifiers.contains(gdk::ModifierType::CONTROL_MASK) && editor_panel.is_visible() {
+                save_editor_contents(&state.borrow(), &notes_view, &lyrics_view);
+                {
+                    let mut s = state.borrow_mut();
+                    if let Some(slide) = s.slides.get(s.current_slide) {
+                        let key = (slide.path.clone(), slide.current_verse);
+                        let svg_path = slide.path.clone();
+                        s.texture_cache.remove(&key);
+                        let _ = std::fs::remove_file(&svg_path);
+                    }
+                }
                 refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
-                glib::Propagation::Stop
+                return glib::Propagation::Stop;
             }
-            gdk::Key::Right => {
-                state.borrow_mut().navigate(1);
-                refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
-                glib::Propagation::Stop
+            match key {
+                gdk::Key::Left => {
+                    state.borrow_mut().navigate(-1);
+                    refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+                    if editor_panel.is_visible() {
+                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+                    }
+                    glib::Propagation::Stop
+                }
+                gdk::Key::Right => {
+                    state.borrow_mut().navigate(1);
+                    refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
+                    if editor_panel.is_visible() {
+                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+                    }
+                    glib::Propagation::Stop
+                }
+                _ => glib::Propagation::Proceed,
             }
-            _ => glib::Propagation::Proceed,
         });
         window.add_controller(kc);
     }
@@ -789,13 +933,17 @@ fn main() -> glib::ExitCode {
         .application_id("org.bop.bookofpraise")
         .build();
     app.connect_startup(|_| {
-        let provider = gtk::CssProvider::new();
-        provider.load_from_data(include_str!("win10.css"));
-        gtk::style_context_add_provider_for_display(
-            &gdk::Display::default().expect("Could not connect to a display"),
-            &provider,
-            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
+        let display = gdk::Display::default().expect("Could not connect to a display");
+        #[cfg(target_os = "windows")]
+        {
+            let provider = gtk::CssProvider::new();
+            provider.load_from_data(include_str!("win10.css"));
+            gtk::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
     });
     let cli = Rc::new(cli);
     app.connect_activate(move |app| build_ui(app, &cli));
