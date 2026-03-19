@@ -134,6 +134,8 @@ struct Slide {
     song_dir: PathBuf,
 }
 
+type CacheKey = (PathBuf, u32, u32); // (path, verse, render_width)
+
 struct AppState {
     songs_dir: PathBuf,
     library: SongLibrary,
@@ -141,7 +143,8 @@ struct AppState {
     slides: Vec<Slide>,
     current_slide: usize,
     use_svg: bool,
-    texture_cache: HashMap<(PathBuf, u32), gdk::Texture>,
+    render_width: u32,
+    texture_cache: HashMap<CacheKey, gdk::Texture>,
     rendering: HashSet<(PathBuf, u32)>,
     render_errors: HashMap<(PathBuf, u32), String>,
 }
@@ -159,6 +162,7 @@ impl AppState {
             slides: Vec::new(),
             current_slide: 0,
             use_svg,
+            render_width: DEFAULT_RENDER_WIDTH,
             texture_cache: HashMap::new(),
             rendering: HashSet::new(),
             render_errors: HashMap::new(),
@@ -276,7 +280,12 @@ fn exe_dir() -> PathBuf {
 }
 
 fn base_dir(use_svg: bool) -> PathBuf {
-    exe_dir().join(if use_svg { "lilypond" } else { "photos" })
+    let sub = if use_svg { "lilypond" } else { "photos" };
+    let cwd = std::env::current_dir().unwrap_or_default().join(sub);
+    if cwd.exists() {
+        return cwd;
+    }
+    exe_dir().join(sub)
 }
 
 /// Find image files for a verse number, sorted (handles multi-part: 1a.svg, 1b.svg).
@@ -309,14 +318,11 @@ fn find_verse_files(dir: &Path, verse: u32) -> Vec<PathBuf> {
 
 // ── Image rendering ─────────────────────────────────────────────────
 
-const RENDER_WIDTH: u32 = 2400;
-const TITLE_PAD: u32 = 80;
-const OUTPUT_W: u32 = 2400;
-const OUTPUT_H: u32 = OUTPUT_W * 9 / 16; // 1350
+const DEFAULT_RENDER_WIDTH: u32 = 2400;
 
 type Pixmap = resvg::tiny_skia::Pixmap;
 
-fn load_svg_pixmap(path: &Path) -> Option<Pixmap> {
+fn load_svg_pixmap(path: &Path, render_width: u32) -> Option<Pixmap> {
     let data = std::fs::read(path).ok()?;
     let data = String::from_utf8_lossy(&data)
         .replace("currentColor", "black")
@@ -328,28 +334,28 @@ fn load_svg_pixmap(path: &Path) -> Option<Pixmap> {
     if size.width() == 0.0 || size.height() == 0.0 {
         return None;
     }
-    let scale = RENDER_WIDTH as f32 / size.width();
+    let scale = render_width as f32 / size.width();
     let w = (size.width() * scale) as u32;
     let h = (size.height() * scale) as u32;
     let mut pm = Pixmap::new(w, h)?;
     pm.fill(resvg::tiny_skia::Color::WHITE);
     resvg::render(
         &tree,
-        resvg::tiny_skia::Transform::from_scale(scale as f32, scale as f32),
+        resvg::tiny_skia::Transform::from_scale(scale, scale),
         &mut pm.as_mut(),
     );
     Some(pm)
 }
 
-fn load_png_pixmap(path: &Path) -> Option<Pixmap> {
+fn load_png_pixmap(path: &Path, render_width: u32) -> Option<Pixmap> {
     let img = image::open(path).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
-    let scale = RENDER_WIDTH as f32 / w as f32;
+    let scale = render_width as f32 / w as f32;
     let th = (h as f32 * scale) as u32;
     let scaled =
-        image::imageops::resize(&img, RENDER_WIDTH, th, image::imageops::FilterType::Lanczos3);
+        image::imageops::resize(&img, render_width, th, image::imageops::FilterType::Lanczos3);
 
-    let mut pm = Pixmap::new(RENDER_WIDTH, th)?;
+    let mut pm = Pixmap::new(render_width, th)?;
     pm.fill(resvg::tiny_skia::Color::WHITE);
     for (i, px) in scaled.pixels().enumerate() {
         if let Some(c) =
@@ -362,7 +368,11 @@ fn load_png_pixmap(path: &Path) -> Option<Pixmap> {
 }
 
 /// Crop white edges, center in 16:9 frame with title padding.
-fn crop_and_frame(src: &Pixmap) -> Option<Pixmap> {
+fn crop_and_frame(src: &Pixmap, render_width: u32) -> Option<Pixmap> {
+    let output_w = render_width;
+    let output_h = render_width * 9 / 16;
+    let title_pad = render_width / 30;
+
     let (w, h) = (src.width() as usize, src.height() as usize);
     let px = src.pixels();
     let white =
@@ -381,30 +391,29 @@ fn crop_and_frame(src: &Pixmap) -> Option<Pixmap> {
     let right = (right + margin).min(w - 1);
     let (cw, ch) = (right - left + 1, bot - top + 1);
 
-    // Scale content to fit fixed frame
-    let avail_h = (OUTPUT_H - TITLE_PAD) as usize;
-    let scale = (OUTPUT_W as f32 / cw as f32)
-        .min(avail_h as f32 / ch as f32)
-        .min(1.0);
+    // Scale content to fit frame
+    let avail_h = (output_h - title_pad) as usize;
+    let scale = (output_w as f32 / cw as f32)
+        .min(avail_h as f32 / ch as f32);
     let (sw, sh) = ((cw as f32 * scale) as usize, (ch as f32 * scale) as usize);
-    let x_off = (OUTPUT_W as usize - sw) / 2;
-    let y_off = TITLE_PAD as usize + (avail_h - sh) / 2;
+    let x_off = (output_w as usize - sw) / 2;
+    let y_off = title_pad as usize + (avail_h - sh) / 2;
 
-    let mut out = Pixmap::new(OUTPUT_W, OUTPUT_H)?;
+    let mut out = Pixmap::new(output_w, output_h)?;
     out.fill(resvg::tiny_skia::Color::WHITE);
     for dy in 0..sh {
         for dx in 0..sw {
             let sx = ((dx as f32 / scale) as usize).min(cw - 1);
             let sy = ((dy as f32 / scale) as usize).min(ch - 1);
-            out.pixels_mut()[(y_off + dy) * OUTPUT_W as usize + x_off + dx] =
+            out.pixels_mut()[(y_off + dy) * output_w as usize + x_off + dx] =
                 px[(top + sy) * w + left + sx];
         }
     }
     Some(out)
 }
 
-fn render_title(pixmap: &mut Pixmap, slide: &Slide) {
-    let font_size = RENDER_WIDTH as f32 / 40.0;
+fn render_title(pixmap: &mut Pixmap, slide: &Slide, render_width: u32) {
+    let font_size = render_width as f32 / 40.0;
 
     let verses: String = slide
         .all_verses
@@ -446,20 +455,20 @@ fn render_title(pixmap: &mut Pixmap, slide: &Slide) {
     }
 }
 
-fn load_slide_texture(slide: &Slide) -> Option<gdk::Texture> {
+fn load_slide_texture(slide: &Slide, render_width: u32) -> Option<gdk::Texture> {
     let is_svg = slide
         .path
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
 
     let raw = if is_svg {
-        load_svg_pixmap(&slide.path)?
+        load_svg_pixmap(&slide.path, render_width)?
     } else {
-        load_png_pixmap(&slide.path)?
+        load_png_pixmap(&slide.path, render_width)?
     };
 
-    let mut framed = crop_and_frame(&raw)?;
-    render_title(&mut framed, slide);
+    let mut framed = crop_and_frame(&raw, render_width)?;
+    render_title(&mut framed, slide, render_width);
 
     let (w, h) = (framed.width(), framed.height());
     let bytes = glib::Bytes::from(framed.data());
@@ -525,8 +534,17 @@ fn refresh_display(
     spinner.set_visible(false);
     error_label.set_visible(false);
 
+    // Render at the picture's actual pixel width
+    let w = picture.width();
+    let scale = picture.scale_factor();
+    if w > 0 {
+        let pixel_width = (w as u32) * (scale as u32);
+        state.render_width = pixel_width.max(DEFAULT_RENDER_WIDTH);
+    }
+    let render_width = state.render_width;
     let slide_info = state.slides.get(state.current_slide).map(|slide| {
         (
+            (slide.path.clone(), slide.current_verse, render_width),
             (slide.path.clone(), slide.current_verse),
             slide.song_dir.clone(),
             slide.current_verse,
@@ -535,11 +553,11 @@ fn refresh_display(
         )
     });
 
-    if let Some((key, song_dir, verse, idx, total)) = slide_info {
+    if let Some((cache_key, render_key, song_dir, verse, idx, total)) = slide_info {
         nav_label.set_text(&format!("{}/{}", idx + 1, total));
 
         // Check for render error
-        if let Some(err) = state.render_errors.get(&key) {
+        if let Some(err) = state.render_errors.get(&render_key) {
             picture.set_paintable(None::<&gdk::Texture>);
             error_label.set_text(err);
             error_label.set_visible(true);
@@ -547,20 +565,19 @@ fn refresh_display(
         }
 
         // Try loading from cache or disk
-        let tex = state.texture_cache.get(&key).cloned().or_else(|| {
-            load_slide_texture(&state.slides[idx])
+        let tex = state.texture_cache.get(&cache_key).cloned().or_else(|| {
+            load_slide_texture(&state.slides[idx], render_width)
         });
         if let Some(tex) = tex {
             picture.set_paintable(Some(&tex));
-            state.texture_cache.insert(key, tex);
+            state.texture_cache.insert(cache_key, tex);
             return;
         }
 
         // Need to render — show spinner and spawn background thread
-        let should_render = !state.rendering.contains(&key) && needs_render(&state.slides[idx]);
+        let should_render = !state.rendering.contains(&render_key) && needs_render(&state.slides[idx]);
         if should_render {
-            state.rendering.insert(key.clone());
-            let render_key = key.clone();
+            state.rendering.insert(render_key.clone());
 
             // Must drop the borrow before setting up the callback
             drop(state);
@@ -602,7 +619,7 @@ fn refresh_display(
         }
 
         // Rendering in progress
-        if state.rendering.contains(&key) {
+        if state.rendering.contains(&render_key) {
             spinner.set_visible(true);
             spinner.start();
             picture.set_paintable(None::<&gdk::Texture>);
@@ -931,12 +948,12 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
             let mut s = state.borrow_mut();
             // Remove cached texture and errors so it re-renders
             if let Some(slide) = s.slides.get(s.current_slide) {
-                let key = (slide.path.clone(), slide.current_verse);
-                let svg_path = slide.path.clone();
-                s.texture_cache.remove(&key);
-                s.render_errors.remove(&key);
+                let path = slide.path.clone();
+                let verse = slide.current_verse;
+                s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
+                s.render_errors.remove(&(path.clone(), verse));
                 // Delete the SVG so lilypond re-renders it
-                let _ = std::fs::remove_file(&svg_path);
+                let _ = std::fs::remove_file(&path);
             }
         }
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
@@ -997,11 +1014,11 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
                 {
                     let mut s = state.borrow_mut();
                     if let Some(slide) = s.slides.get(s.current_slide) {
-                        let key = (slide.path.clone(), slide.current_verse);
-                        let svg_path = slide.path.clone();
-                        s.texture_cache.remove(&key);
-                        s.render_errors.remove(&key);
-                        let _ = std::fs::remove_file(&svg_path);
+                        let path = slide.path.clone();
+                        let verse = slide.current_verse;
+                        s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
+                        s.render_errors.remove(&(path.clone(), verse));
+                        let _ = std::fs::remove_file(&path);
                     }
                 }
                 refresh_display(&state, &picture, &nav_label, &spinner, &error_label);

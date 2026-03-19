@@ -5,5 +5,5 @@ The hum -- ble in their help -- less -- ness de -- fend!
 Why does the wick -- ed man still scoff and sneer?
 How can he keep on think -- ing with -- out fear,
 God will ig -- nore my e -- vil and op -- pres -- sion;
-he will not make me pay for my trans -- gres -- si -- on\"?
+he will not make me pay for my trans -- gres -- sion\"?
 }
