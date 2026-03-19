@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [master]
 
-env:
-  LILYPOND_VERSION: "2.24.4"
-
 jobs:
   build-linux:
     runs-on: ubuntu-latest
@@ -25,22 +22,13 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Download LilyPond
-        run: |
-          curl -L -o lilypond.tar.gz \
-            "https://gitlab.com/lilypond/lilypond/-/releases/v${LILYPOND_VERSION}/downloads/lilypond-${LILYPOND_VERSION}-linux-x86_64.tar.gz"
-          tar xzf lilypond.tar.gz
-
       - name: Assemble distribution
         run: |
-          mkdir -p dist/photos
+          mkdir -p dist
           cp target/release/bop dist/
-          cp -r "lilypond-${LILYPOND_VERSION}" dist/lilypond-bin
-          find lilypond -name '*.ly' -o -name 'composer.txt' | while read f; do
-            mkdir -p "dist/$(dirname "$f")"
-            cp "$f" "dist/$f"
-          done
-          cp -r photos/ dist/photos/
+          cp -r target/release/lilypond-bin dist/
+          cp -r target/release/lilypond dist/
+          cp -r target/release/photos dist/
 
       - uses: actions/upload-artifact@v4
         with:
@@ -68,33 +56,19 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Download LilyPond
-        run: |
-          curl -L -o lilypond.zip \
-            "https://gitlab.com/lilypond/lilypond/-/releases/v${LILYPOND_VERSION}/downloads/lilypond-${LILYPOND_VERSION}-mingw-x86_64.zip"
-          unzip -q lilypond.zip
-
       - name: Assemble distribution
         run: |
-          mkdir -p dist/photos
+          mkdir -p dist
           cp target/release/bop.exe dist/
-
-          # Bundle GTK4 and dependency DLLs
-          ldd target/release/bop.exe | grep ucrt64 | awk '{print $3}' | while read dll; do
-            cp "$dll" dist/
-          done
+          cp target/release/*.dll dist/
+          cp -r target/release/lilypond-bin dist/
+          cp -r target/release/lilypond dist/
+          cp -r target/release/photos dist/
 
           # Bundle GDK pixbuf loaders and GTK schemas
           cp -r /$MSYSTEM/lib/gdk-pixbuf-2.0 dist/lib/gdk-pixbuf-2.0 2>/dev/null || true
           mkdir -p dist/share/glib-2.0
           cp -r /$MSYSTEM/share/glib-2.0/schemas dist/share/glib-2.0/ 2>/dev/null || true
-
-          cp -r "lilypond-${LILYPOND_VERSION}" dist/lilypond-bin
-          find lilypond -name '*.ly' -o -name 'composer.txt' | while read f; do
-            mkdir -p "dist/$(dirname "$f")"
-            cp "$f" "dist/$f"
-          done
-          cp -r photos/ dist/photos/
 
       - uses: actions/upload-artifact@v4
         with:
