@@ -8,7 +8,7 @@ use gtk::gdk;
 use gtk::glib;
 use gtk::prelude::*;
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -141,6 +141,7 @@ struct AppState {
     slides: Vec<Slide>,
     current_slide: usize,
     use_svg: bool,
+    texture_cache: HashMap<(PathBuf, u32), gdk::Texture>,
 }
 
 impl AppState {
@@ -156,6 +157,7 @@ impl AppState {
             slides: Vec::new(),
             current_slide: 0,
             use_svg,
+            texture_cache: HashMap::new(),
         };
 
         // Load songs from CLI, defaulting to Psalm 1
@@ -201,6 +203,7 @@ impl AppState {
     fn rebuild_slides(&mut self) {
         let prev = self.slides.get(self.current_slide).cloned();
         self.slides.clear();
+        self.texture_cache.clear();
         self.current_slide = 0;
 
         for entry in &self.liturgy {
@@ -224,6 +227,16 @@ impl AppState {
                         path,
                         song_dir: dir.clone(),
                     });
+                }
+            }
+        }
+
+        // Warm the texture cache for all slides
+        for slide in &self.slides {
+            let key = (slide.path.clone(), slide.current_verse);
+            if !self.texture_cache.contains_key(&key) {
+                if let Some(tex) = load_slide_texture(slide) {
+                    self.texture_cache.insert(key, tex);
                 }
             }
         }
@@ -463,10 +476,15 @@ fn load_slide_texture(slide: &Slide) -> Option<gdk::Texture> {
 
 // ── UI helpers ──────────────────────────────────────────────────────
 
-fn refresh_display(state: &AppState, picture: &gtk::Picture, nav_label: &gtk::Label) {
+fn refresh_display(state: &mut AppState, picture: &gtk::Picture, nav_label: &gtk::Label) {
     if let Some(slide) = state.slides.get(state.current_slide) {
-        if let Some(tex) = load_slide_texture(slide) {
+        let key = (slide.path.clone(), slide.current_verse);
+        let tex = state.texture_cache.get(&key).cloned().or_else(|| {
+            load_slide_texture(&state.slides[state.current_slide])
+        });
+        if let Some(tex) = tex {
             picture.set_paintable(Some(&tex));
+            state.texture_cache.insert(key, tex);
         }
         nav_label.set_text(&format!("{}/{}", state.current_slide + 1, state.slides.len()));
     } else {
@@ -636,7 +654,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     window.set_child(Some(&vbox));
 
     // Initial display
-    refresh_display(&state.borrow(), &picture, &nav_label);
+    refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
     refresh_liturgy(&state.borrow(), &liturgy_label);
 
     // ── Helpers for signal closures ──
@@ -684,17 +702,17 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     // Prev / Next
     connect!(prev_btn, connect_clicked, [state, picture, nav_label], move |_| {
         state.borrow_mut().navigate(-1);
-        refresh_display(&state.borrow(), &picture, &nav_label);
+        refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
     });
     connect!(next_btn, connect_clicked, [state, picture, nav_label], move |_| {
         state.borrow_mut().navigate(1);
-        refresh_display(&state.borrow(), &picture, &nav_label);
+        refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
     });
 
     // Clear
     connect!(clear_btn, connect_clicked, [state, picture, nav_label, liturgy_label], move |_| {
         { let mut s = state.borrow_mut(); s.liturgy.clear(); s.rebuild_slides(); }
-        refresh_display(&state.borrow(), &picture, &nav_label);
+        refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
         refresh_liturgy(&state.borrow(), &liturgy_label);
     });
 
@@ -703,7 +721,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
         state.borrow_mut().set_use_svg(sw.is_active());
         number_entry.set_text("");
         rebuild_verse_checks(&verse_box, &[]);
-        refresh_display(&state.borrow(), &picture, &nav_label);
+        refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
         refresh_liturgy(&state.borrow(), &liturgy_label);
     });
 
@@ -715,7 +733,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
             state.borrow_mut().add_song_with_verses(song_type(), num, verses);
             number_entry.set_text("");
             rebuild_verse_checks(&verse_box, &[]);
-            refresh_display(&state.borrow(), &picture, &nav_label);
+            refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
             refresh_liturgy(&state.borrow(), &liturgy_label);
         }
     });
@@ -727,7 +745,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
             state.borrow_mut().add_song_with_verses(song_type(), num, verses);
             number_entry.set_text("");
             rebuild_verse_checks(&verse_box, &[]);
-            refresh_display(&state.borrow(), &picture, &nav_label);
+            refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
             refresh_liturgy(&state.borrow(), &liturgy_label);
         }
     });
@@ -741,12 +759,12 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
         kc.connect_key_pressed(move |_, key, _, _| match key {
             gdk::Key::Left => {
                 state.borrow_mut().navigate(-1);
-                refresh_display(&state.borrow(), &picture, &nav_label);
+                refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
                 glib::Propagation::Stop
             }
             gdk::Key::Right => {
                 state.borrow_mut().navigate(1);
-                refresh_display(&state.borrow(), &picture, &nav_label);
+                refresh_display(&mut state.borrow_mut(), &picture, &nav_label);
                 glib::Propagation::Stop
             }
             _ => glib::Propagation::Proceed,
@@ -760,10 +778,24 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
 // ── Entry point ─────────────────────────────────────────────────────
 
 fn main() -> glib::ExitCode {
+    // Disable client-side decorations so the native Windows titlebar is used.
+    #[cfg(target_os = "windows")]
+    // SAFETY: called before any other threads are spawned.
+    unsafe { std::env::set_var("GTK_CSD", "0") };
+
     let cli = Cli::parse();
     let app = gtk::Application::builder()
         .application_id("org.bop.bookofpraise")
         .build();
+    app.connect_startup(|_| {
+        let provider = gtk::CssProvider::new();
+        provider.load_from_data(include_str!("win10.css"));
+        gtk::style_context_add_provider_for_display(
+            &gdk::Display::default().expect("Could not connect to a display"),
+            &provider,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    });
     let cli = Rc::new(cli);
     app.connect_activate(move |app| build_ui(app, &cli));
     app.run_with_args::<&str>(&[])
