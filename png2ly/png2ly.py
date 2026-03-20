@@ -155,10 +155,8 @@ def detect_staff_systems(img_path):
     threshold = content_width * 0.75
     staff_rows = np.where(row_edge > threshold)[0]
 
-    if len(staff_rows) == 0:
+    if len(staff_rows) < 2:
         raise ValueError("No staff lines detected in image")
-
-    gaps = np.diff(staff_rows)
     # Adaptive threshold: intra-staff gaps are small (~10-15px),
     # inter-system gaps are much larger (~40+px).
     # Use 2x the median gap as threshold — median will be an intra-staff gap.
@@ -438,19 +436,96 @@ def fifths_to_lilypond_key(fifths):
     return f"\\key {key_name} \\major"
 
 
-def relative_header(fifths):
-    """Determine the \\relative starting pitch from first note context."""
-    # We'll use c'' as default (common for treble clef melodies)
-    return "c''"
+NOTE_STEPS = {'c': 0, 'd': 1, 'e': 2, 'f': 3, 'g': 4, 'a': 5, 'b': 6}
+
+
+def _default_octave(prev_step, prev_octave, target_step):
+    """Return the octave LilyPond \\relative would pick for target_step given previous note.
+
+    LilyPond places the bare note name in the octave closest to the previous
+    note (measuring by diatonic steps). On a tie it goes up.
+    """
+    prev_pitch = prev_step + 7 * prev_octave
+    best_octave = None
+    best_dist = float('inf')
+    for candidate_octave in range(prev_octave - 2, prev_octave + 3):
+        candidate_pitch = target_step + 7 * candidate_octave
+        dist = abs(candidate_pitch - prev_pitch)
+        if dist < best_dist or (dist == best_dist and candidate_pitch > prev_pitch):
+            best_dist = dist
+            best_octave = candidate_octave
+    return best_octave
+
+
+def note_to_lilypond_relative(note, prev_step, prev_octave):
+    """Convert a note dict to relative LilyPond notation.
+
+    Returns (ly_string, new_step, new_octave).
+    prev_step/prev_octave describe the previous pitched note (or the
+    \\relative reference for the first note).
+    """
+    if note["is_rest"]:
+        duration_map = {"whole": "1", "half": "2", "quarter": "4", "eighth": "8"}
+        dur = duration_map.get(note["type"], "4")
+        return f"r{dur}", prev_step, prev_octave
+
+    step_name = note["step"].lower()
+    step = NOTE_STEPS[step_name]
+    alter = note["alter"]
+    if alter == 1:
+        step_name += "is"
+    elif alter == -1:
+        step_name += "es"
+
+    target_octave = note["octave"]
+    default_oct = _default_octave(prev_step, prev_octave, step)
+    diff = target_octave - default_oct
+    if diff > 0:
+        marks = "'" * diff
+    elif diff < 0:
+        marks = "," * (-diff)
+    else:
+        marks = ""
+
+    duration_map = {
+        "breve": "\\breve",
+        "whole": "1",
+        "half": "2",
+        "quarter": "4",
+        "eighth": "8",
+    }
+    dur = duration_map.get(note["type"], "4")
+
+    result = f"{step_name}{marks}{dur}"
+    if note.get("slur_start"):
+        result += "("
+    if note.get("slur_stop"):
+        result += ")"
+    return result, step, target_octave
+
+
+def notes_to_lilypond_relative(notes, prev_step, prev_octave):
+    """Convert notes to relative LilyPond. Returns (ly_string, final_step, final_octave)."""
+    tokens = []
+    for note in notes:
+        tok, prev_step, prev_octave = note_to_lilypond_relative(note, prev_step, prev_octave)
+        tokens.append(tok)
+    return " ".join(tokens), prev_step, prev_octave
 
 
 def build_notes_ly(all_lines, key_fifths):
-    """Generate LilyPond melody definition."""
+    """Generate LilyPond melody definition in \\relative mode."""
     key_str = fifths_to_lilypond_key(key_fifths)
 
+    # Reference pitch for \relative: c' (middle C, octave 4)
+    ref_step, ref_octave = 0, 4  # c'
+
     lines_ly = []
+    prev_step, prev_octave = ref_step, ref_octave
     for i, line_notes in enumerate(all_lines):
-        ly = notes_to_lilypond_fixed(line_notes)
+        ly, prev_step, prev_octave = notes_to_lilypond_relative(
+            line_notes, prev_step, prev_octave
+        )
 
         if i < len(all_lines) - 1:
             ly += ' \\break'
@@ -460,7 +535,7 @@ def build_notes_ly(all_lines, key_fifths):
 
     melody_block = "\n".join(lines_ly)
 
-    return f"""melody = \\fixed c {{
+    return f"""melody = \\relative c' {{
   \\clef treble
   {key_str}
   \\cadenzaOn
@@ -472,9 +547,10 @@ def build_notes_ly(all_lines, key_fifths):
 
 def sanitize_lyrics(lyrics):
     """Clean up lyrics for LilyPond lyricmode compatibility."""
-    # Replace smart quotes with straight quotes
+    # Replace smart quotes with straight quotes, then escape for lyricmode
     lyrics = lyrics.replace("\u201c", '"').replace("\u201d", '"')
     lyrics = lyrics.replace("\u2018", "'").replace("\u2019", "'")
+    lyrics = lyrics.replace('"', '\\"')
     # Remove invalid LilyPond commands that Claude sometimes inserts
     lyrics = re.sub(r'\\(left|right|textit|textbf|emph)\s*', '', lyrics)
     # Remove unicode escapes
@@ -527,16 +603,14 @@ def find_psalm_input(psalm_dir):
     return None, False, []
 
 
-def process_psalm(png_path, out_dir, no_lyrics=False):
+def process_psalm(png_path, out_dir, no_lyrics=False, skip_composer=False):
     """Run the full png2ly pipeline on a single image."""
     from render_ly import render_svg
 
-    lines_dir = os.path.join(out_dir, "lines")
-    os.makedirs(lines_dir, exist_ok=True)
     tmpdir = tempfile.mkdtemp(prefix="png2ly_")
     try:
         systems, img_height = detect_staff_systems(png_path)
-        line_paths = crop_lines(png_path, systems, img_height, lines_dir)
+        line_paths = crop_lines(png_path, systems, img_height, tmpdir)
 
         all_line_data = []
         for line_path in line_paths:
@@ -550,7 +624,7 @@ def process_psalm(png_path, out_dir, no_lyrics=False):
         for notes, _ in all_line_data:
             all_lines.append(apply_key_signature(notes, global_key))
 
-        composer = extract_composer_with_claude(png_path)
+        composer = None if skip_composer else extract_composer_with_claude(png_path)
         lyrics = None
         if not no_lyrics:
             num_notes = [
@@ -585,10 +659,10 @@ def process_psalm(png_path, out_dir, no_lyrics=False):
 
 def _process_psalm_worker(args):
     """Worker wrapper for process_psalm. Returns (psalm_name, status, elapsed)."""
-    png_path, out_dir, psalm_name = args
+    png_path, out_dir, psalm_name, kwargs = args
     t0 = time.time()
     try:
-        process_psalm(png_path, out_dir)
+        process_psalm(png_path, out_dir, **kwargs)
         return (psalm_name, "OK", time.time() - t0)
     except Exception as e:
         return (psalm_name, f"FAILED: {e}", time.time() - t0)
@@ -605,6 +679,7 @@ def main():
     parser.add_argument("-j", "--jobs", type=int, default=4, help="Parallel workers for batch mode (default: 4)")
     parser.add_argument("--psalm", help="Process only this psalm (e.g. psalm6)")
     parser.add_argument("--no-lyrics", action="store_true", help="Skip lyrics extraction")
+    parser.add_argument("--skip-composer", action="store_true", help="Skip composer extraction")
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -624,6 +699,7 @@ def main():
 
         print(f"Found {len(psalm_dirs)} psalm directories")
 
+        worker_kwargs = {"no_lyrics": args.no_lyrics, "skip_composer": args.skip_composer}
         work = []
         for psalm_dir in psalm_dirs:
             psalm_name = os.path.basename(psalm_dir)
@@ -640,9 +716,9 @@ def main():
                 os.makedirs(out_dir, exist_ok=True)
                 concat_path = os.path.join(out_dir, "1.png")
                 concatenate_images_vertically(parts, concat_path)
-                work.append((concat_path, out_dir, psalm_name))
+                work.append((concat_path, out_dir, psalm_name, worker_kwargs))
             elif png_path:
-                work.append((png_path, out_dir, psalm_name))
+                work.append((png_path, out_dir, psalm_name, worker_kwargs))
             else:
                 print(f"  SKIP {psalm_name} (no 1.png or 1a.png)")
 
@@ -671,7 +747,7 @@ def main():
             out_dir = os.path.splitext(input_path)[0]
 
         t0 = time.time()
-        process_psalm(input_path, out_dir, no_lyrics=args.no_lyrics)
+        process_psalm(input_path, out_dir, no_lyrics=args.no_lyrics, skip_composer=args.skip_composer)
         print(f"Done. Total: {time.time() - t0:.1f}s")
 
     else:
