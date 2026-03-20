@@ -83,9 +83,9 @@ def split_line_syllables(text_line, note_line, note_count):
     for line in result.splitlines():
         line = line.strip()
         if line and not line.startswith("-") and ":" not in line[:15]:
-            # Remove standalone dashes (not syllable separators)
-            line = re.sub(r'\s+[–—]\s*$', '', line)
-            line = re.sub(r'\s+[–—]\s+', ' ', line)
+            # Attach em-dashes to preceding token with quotes
+            line = re.sub(r'(\S+)\s+([–—])\s*$', r'"\1 \2"', line)
+            line = re.sub(r'(\S+)\s+([–—])\s+', r'"\1 \2" ', line)
             return line
     return result.strip()
 
@@ -166,7 +166,7 @@ def find_verse_pngs(psalm_photo_dir):
         m = re.match(r'^(\d+)([a-z])\.png$', f)
         if m:
             num = int(m.group(1))
-            if num >= 2:
+            if num >= 1:
                 if num not in verses:
                     verses[num] = []
                 verses[num].append(os.path.join(psalm_photo_dir, f))
