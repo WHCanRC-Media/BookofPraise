@@ -139,11 +139,15 @@ fn fetch_lilypond(manifest: &str) {
             println!("cargo:warning=Failed to download LilyPond");
             return;
         }
-        let status = std::process::Command::new("unzip")
-            .args(["-q", "-o"])
-            .arg(&zip_path)
-            .arg("-d")
-            .arg(&target_dir)
+        let status = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile", "-Command",
+                &format!(
+                    "Expand-Archive -Force -Path '{}' -DestinationPath '{}'",
+                    zip_path.display(),
+                    target_dir.display()
+                ),
+            ])
             .status();
         if !status.is_ok_and(|s| s.success()) {
             println!("cargo:warning=Failed to extract LilyPond");
