@@ -88,8 +88,24 @@ jobs:
           name: bop-windows
           path: bop-windows.zip
 
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install asciidoctor-pdf
+        run: sudo gem install asciidoctor-pdf --no-document
+
+      - name: Build user guide PDF
+        run: asciidoctor-pdf doc/userguide.adoc -o userguide.pdf
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: userguide
+          path: userguide.pdf
+
   release:
-    needs: [tag, build-linux, build-windows]
+    needs: [tag, build-linux, build-windows, build-docs]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -107,6 +123,10 @@ jobs:
         with:
           name: bop-windows
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: userguide
+
       - name: Delete existing release if present
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -120,5 +140,6 @@ jobs:
             lilypond.zip \
             bop-linux.zip \
             bop-windows.zip \
+            userguide.pdf \
             --title "${{ needs.tag.outputs.tag }}" \
             --notes "Release ${{ needs.tag.outputs.tag }}"

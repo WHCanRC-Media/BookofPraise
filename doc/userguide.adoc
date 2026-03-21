@@ -1,0 +1,232 @@
+= Book of Praise User Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:imagesdir: images
+:sectnums:
+
+== Introduction
+
+Book of Praise is a desktop application for displaying psalms and hymns as projected slides.
+It renders LilyPond music notation into SVG images, frames them in a 16:9 slide format, and provides navigation for building and presenting a liturgy.
+
+The application supports two display modes:
+
+SVG mode:: Renders music from LilyPond source files (`.ly`). Supports inline editing and re-rendering.
+PNG mode:: Displays pre-rendered PNG photographs of sheet music.
+
+== Installation
+
+=== Windows
+
+. Download the latest `bop-windows.zip` from the GitHub releases page.
+. Extract the zip to a folder of your choice.
+. Run `bop.exe` from the extracted folder.
+
+The Windows build bundles all required GTK4 libraries and LilyPond binaries.
+
+=== Linux
+
+. Download the latest `bop-linux.zip` from the GitHub releases page.
+. Extract the zip.
+. Ensure GTK4 is installed on your system (`libgtk-4` or equivalent for your distribution).
+. Run the `bop` binary from the extracted folder.
+
+== Starting the Application
+
+Launch the application from the command line or by double-clicking the executable.
+
+=== Command-line Options
+
+[cols="1,3"]
+|===
+| Option | Description
+
+| `--psalm <NUM>`
+| Load a psalm on startup. Can be repeated for multiple psalms.
+
+| `--hymn <NUM>`
+| Load a hymn on startup. Can be repeated for multiple hymns.
+
+| `--png`
+| Start in PNG mode instead of SVG mode.
+
+| `--update`
+| Check for updates on startup (enabled by default in release builds).
+|===
+
+.Example: start with Psalm 42 and Hymn 1
+----
+bop --psalm 42 --hymn 1
+----
+
+If no psalms or hymns are specified, the application opens with Psalm 1.
+
+== Main Window
+
+The main window is divided into two areas:
+
+Slide display:: The large central area showing the current verse as a framed slide with a title bar indicating the song name and verse numbers.
+Controls:: The bottom panel with navigation, liturgy management, and song selection.
+
+image::main-window.png[Main window,800]
+
+=== Slide Display
+
+Each slide shows one verse of a psalm or hymn, rendered as sheet music.
+The title bar at the top of the slide shows the song name followed by verse numbers.
+The current verse is shown in black; other verses in grey.
+
+image::slide-title.png[Slide title bar,600]
+
+== Navigation
+
+=== Buttons
+
+[horizontal]
+Prev:: Go to the previous slide.
+Next:: Go to the next slide.
+
+The slide counter between the buttons shows the current position (e.g., "3/12").
+
+=== Keyboard Shortcuts
+
+[cols="1,2"]
+|===
+| Key | Action
+
+| Left arrow
+| Previous slide
+
+| Right arrow
+| Next slide
+
+| Ctrl+S
+| Save edits and re-render (when editor is open)
+|===
+
+== Building a Liturgy
+
+The liturgy is the ordered list of songs and verses to display during a service.
+It is shown as a summary line above the navigation buttons.
+
+image::liturgy-bar.png[Liturgy summary,700]
+
+=== Adding a Song
+
+. Select *Psalm* or *Hymn* using the radio buttons at the bottom of the window.
+. Enter the song number in the text field.
+. The available verses appear as checkboxes.
+. Check the verses you want to include.
+. Click *Add* to append the song to the liturgy.
+
+image::song-input.png[Song input row,700]
+
+=== Adding All Verses
+
+Click *All* to check all available verses and immediately add the song to the liturgy.
+
+=== Clearing the Liturgy
+
+Click *Clear liturgy* to remove all songs and start fresh.
+
+== SVG / PNG Mode Toggle
+
+Use the toggle switch in the navigation bar to switch between SVG and PNG display modes.
+
+[horizontal]
+SVG:: Renders from LilyPond source files. Supports editing. Shows the *Edit* and *Verify* buttons.
+PNG:: Displays pre-rendered photograph images. The *Edit* and *Verify* buttons are hidden.
+
+image::mode-toggle.png[SVG/PNG toggle,300]
+
+== Editing LilyPond Source (SVG Mode)
+
+In SVG mode, you can edit the LilyPond source files that generate each verse.
+
+. Click the *Edit* toggle button to open the editor panel on the right side of the window.
+. The editor shows two files:
+  - `notes.ly` -- the musical notation shared across all verses of the song.
+  - `lyrics_N.ly` -- the lyrics for the current verse.
+. Make your changes in the text editors.
+. Click *Save & Re-render* (or press *Ctrl+S*) to save the files and regenerate the SVG.
+
+image::editor-panel.png[Editor panel,800]
+
+The application will show a loading spinner while LilyPond renders the new SVG.
+If rendering fails, an error message is displayed in the slide area.
+
+=== Email Edits on Close
+
+When you close the application after making edits, you will be prompted to email a patch of your changes to the maintainer.
+This allows corrections to be incorporated into the master song library.
+
+== Verifying Verses (SVG Mode)
+
+The *Verify* button allows you to mark a verse as reviewed and correct.
+
+- Click *Verify* on a verse to increment its verification count.
+- Each verse can be verified once per session.
+- After a verse has been verified twice (across any number of sessions), it is marked as *Verified* and the button is disabled for that verse.
+
+This helps track which verses have been proofread after rendering.
+
+== Auto-Update
+
+When the `--update` flag is active (default in release builds), the application checks GitHub for new releases on startup.
+
+If an update is available:
+
+. A dialog asks whether to download and install the update.
+. If accepted, the application downloads the new `lilypond.zip` asset.
+. The local `lilypond/` directory is updated with the new files.
+. The song library is reloaded automatically.
+
+== File Structure
+
+The application expects the following directory structure next to the executable (or in the current working directory):
+
+----
+lilypond/               <-- SVG mode song data
+  psalm1/
+    notes.ly            <-- shared notation
+    lyrics_1.ly         <-- verse 1 lyrics
+    lyrics_2.ly         <-- verse 2 lyrics
+    1.svg               <-- rendered verse 1
+    2.svg               <-- rendered verse 2
+    verify_1.txt        <-- verification count for verse 1
+  psalm2/
+    ...
+  hymn1/
+    ...
+
+photos/                 <-- PNG mode images
+  psalm1/
+    1.png
+    2.png
+  ...
+
+lilypond-bin/           <-- bundled LilyPond binaries (for rendering)
+
+lilypond_version.txt    <-- tracks the installed release version
+----
+
+Songs are identified by directory name: `psalm` or `hymn` followed by the number (e.g., `psalm42`, `hymn65`).
+
+Verse images may have letter suffixes for multi-page verses (e.g., `1a.svg`, `1b.svg`), which are displayed in alphabetical order.
+
+== Troubleshooting
+
+Blank slide with no error::
+The image file for that verse may be missing.
+In SVG mode, check that the LilyPond source files (`notes.ly` and `lyrics_N.ly`) exist in the song directory.
+
+Render error displayed::
+LilyPond failed to compile the source. Click *Edit* to review and correct the `.ly` files, then *Save & Re-render*.
+
+Application does not start::
+On Linux, ensure GTK4 is installed.
+On Windows, ensure all bundled DLL files are in the same directory as `bop.exe`.
+
+No songs appear::
+Ensure the `lilypond/` or `photos/` directory exists next to the executable or in the current working directory with the expected file structure.
