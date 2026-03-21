@@ -9,8 +9,114 @@ use gtk::glib;
 use gtk::prelude::*;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+
+// ── Update check ────────────────────────────────────────────────────
+
+const GITHUB_REPO: &str = "vanjoe/bookOfPraise";
+const GITHUB_PAT: &str = "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";
+const VERSION_FILE: &str = "lilypond_version.txt";
+
+fn current_local_version() -> Option<String> {
+    let path = base_dir(true).parent()?.join(VERSION_FILE);
+    std::fs::read_to_string(path).ok().map(|s| s.trim().to_string())
+}
+
+fn save_local_version(tag: &str) {
+    if let Some(parent) = base_dir(true).parent() {
+        let _ = std::fs::write(parent.join(VERSION_FILE), tag);
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ReleaseInfo {
+    tag_name: String,
+    assets: Vec<ReleaseAsset>,
+}
+
+#[derive(serde::Deserialize)]
+struct ReleaseAsset {
+    name: String,
+    url: String,
+}
+
+/// Check GitHub for a newer release. Returns (tag, asset_download_url) if available.
+fn check_for_update() -> Result<Option<(String, String)>, String> {
+    let url = format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest");
+    let resp = ureq::get(&url)
+        .set("Authorization", &format!("Bearer {GITHUB_PAT}"))
+        .set("Accept", "application/vnd.github+json")
+        .set("User-Agent", "bop-rustapp")
+        .call()
+        .map_err(|e| format!("API request failed: {e}"))?;
+
+    let release: ReleaseInfo = resp.into_json().map_err(|e| format!("JSON parse error: {e}"))?;
+
+    let local = current_local_version();
+    if local.as_deref() == Some(&release.tag_name) {
+        return Ok(None);
+    }
+
+    // Find the lilypond zip asset
+    let asset = release
+        .assets
+        .iter()
+        .find(|a| a.name.starts_with("lilypond") && a.name.ends_with(".zip"))
+        .ok_or("No lilypond zip asset found in release")?;
+
+    Ok(Some((release.tag_name, asset.url.clone())))
+}
+
+/// Download and extract the lilypond zip, replacing the local lilypond/ directory.
+fn download_and_extract(asset_url: &str, tag: &str) -> Result<(), String> {
+    // Download the asset (need Accept: application/octet-stream for the redirect)
+    let resp = ureq::get(asset_url)
+        .set("Authorization", &format!("Bearer {GITHUB_PAT}"))
+        .set("Accept", "application/octet-stream")
+        .set("User-Agent", "bop-rustapp")
+        .call()
+        .map_err(|e| format!("Download failed: {e}"))?;
+
+    let mut bytes = Vec::new();
+    resp.into_reader()
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("Read failed: {e}"))?;
+
+    let target_dir = base_dir(true);
+
+    // Extract zip over the existing directory
+    let cursor = std::io::Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("Zip error: {e}"))?;
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| format!("Zip entry error: {e}"))?;
+        let name = file.name().to_string();
+
+        // Strip the top-level directory from the zip (e.g. "lilypond/psalm1/..." → "psalm1/...")
+        let rel = name
+            .strip_prefix("lilypond/")
+            .unwrap_or(&name);
+        if rel.is_empty() {
+            continue;
+        }
+
+        let out_path = target_dir.join(rel);
+        if file.is_dir() {
+            let _ = std::fs::create_dir_all(&out_path);
+        } else {
+            if let Some(parent) = out_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let mut buf = Vec::new();
+            file.read_to_end(&mut buf).map_err(|e| format!("Extract read error: {e}"))?;
+            std::fs::write(&out_path, buf).map_err(|e| format!("Write error: {e}"))?;
+        }
+    }
+
+    save_local_version(tag);
+    Ok(())
+}
 
 // ── CLI ─────────────────────────────────────────────────────────────
 
@@ -29,6 +135,10 @@ struct Cli {
     /// Hymn numbers to load on startup (repeatable)
     #[arg(long, value_name = "NUM")]
     hymn: Vec<u32>,
+
+    /// Check for updates on startup
+    #[arg(long, default_value_t = cfg!(feature = "auto-update"))]
+    update: bool,
 }
 
 // ── Data model ──────────────────────────────────────────────────────
@@ -1109,6 +1219,99 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     }
 
     window.present();
+
+    // ── Startup update check ──
+    if cli.update {
+        let window = window.clone();
+        let state = state.clone();
+        let picture = picture.clone();
+        let nav_label = nav_label.clone();
+        let spinner = spinner.clone();
+        let error_label = error_label.clone();
+        let verify_btn = verify_btn.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(check_for_update());
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
+            match rx.try_recv() {
+                Ok(Ok(Some((tag, asset_url)))) => {
+                    let dialog = gtk::MessageDialog::new(
+                        Some(&window),
+                        gtk::DialogFlags::MODAL,
+                        gtk::MessageType::Question,
+                        gtk::ButtonsType::YesNo,
+                        &format!("Lilypond update available: {tag}\nDownload and install?"),
+                    );
+                    let window2 = window.clone();
+                    let state2 = state.clone();
+                    let picture2 = picture.clone();
+                    let nav_label2 = nav_label.clone();
+                    let spinner2 = spinner.clone();
+                    let error_label2 = error_label.clone();
+                    let verify_btn2 = verify_btn.clone();
+                    let asset_url = Rc::new(asset_url);
+                    dialog.connect_response(move |dlg, resp| {
+                        dlg.close();
+                        if resp == gtk::ResponseType::Yes {
+                            let asset_url = (*asset_url).clone();
+                            // Show a progress dialog while downloading
+                            let progress = gtk::MessageDialog::new(
+                                Some(&window2),
+                                gtk::DialogFlags::MODAL,
+                                gtk::MessageType::Info,
+                                gtk::ButtonsType::None,
+                                "Downloading update...",
+                            );
+                            progress.show();
+
+                            let tag2 = tag.clone();
+                            let (tx2, rx2) = std::sync::mpsc::channel();
+                            std::thread::spawn(move || {
+                                let _ = tx2.send(download_and_extract(&asset_url, &tag2));
+                            });
+
+                            let state3 = state2.clone();
+                            let picture3 = picture2.clone();
+                            let nav_label3 = nav_label2.clone();
+                            let spinner3 = spinner2.clone();
+                            let error_label3 = error_label2.clone();
+                            let verify_btn3 = verify_btn2.clone();
+                            glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
+                                match rx2.try_recv() {
+                                    Ok(Ok(())) => {
+                                        progress.close();
+                                        // Reload library with new data
+                                        {
+                                            let mut s = state3.borrow_mut();
+                                            s.library = SongLibrary::scan(&s.songs_dir);
+                                            s.texture_cache.clear();
+                                            s.render_errors.clear();
+                                            s.rebuild_slides();
+                                        }
+                                        refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3);
+                                        glib::ControlFlow::Break
+                                    }
+                                    Ok(Err(e)) => {
+                                        progress.close();
+                                        eprintln!("Update failed: {e}");
+                                        glib::ControlFlow::Break
+                                    }
+                                    Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                                    Err(_) => { progress.close(); glib::ControlFlow::Break }
+                                }
+                            });
+                        }
+                    });
+                    dialog.show();
+                    glib::ControlFlow::Break
+                }
+                Ok(_) => glib::ControlFlow::Break, // no update or error
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(_) => glib::ControlFlow::Break,
+            }
+        });
+    }
 }
 
 // ── Entry point ─────────────────────────────────────────────────────

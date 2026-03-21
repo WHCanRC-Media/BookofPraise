@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [rustapp]
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - id: tag
+        run: echo "tag=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK4 dev libraries
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --features auto-update
+
+      - name: Assemble distribution
+        run: |
+          mkdir -p dist
+          cp target/release/bop dist/
+          cp -r target/release/lilypond-bin dist/
+          cp -r target/release/lilypond dist/
+          cp -r target/release/photos dist/
+
+      - name: Zip
+        run: cd dist && zip -r ../bop-linux.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bop-linux
+          path: bop-linux.zip
+
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-rust
+            mingw-w64-ucrt-x86_64-pkg-config
+            unzip
+            zip
+
+      - name: Build
+        run: cargo build --release --features auto-update
+
+      - name: Assemble distribution
+        run: |
+          mkdir -p dist
+          cp target/release/bop.exe dist/
+          cp target/release/*.dll dist/
+          cp -r target/release/lilypond-bin dist/
+          cp -r target/release/lilypond dist/
+          cp -r target/release/photos dist/
+
+          # Bundle GDK pixbuf loaders and GTK schemas
+          cp -r /$MSYSTEM/lib/gdk-pixbuf-2.0 dist/lib/gdk-pixbuf-2.0 2>/dev/null || true
+          mkdir -p dist/share/glib-2.0
+          cp -r /$MSYSTEM/share/glib-2.0/schemas dist/share/glib-2.0/ 2>/dev/null || true
+
+      - name: Zip
+        run: cd dist && zip -r ../bop-windows.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bop-windows
+          path: bop-windows.zip
+
+  release:
+    needs: [tag, build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zip lilypond directory
+        run: zip -r lilypond.zip lilypond/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bop-linux
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bop-windows
+
+      - name: Delete existing release if present
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete "${{ needs.tag.outputs.tag }}" --yes --cleanup-tag 2>/dev/null || true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ needs.tag.outputs.tag }}" \
+            lilypond.zip \
+            bop-linux.zip \
+            bop-windows.zip \
+            --title "${{ needs.tag.outputs.tag }}" \
+            --notes "Release ${{ needs.tag.outputs.tag }}"
