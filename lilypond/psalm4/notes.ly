@@ -20,16 +20,16 @@ melody = \relative c' {
   a2 b2 a2 fis4 gis4 a2 gis2 fis2 r2 \break
 
   % Line 6
-  cis2 cis4 cis4 fis,2 cis'2 b4 gis4 a2 gis2 r2 \break
+  cis'2 cis4 cis4 fis,2 cis'2 b4 gis4 a2 gis2 r2 \break
 
   % Line 7
-  a'2 cis4 cis4 b4 gis4 b2 a2 gis2 r2 \break
+  a2 cis4 cis4 b4 gis4 b2 a2 gis2 r2 \break
 
   % Line 8
-  b,,2 b4 b4 a4 d,4 e4 fis4 gis2 fis2 r2 \break
+  cis2 cis4 cis4 b4 e,4 fis4 gis4 a2 gis2 r2 \break
 
   % Line 9
-  a''2 a4 a4 fis4 fis4 gis4 a4 b2 a2 r2 \break
+  a2 a4 a4 fis4 fis4 gis4 a4 b2 a2 r2 \break
 
   % Line 10
   cis2 b4 a4 gis4 fis4 gis2 gis2 fis1 \bar "|."

@@ -1,4 +1,10 @@
 use std::io::Read as _;
+use std::path::PathBuf;
+use std::collections::HashSet;
+
+use lettre::message::{header::ContentType, Attachment, MultiPart, SinglePart};
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{Message, SmtpTransport, Transport};
 
 use crate::model::base_dir;
 
@@ -102,5 +108,76 @@ pub fn download_and_extract(asset_url: &str, tag: &str) -> Result<(), String> {
     }
 
     save_local_version(tag);
+    Ok(())
+}
+
+// ── Email edits as patch ────────────────────────────────────────────
+
+const SMTP_HOST: &str = "smtp.purelymail.com";
+const SMTP_USER: &str = "bopnotifications@microridge.ca";
+const SMTP_PASS: &str = "s^]Xd;?@_5UW;MW";
+const NOTIFY_TO: &str = "joelvandergriendt@microridge.ca";
+
+/// Build a unified-diff-style patch for all .ly files in the given song dirs,
+/// comparing against the last-downloaded version stored in git.
+fn build_patch(edited_dirs: &HashSet<PathBuf>) -> String {
+    let mut patch = String::new();
+    for dir in edited_dirs {
+        let dir_name = dir.file_name().unwrap_or_default().to_string_lossy();
+        // Collect all .ly files in the directory
+        let Ok(entries) = std::fs::read_dir(dir) else { continue };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.ends_with(".ly") {
+                continue;
+            }
+            let path = entry.path();
+            let content = std::fs::read_to_string(&path).unwrap_or_default();
+            let rel_path = format!("{dir_name}/{name}");
+            // Format as a simple patch (full file content since we don't have the original)
+            patch.push_str(&format!("--- a/{rel_path}\n+++ b/{rel_path}\n"));
+            for line in content.lines() {
+                patch.push_str(&format!("+{line}\n"));
+            }
+            patch.push('\n');
+        }
+    }
+    patch
+}
+
+/// Send an email with the edited .ly files as a patch attachment.
+pub fn email_edits(edited_dirs: &HashSet<PathBuf>) -> Result<(), String> {
+    let patch = build_patch(edited_dirs);
+    if patch.is_empty() {
+        return Ok(());
+    }
+
+    let dir_names: Vec<String> = edited_dirs
+        .iter()
+        .filter_map(|d| d.file_name().map(|n| n.to_string_lossy().to_string()))
+        .collect();
+    let subject = format!("BOP edits: {}", dir_names.join(", "));
+
+    let attachment = Attachment::new("edits.patch".to_string())
+        .body(patch, ContentType::TEXT_PLAIN);
+
+    let email = Message::builder()
+        .from(SMTP_USER.parse().map_err(|e| format!("From address error: {e}"))?)
+        .to(NOTIFY_TO.parse().map_err(|e| format!("To address error: {e}"))?)
+        .subject(subject)
+        .multipart(
+            MultiPart::mixed()
+                .singlepart(SinglePart::plain("Lilypond edits from Book of Praise app.".to_string()))
+                .singlepart(attachment),
+        )
+        .map_err(|e| format!("Email build error: {e}"))?;
+
+    let creds = Credentials::new(SMTP_USER.to_string(), SMTP_PASS.to_string());
+    let mailer = SmtpTransport::starttls_relay(SMTP_HOST)
+        .map_err(|e| format!("SMTP relay error: {e}"))?
+        .credentials(creds)
+        .build();
+
+    mailer.send(&email).map_err(|e| format!("Send error: {e}"))?;
     Ok(())
 }

@@ -162,6 +162,8 @@ pub struct AppState {
     pub rendering: HashSet<(PathBuf, u32)>,
     pub render_errors: HashMap<(PathBuf, u32), String>,
     pub verified_this_session: HashSet<(PathBuf, u32)>,
+    /// Song dirs that had edits saved this session (for email-patch-on-close).
+    pub edited_song_dirs: HashSet<PathBuf>,
 }
 
 impl AppState {
@@ -182,6 +184,7 @@ impl AppState {
             rendering: HashSet::new(),
             render_errors: HashMap::new(),
             verified_this_session: HashSet::new(),
+            edited_song_dirs: HashSet::new(),
         };
 
         // Load songs from CLI, defaulting to Psalm 1

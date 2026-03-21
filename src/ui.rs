@@ -11,14 +11,15 @@ use crate::model::{
 };
 use crate::render_ly;
 use crate::rendering::{load_slide_texture, DEFAULT_RENDER_WIDTH};
-use crate::updater::{check_for_update, download_and_extract};
+use crate::updater::{check_for_update, download_and_extract, email_edits};
 
 // ── UI helpers ──────────────────────────────────────────────────────
 
-fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, lyrics_label: &gtk::Label) {
+fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, lyrics_label: &gtk::Label, copyright_entry: &gtk::Entry) {
     if let Some(slide) = state.slides.get(state.current_slide) {
         let notes_path = slide.song_dir.join("notes.ly");
         let lyrics_path = slide.song_dir.join(format!("lyrics_{}.ly", slide.current_verse));
+        let composer_path = slide.song_dir.join("composer.txt");
 
         let notes_text = std::fs::read_to_string(&notes_path).unwrap_or_default();
         notes_view.buffer().set_text(&notes_text);
@@ -26,18 +27,24 @@ fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_vie
         let lyrics_text = std::fs::read_to_string(&lyrics_path).unwrap_or_default();
         lyrics_view.buffer().set_text(&lyrics_text);
 
+        let composer_text = std::fs::read_to_string(&composer_path).unwrap_or_default();
+        copyright_entry.set_text(composer_text.trim());
+
         lyrics_label.set_text(&format!("lyrics_{}.ly", slide.current_verse));
     } else {
         notes_view.buffer().set_text("");
         lyrics_view.buffer().set_text("");
+        copyright_entry.set_text("");
         lyrics_label.set_text("lyrics.ly");
     }
 }
 
-fn save_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView) {
+fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, copyright_entry: &gtk::Entry) {
     if let Some(slide) = state.slides.get(state.current_slide) {
+        state.edited_song_dirs.insert(slide.song_dir.clone());
         let notes_path = slide.song_dir.join("notes.ly");
         let lyrics_path = slide.song_dir.join(format!("lyrics_{}.ly", slide.current_verse));
+        let composer_path = slide.song_dir.join("composer.txt");
 
         let buf = notes_view.buffer();
         let notes_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
@@ -46,6 +53,23 @@ fn save_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_vie
         let buf = lyrics_view.buffer();
         let lyrics_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
         let _ = std::fs::write(&lyrics_path, lyrics_text.as_str());
+
+        let copyright_text = copyright_entry.text();
+        let _ = std::fs::write(&composer_path, copyright_text.as_str());
+    }
+}
+
+/// Invalidate all verses of a song: clear cached textures/errors for any
+/// slides in that song. The SVG cache is content-addressed so stale entries
+/// are harmless — new content will hash to a different filename.
+fn invalidate_song(state: &mut AppState, song_dir: &std::path::Path) {
+    let keys: Vec<_> = state.slides.iter()
+        .filter(|sl| sl.song_dir == song_dir)
+        .map(|sl| (sl.path.clone(), sl.current_verse))
+        .collect();
+    for (path, verse) in keys {
+        state.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
+        state.render_errors.remove(&(path, verse));
     }
 }
 
@@ -309,6 +333,10 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     let lyrics_label = gtk::Label::new(Some("lyrics.ly"));
     lyrics_label.set_xalign(0.0);
 
+    let copyright_label = gtk::Label::new(Some("Copyright"));
+    copyright_label.set_xalign(0.0);
+    let copyright_entry = gtk::Entry::new();
+
     let save_btn = gtk::Button::with_label("Save & Re-render");
 
     let editor_panel = gtk::Box::new(gtk::Orientation::Vertical, 4);
@@ -316,6 +344,8 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     editor_panel.set_margin_end(4);
     editor_panel.set_margin_top(4);
     editor_panel.set_margin_bottom(4);
+    editor_panel.append(&copyright_label);
+    editor_panel.append(&copyright_entry);
     editor_panel.append(&notes_label);
     editor_panel.append(&notes_scroll);
     editor_panel.append(&lyrics_label);
@@ -465,18 +495,18 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     });
 
     // Prev / Next
-    connect!(prev_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
+    connect!(prev_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, lyrics_label, copyright_entry], move |_| {
         state.borrow_mut().navigate(-1);
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
         if editor_panel.is_visible() {
-            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label, &copyright_entry);
         }
     });
-    connect!(next_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
+    connect!(next_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, lyrics_label, copyright_entry], move |_| {
         state.borrow_mut().navigate(1);
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
         if editor_panel.is_visible() {
-            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label, &copyright_entry);
         }
     });
 
@@ -488,11 +518,11 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     });
 
     // Edit toggle
-    connect!(edit_btn, connect_toggled, [state, editor_panel, notes_view, lyrics_view, lyrics_label], move |btn| {
+    connect!(edit_btn, connect_toggled, [state, editor_panel, notes_view, lyrics_view, lyrics_label, copyright_entry], move |btn| {
         let active = btn.is_active();
         editor_panel.set_visible(active);
         if active {
-            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label, &copyright_entry);
         }
     });
 
@@ -519,18 +549,35 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     }
 
     // Save & Re-render
-    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, picture, nav_label, spinner, error_label, verify_btn], move |_| {
-        save_editor_contents(&state.borrow(), &notes_view, &lyrics_view);
+    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, copyright_entry, picture, nav_label, spinner, error_label, verify_btn], move |_| {
         {
             let mut s = state.borrow_mut();
-            // Remove cached texture and errors so it re-renders
+            // Detect if notes were modified (shared across all verses)
+            let notes_changed = if let Some(slide) = s.slides.get(s.current_slide) {
+                let notes_path = slide.song_dir.join("notes.ly");
+                let old = std::fs::read_to_string(&notes_path).unwrap_or_default();
+                let buf = notes_view.buffer();
+                let new = buf.text(&buf.start_iter(), &buf.end_iter(), false);
+                old != new.as_str()
+            } else {
+                false
+            };
+
+            save_editor_contents(&mut s, &notes_view, &lyrics_view, &copyright_entry);
+
             if let Some(slide) = s.slides.get(s.current_slide) {
-                let path = slide.path.clone();
-                let verse = slide.current_verse;
-                s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
-                s.render_errors.remove(&(path.clone(), verse));
-                // Delete the SVG so lilypond re-renders it
-                let _ = std::fs::remove_file(&path);
+                let song_dir = slide.song_dir.clone();
+                if notes_changed {
+                    // Notes are shared — delete all SVGs in the song dir
+                    // and invalidate all cached slides for this song
+                    invalidate_song(&mut s, &song_dir);
+                } else {
+                    // Only invalidate current verse
+                    let path = slide.path.clone();
+                    let verse = slide.current_verse;
+                    s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
+                    s.render_errors.remove(&(path.clone(), verse));
+                }
             }
         }
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
@@ -586,18 +633,35 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
         let notes_view = notes_view.clone();
         let lyrics_view = lyrics_view.clone();
         let lyrics_label = lyrics_label.clone();
+        let copyright_entry = copyright_entry.clone();
         let kc = gtk::EventControllerKey::new();
         kc.connect_key_pressed(move |_, key, _, modifiers| {
             if key == gdk::Key::s && modifiers.contains(gdk::ModifierType::CONTROL_MASK) && editor_panel.is_visible() {
-                save_editor_contents(&state.borrow(), &notes_view, &lyrics_view);
                 {
                     let mut s = state.borrow_mut();
+                    let notes_changed = if let Some(slide) = s.slides.get(s.current_slide) {
+                        let notes_path = slide.song_dir.join("notes.ly");
+                        let old = std::fs::read_to_string(&notes_path).unwrap_or_default();
+                        let buf = notes_view.buffer();
+                        let new = buf.text(&buf.start_iter(), &buf.end_iter(), false);
+                        old != new.as_str()
+                    } else {
+                        false
+                    };
+
+                    save_editor_contents(&mut s, &notes_view, &lyrics_view, &copyright_entry);
+
                     if let Some(slide) = s.slides.get(s.current_slide) {
-                        let path = slide.path.clone();
-                        let verse = slide.current_verse;
-                        s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
-                        s.render_errors.remove(&(path.clone(), verse));
-                        let _ = std::fs::remove_file(&path);
+                        let song_dir = slide.song_dir.clone();
+                        if notes_changed {
+                            invalidate_song(&mut s, &song_dir);
+                        } else {
+                            let path = slide.path.clone();
+                            let verse = slide.current_verse;
+                            s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
+                            s.render_errors.remove(&(path.clone(), verse));
+                            let _ = std::fs::remove_file(&path);
+                        }
                     }
                 }
                 refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
@@ -608,7 +672,7 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
                     state.borrow_mut().navigate(-1);
                     refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
                     if editor_panel.is_visible() {
-                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label, &copyright_entry);
                     }
                     glib::Propagation::Stop
                 }
@@ -616,7 +680,7 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
                     state.borrow_mut().navigate(1);
                     refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
                     if editor_panel.is_visible() {
-                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label, &copyright_entry);
                     }
                     glib::Propagation::Stop
                 }
@@ -624,6 +688,37 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
             }
         });
         window.add_controller(kc);
+    }
+
+    // ── Offer to email edits on close ──
+    {
+        let state = state.clone();
+        window.connect_close_request(move |win| {
+            let edited = state.borrow().edited_song_dirs.clone();
+            if edited.is_empty() {
+                return glib::Propagation::Proceed;
+            }
+
+            let dialog = gtk::MessageDialog::new(
+                Some(win),
+                gtk::DialogFlags::MODAL,
+                gtk::MessageType::Question,
+                gtk::ButtonsType::YesNo,
+                "You made edits this session. Email a patch to the author?",
+            );
+            let win = win.clone();
+            dialog.connect_response(move |dlg, resp| {
+                dlg.close();
+                if resp == gtk::ResponseType::Yes {
+                    if let Err(e) = email_edits(&edited) {
+                        eprintln!("Failed to send email: {e}");
+                    }
+                }
+                win.destroy();
+            });
+            dialog.show();
+            glib::Propagation::Stop
+        });
     }
 
     window.present();
