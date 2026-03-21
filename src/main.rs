@@ -18,6 +18,8 @@ use model::Cli;
 
 // ── Entry point ─────────────────────────────────────────────────────
 
+/// Application entry point. Parses CLI arguments, builds a GTK application,
+/// and launches the main UI window.
 fn main() -> glib::ExitCode {
     // Disable client-side decorations so the native Windows titlebar is used.
     #[cfg(target_os = "windows")]

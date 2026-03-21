@@ -2,6 +2,8 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+/// Build script entry point. Compiles the Windows icon resource, copies runtime
+/// DLLs (Windows only), copies song data directories, and fetches a LilyPond binary.
 fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
 
@@ -27,6 +29,8 @@ fn main() {
 }
 
 #[cfg(target_os = "windows")]
+/// Recursively resolve and copy all required UCRT64 DLLs to the target directory
+/// using `ldd` to walk transitive dependencies.
 fn copy_dlls(manifest: &str) {
     let prefix = std::env::var("MSYSTEM_PREFIX")
         .unwrap_or_else(|_| "C:/msys64/ucrt64".into());
@@ -91,6 +95,8 @@ fn copy_dlls(manifest: &str) {
     }
 }
 
+/// Copy the `lilypond/` and `photos/` data directories into the build target
+/// directory so they are available at runtime.
 fn copy_data_dirs(manifest: &str) {
     let profile = std::env::var("PROFILE").unwrap();
     let manifest = PathBuf::from(manifest);
@@ -104,6 +110,8 @@ fn copy_data_dirs(manifest: &str) {
     }
 }
 
+/// Download and extract a bundled LilyPond binary if one is not already present
+/// in the target directory.
 fn fetch_lilypond(manifest: &str) {
     const VERSION: &str = "2.24.4";
 
@@ -174,6 +182,8 @@ fn fetch_lilypond(manifest: &str) {
 
 }
 
+/// Recursively copy a directory tree, only overwriting files whose source is
+/// newer than the destination.
 fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) {
     std::fs::create_dir_all(dst)
         .unwrap_or_else(|e| panic!("failed to create dir {}: {e}", dst.display()));

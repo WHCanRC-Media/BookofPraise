@@ -30,6 +30,7 @@ pub fn svg_cache_dir() -> PathBuf {
     base.join("bop").join("svg")
 }
 
+/// Compute a hex-encoded hash of the given string for use as a cache key.
 fn content_hash(data: &str) -> String {
     let mut hasher = DefaultHasher::new();
     data.hash(&mut hasher);
@@ -97,6 +98,8 @@ fn modify_notes(notes: &str) -> String {
         .join("\n")
 }
 
+/// Strip or replace LaTeX-style markup from lyrics content so it can be safely
+/// used in LilyPond's `\lyricmode`.
 fn sanitize_lyrics(content: &str) -> String {
     // Replace escaped straight quotes with curly quotes (safe in lyricmode)
     let s = content.replace("\\\"", "\u{201c}");
@@ -109,6 +112,8 @@ fn sanitize_lyrics(content: &str) -> String {
         .to_string()
 }
 
+/// Assemble a complete LilyPond `.ly` file from notes, lyrics, and an optional
+/// composer credit, ready for rendering.
 fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>) -> String {
     let mut header_items = Vec::new();
     if let Some(c) = composer {

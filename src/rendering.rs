@@ -12,6 +12,8 @@ pub const DEFAULT_RENDER_WIDTH: u32 = 2400;
 
 pub type Pixmap = resvg::tiny_skia::Pixmap;
 
+/// Parse and rasterize an SVG file into a pixmap, scaling to `render_width` pixels
+/// while preserving aspect ratio. Replaces `currentColor` with black for compatibility.
 pub fn load_svg_pixmap(path: &Path, render_width: u32) -> Option<Pixmap> {
     let data = std::fs::read(path).ok()?;
     let data = String::from_utf8_lossy(&data)
@@ -37,6 +39,7 @@ pub fn load_svg_pixmap(path: &Path, render_width: u32) -> Option<Pixmap> {
     Some(pm)
 }
 
+/// Load a PNG image and scale it to `render_width` pixels using Lanczos3 filtering.
 pub fn load_png_pixmap(path: &Path, render_width: u32) -> Option<Pixmap> {
     let img = image::open(path).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
@@ -102,6 +105,8 @@ pub fn crop_and_frame(src: &Pixmap, render_width: u32) -> Option<Pixmap> {
     Some(out)
 }
 
+/// Render a song title and verse indicator into the top region of the pixmap
+/// using an inline SVG overlay. The current verse is shown in black, others in grey.
 fn render_title(pixmap: &mut Pixmap, slide: &Slide, render_width: u32) {
     let font_size = render_width as f32 / 40.0;
 
@@ -145,6 +150,8 @@ fn render_title(pixmap: &mut Pixmap, slide: &Slide, render_width: u32) {
     }
 }
 
+/// Load a slide's image (SVG or PNG), crop whitespace, frame it in 16:9 with a
+/// title overlay, and return a GDK texture ready for display.
 pub fn load_slide_texture(slide: &Slide, render_width: u32) -> Option<gdk::Texture> {
     let is_svg = slide
         .path

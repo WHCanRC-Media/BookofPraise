@@ -12,11 +12,13 @@ pub const GITHUB_REPO: &str = "vanjoe/bookOfPraise";
 pub const GITHUB_PAT: &str = "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";
 const VERSION_FILE: &str = "lilypond_version.txt";
 
+/// Read the locally stored version tag from `lilypond_version.txt`.
 fn current_local_version() -> Option<String> {
     let path = base_dir(true).parent()?.join(VERSION_FILE);
     std::fs::read_to_string(path).ok().map(|s| s.trim().to_string())
 }
 
+/// Persist the given version tag to `lilypond_version.txt` for future update checks.
 fn save_local_version(tag: &str) {
     if let Some(parent) = base_dir(true).parent() {
         let _ = std::fs::write(parent.join(VERSION_FILE), tag);
@@ -118,8 +120,9 @@ const SMTP_USER: &str = "bopnotifications@microridge.ca";
 const SMTP_PASS: &str = "s^]Xd;?@_5UW;MW";
 const NOTIFY_TO: &str = "joelvandergriendt@microridge.ca";
 
-/// Build a unified-diff-style patch for all .ly files in the given song dirs,
-/// comparing against the last-downloaded version stored in git.
+/// Build a unified-diff-style patch for all `.ly` files in the given song
+/// directories. Since the original content is unavailable, each file's full
+/// content is included as additions.
 fn build_patch(edited_dirs: &HashSet<PathBuf>) -> String {
     let mut patch = String::new();
     for dir in edited_dirs {

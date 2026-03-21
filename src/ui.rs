@@ -15,6 +15,8 @@ use crate::updater::{check_for_update, download_and_extract, email_edits};
 
 // ── UI helpers ──────────────────────────────────────────────────────
 
+/// Populate the editor panel's text views and entry fields from the current slide's
+/// LilyPond source files (`notes.ly`, `lyrics_N.ly`, `composer.txt`).
 fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, lyrics_label: &gtk::Label, copyright_entry: &gtk::Entry) {
     if let Some(slide) = state.slides.get(state.current_slide) {
         let notes_path = slide.song_dir.join("notes.ly");
@@ -39,6 +41,8 @@ fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_vie
     }
 }
 
+/// Write the editor panel's current text back to the corresponding LilyPond
+/// source files on disk and mark the song directory as edited.
 fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, copyright_entry: &gtk::Entry) {
     if let Some(slide) = state.slides.get(state.current_slide) {
         state.edited_song_dirs.insert(slide.song_dir.clone());
@@ -73,6 +77,7 @@ fn invalidate_song(state: &mut AppState, song_dir: &std::path::Path) {
     }
 }
 
+/// Return `true` if the slide is an SVG that has no up-to-date cached render.
 fn needs_render(slide: &crate::model::Slide) -> bool {
     let is_svg = slide
         .path
@@ -81,6 +86,107 @@ fn needs_render(slide: &crate::model::Slide) -> bool {
     is_svg && !render_ly::is_svg_current(&slide.song_dir, slide.current_verse)
 }
 
+/// Spawn a background LilyPond render for the given slide, if not already
+/// running or cached. When the render completes, the callback refreshes the
+/// display and chains to the next unrendered slide via `prefetch_next`.
+fn start_render(
+    state_rc: &Rc<RefCell<AppState>>,
+    picture: &gtk::Picture,
+    nav_label: &gtk::Label,
+    spinner: &gtk::Spinner,
+    error_label: &gtk::Label,
+    verify_btn: &gtk::Button,
+    song_dir: std::path::PathBuf,
+    verse: u32,
+) {
+    let render_key = (song_dir.clone(), verse);
+    {
+        let mut state = state_rc.borrow_mut();
+        if state.rendering.contains(&render_key) {
+            return; // already in progress
+        }
+        if !needs_render_dir(&song_dir, verse) {
+            return; // already cached
+        }
+        state.rendering.insert(render_key.clone());
+    }
+
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    std::thread::spawn(move || {
+        let result = render_ly::render_svg(&song_dir, verse);
+        let _ = tx.send(result);
+    });
+
+    let state_rc2 = state_rc.clone();
+    let picture2 = picture.clone();
+    let nav_label2 = nav_label.clone();
+    let spinner2 = spinner.clone();
+    let error_label2 = error_label.clone();
+    let verify_btn2 = verify_btn.clone();
+    glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+        match rx.try_recv() {
+            Ok(result) => {
+                {
+                    let mut state = state_rc2.borrow_mut();
+                    state.rendering.remove(&render_key);
+                    if let Err(err) = result {
+                        state.render_errors.insert(render_key.clone(), err);
+                    }
+                }
+                refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2);
+                prefetch_next(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2);
+                glib::ControlFlow::Break
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+            Err(_) => glib::ControlFlow::Break, // sender dropped
+        }
+    });
+}
+
+/// Check whether a song directory + verse needs rendering (without a Slide).
+fn needs_render_dir(song_dir: &std::path::Path, verse: u32) -> bool {
+    !render_ly::is_svg_current(song_dir, verse)
+}
+
+/// Find the next slide that needs rendering and start it. Searches forward
+/// from the current slide, wrapping around, so all slides are eventually rendered.
+fn prefetch_next(
+    state_rc: &Rc<RefCell<AppState>>,
+    picture: &gtk::Picture,
+    nav_label: &gtk::Label,
+    spinner: &gtk::Spinner,
+    error_label: &gtk::Label,
+    verify_btn: &gtk::Button,
+) {
+    let state = state_rc.borrow();
+    let n = state.slides.len();
+    if n == 0 {
+        return;
+    }
+    let start = state.current_slide;
+    for offset in 1..n {
+        let i = (start + offset) % n;
+        let slide = &state.slides[i];
+        if !needs_render(slide) {
+            continue;
+        }
+        if state.rendering.contains(&(slide.song_dir.clone(), slide.current_verse)) {
+            continue;
+        }
+        if state.render_errors.contains_key(&(slide.song_dir.clone(), slide.current_verse)) {
+            continue;
+        }
+        let song_dir = slide.song_dir.clone();
+        let verse = slide.current_verse;
+        drop(state);
+        start_render(state_rc, picture, nav_label, spinner, error_label, verify_btn, song_dir, verse);
+        return;
+    }
+}
+
+/// Update the main image display for the current slide. Loads a cached texture
+/// if available, otherwise spawns a background LilyPond render and polls for
+/// completion. Also updates the navigation label, verify button, and error state.
 fn refresh_display(
     state_rc: &Rc<RefCell<AppState>>,
     picture: &gtk::Picture,
@@ -146,47 +252,14 @@ fn refresh_display(
         }
 
         // Need to render — show spinner and spawn background thread
-        let should_render = !state.rendering.contains(&render_key) && needs_render(&state.slides[idx]);
-        if should_render {
-            state.rendering.insert(render_key.clone());
-
-            // Must drop the borrow before setting up the callback
+        if needs_render(&state.slides[idx]) && !state.rendering.contains(&render_key) {
             drop(state);
 
             spinner.set_visible(true);
             spinner.start();
             picture.set_paintable(None::<&gdk::Texture>);
 
-            let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
-            std::thread::spawn(move || {
-                let result = render_ly::render_svg(&song_dir, verse);
-                let _ = tx.send(result);
-            });
-
-            // Poll for completion from the main thread
-            let state_rc2 = state_rc.clone();
-            let picture2 = picture.clone();
-            let nav_label2 = nav_label.clone();
-            let spinner2 = spinner.clone();
-            let error_label2 = error_label.clone();
-            let verify_btn2 = verify_btn.clone();
-            glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
-                match rx.try_recv() {
-                    Ok(result) => {
-                        {
-                            let mut state = state_rc2.borrow_mut();
-                            state.rendering.remove(&render_key);
-                            if let Err(err) = result {
-                                state.render_errors.insert(render_key.clone(), err);
-                            }
-                        }
-                        refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2);
-                        glib::ControlFlow::Break
-                    }
-                    Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                    Err(_) => glib::ControlFlow::Break, // sender dropped
-                }
-            });
+            start_render(state_rc, picture, nav_label, spinner, error_label, verify_btn, song_dir, verse);
             return;
         }
 
@@ -204,6 +277,7 @@ fn refresh_display(
     }
 }
 
+/// Update the liturgy summary label with the current list of songs and verses.
 fn refresh_liturgy(state: &AppState, label: &gtk::Label) {
     if state.liturgy.is_empty() {
         label.set_text("");
@@ -220,6 +294,7 @@ fn refresh_liturgy(state: &AppState, label: &gtk::Label) {
     }
 }
 
+/// Clear and repopulate the verse checkbox row with one `CheckButton` per verse.
 fn rebuild_verse_checks(verse_box: &gtk::FlowBox, verses: &[u32]) {
     while let Some(child) = verse_box.first_child() {
         verse_box.remove(&child);
@@ -231,6 +306,7 @@ fn rebuild_verse_checks(verse_box: &gtk::FlowBox, verses: &[u32]) {
     }
 }
 
+/// Collect the verse numbers of all currently checked checkboxes, sorted.
 fn checked_verses(verse_box: &gtk::FlowBox) -> Vec<u32> {
     let mut out = Vec::new();
     let mut child = verse_box.first_child();
@@ -250,6 +326,7 @@ fn checked_verses(verse_box: &gtk::FlowBox) -> Vec<u32> {
     out
 }
 
+/// Set all verse checkboxes in the flow box to active.
 fn check_all(verse_box: &gtk::FlowBox) {
     let mut child = verse_box.first_child();
     while let Some(w) = child {
@@ -264,6 +341,8 @@ fn check_all(verse_box: &gtk::FlowBox) {
 
 // ── UI construction ─────────────────────────────────────────────────
 
+/// Construct the main application window and wire up all widgets and signal handlers.
+/// This is the top-level UI entry point called once on application activation.
 pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     let state = Rc::new(RefCell::new(AppState::new(cli)));
 

@@ -39,6 +39,7 @@ pub enum SongType {
 }
 
 impl SongType {
+    /// Return the filesystem prefix for this song type (e.g. `"psalm"` or `"hymn"`).
     pub fn prefix(self) -> &'static str {
         match self {
             SongType::Psalm => "psalm",
@@ -46,6 +47,7 @@ impl SongType {
         }
     }
 
+    /// Return a human-readable label like `"Psalm 42"` or `"Hymn 7"`.
     pub fn label(self, num: u32) -> String {
         match self {
             SongType::Psalm => format!("Psalm {num}"),
@@ -60,6 +62,8 @@ pub struct SongLibrary {
 }
 
 impl SongLibrary {
+    /// Scan a directory for psalm and hymn subdirectories, building a mapping
+    /// from song number to available verse numbers.
     pub fn scan(dir: &Path) -> Self {
         let mut psalms = BTreeMap::new();
         let mut hymns = BTreeMap::new();
@@ -84,6 +88,7 @@ impl SongLibrary {
         SongLibrary { psalms, hymns }
     }
 
+    /// Look up the available verses for a song by type and number.
     pub fn get(&self, song_type: SongType, num: u32) -> Option<&Vec<u32>> {
         match song_type {
             SongType::Psalm => self.psalms.get(&num),
@@ -92,6 +97,7 @@ impl SongLibrary {
     }
 }
 
+/// Scan a song directory for verse numbers by examining image files and LilyPond sources.
 fn scan_verses(dir: &Path) -> Vec<u32> {
     let mut verses = std::collections::BTreeSet::new();
     for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
@@ -117,6 +123,7 @@ fn scan_verses(dir: &Path) -> Vec<u32> {
     verses.into_iter().collect()
 }
 
+/// Read the verification count for a specific verse from its `verify_N.txt` file.
 pub fn read_verify_count(song_dir: &Path, verse: u32) -> u32 {
     let path = song_dir.join(format!("verify_{verse}.txt"));
     std::fs::read_to_string(path)
@@ -125,6 +132,7 @@ pub fn read_verify_count(song_dir: &Path, verse: u32) -> u32 {
         .unwrap_or(0)
 }
 
+/// Increment and persist the verification count for a verse, returning the new count.
 pub fn increment_verify(song_dir: &Path, verse: u32) -> u32 {
     let count = read_verify_count(song_dir, verse) + 1;
     let path = song_dir.join(format!("verify_{verse}.txt"));
@@ -167,6 +175,9 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Initialize application state from CLI arguments. Loads the song library,
+    /// adds any songs specified on the command line (defaulting to Psalm 1), and
+    /// builds the initial slide list.
     pub fn new(cli: &Cli) -> Self {
         let use_svg = !cli.png;
         let songs_dir = base_dir(use_svg);
@@ -202,6 +213,7 @@ impl AppState {
         state
     }
 
+    /// Add all verses of a song to the liturgy. Returns `true` if the song was found.
     pub fn add_song(&mut self, song_type: SongType, num: u32) -> bool {
         if let Some(verses) = self.library.get(song_type, num).cloned() {
             self.liturgy.push(LiturgyEntry {
@@ -215,6 +227,7 @@ impl AppState {
         }
     }
 
+    /// Add specific verses of a song to the liturgy and rebuild the slide list.
     pub fn add_song_with_verses(&mut self, song_type: SongType, num: u32, verses: Vec<u32>) {
         if verses.is_empty() {
             return;
@@ -227,6 +240,9 @@ impl AppState {
         self.rebuild_slides();
     }
 
+    /// Rebuild the flat slide list from the current liturgy entries, resolving
+    /// each verse to its image files on disk. Clears all caches and attempts
+    /// to preserve the current slide position.
     pub fn rebuild_slides(&mut self) {
         let prev = self.slides.get(self.current_slide).cloned();
         self.slides.clear();
@@ -272,6 +288,8 @@ impl AppState {
         }
     }
 
+    /// Switch between SVG and PNG rendering mode, rescanning the library and
+    /// rebuilding slides from the appropriate data directory.
     pub fn set_use_svg(&mut self, use_svg: bool) {
         if self.use_svg == use_svg {
             return;
@@ -282,6 +300,7 @@ impl AppState {
         self.rebuild_slides();
     }
 
+    /// Move the current slide index by `delta`, clamping to valid bounds.
     pub fn navigate(&mut self, delta: isize) {
         if self.slides.is_empty() {
             return;
@@ -291,6 +310,8 @@ impl AppState {
     }
 }
 
+/// Return the directory containing the running executable, falling back to the
+/// current working directory.
 pub fn exe_dir() -> PathBuf {
     std::env::current_exe()
         .ok()
@@ -298,6 +319,8 @@ pub fn exe_dir() -> PathBuf {
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
 }
 
+/// Resolve the base song data directory (`lilypond/` for SVG mode, `photos/` for PNG),
+/// checking the current working directory first, then falling back to the executable's directory.
 pub fn base_dir(use_svg: bool) -> PathBuf {
     let sub = if use_svg { "lilypond" } else { "photos" };
     let cwd = std::env::current_dir().unwrap_or_default().join(sub);
