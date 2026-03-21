@@ -8,6 +8,8 @@ mod updater;
 
 use clap::Parser;
 use gtk4 as gtk;
+#[cfg(target_os = "windows")]
+use gtk::gdk;
 use gtk::glib;
 use gtk::prelude::*;
 use std::rc::Rc;
