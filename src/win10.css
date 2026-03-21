@@ -1,6 +1,6 @@
 .background {
   color: #000000;
-  background-color: rgba(255, 255, 255, 0.999); }
+  background-color: #EEEEEE; }
   .background:backdrop {
     color: #000000;
     background-color: rgba(255, 255, 255, 0.999); }
@@ -1560,9 +1560,10 @@ switch {
   margin-left: -3px;
   margin-right: -3px;
   font-size: 0;
-  min-width: 42px;
-  border-radius: 16px;
-  border: 3px solid #000000;
+  min-width: 36px;
+  min-height: 16px;
+  border-radius: 10px;
+  border: 2px solid #000000;
   color: transparent;
   background-color: transparent;
   box-shadow: none; }
@@ -1582,9 +1583,9 @@ switch {
   switch:backdrop {
     border-color: #000000; }
   switch > slider {
-    margin: 3px;
-    margin-left: 4px;
-    margin-right: 4px;
+    margin: 2px;
+    margin-left: 3px;
+    margin-right: 3px;
     min-width: 12px;
     min-height: 12px;
     border-radius: 100%;
@@ -2891,7 +2892,4 @@ read if you used those and something break with a version upgrade you're on your
 @define-color wm_button_active_color_c shade(#FFFFFF, 0.9);
 @define-color content_view_bg #FFFFFF;
 
-/* Slide image border */
-.slide-image {
-  border: 1px solid #000000;
-}
+

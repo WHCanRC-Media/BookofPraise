@@ -739,6 +739,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     let notes_view = gtk::TextView::new();
     notes_view.set_monospace(true);
     notes_view.set_wrap_mode(gtk::WrapMode::Word);
+    notes_view.add_css_class("editor-text");
 
     let notes_scroll = gtk::ScrolledWindow::new();
     notes_scroll.set_child(Some(&notes_view));
@@ -747,6 +748,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     let lyrics_view = gtk::TextView::new();
     lyrics_view.set_monospace(true);
     lyrics_view.set_wrap_mode(gtk::WrapMode::Word);
+    lyrics_view.add_css_class("editor-text");
 
     let lyrics_scroll = gtk::ScrolledWindow::new();
     lyrics_scroll.set_child(Some(&lyrics_view));
@@ -807,10 +809,10 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
         next_btn.upcast_ref(),
         clear_btn.upcast_ref(),
         spacer.upcast_ref(),
+        edit_btn.upcast_ref(),
         png_label.upcast_ref(),
         svg_switch.upcast_ref(),
         svg_label.upcast_ref(),
-        edit_btn.upcast_ref(),
     ] {
         nav_row.append(w);
     }
