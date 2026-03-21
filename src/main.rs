@@ -118,6 +118,21 @@ fn scan_verses(dir: &Path) -> Vec<u32> {
     verses.into_iter().collect()
 }
 
+fn read_verify_count(song_dir: &Path, verse: u32) -> u32 {
+    let path = song_dir.join(format!("verify_{verse}.txt"));
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+fn increment_verify(song_dir: &Path, verse: u32) -> u32 {
+    let count = read_verify_count(song_dir, verse) + 1;
+    let path = song_dir.join(format!("verify_{verse}.txt"));
+    let _ = std::fs::write(path, count.to_string());
+    count
+}
+
 #[derive(Clone)]
 struct LiturgyEntry {
     song_name: String,
@@ -147,6 +162,7 @@ struct AppState {
     texture_cache: HashMap<CacheKey, gdk::Texture>,
     rendering: HashSet<(PathBuf, u32)>,
     render_errors: HashMap<(PathBuf, u32), String>,
+    verified_this_session: HashSet<(PathBuf, u32)>,
 }
 
 impl AppState {
@@ -166,6 +182,7 @@ impl AppState {
             texture_cache: HashMap::new(),
             rendering: HashSet::new(),
             render_errors: HashMap::new(),
+            verified_this_session: HashSet::new(),
         };
 
         // Load songs from CLI, defaulting to Psalm 1
@@ -528,6 +545,7 @@ fn refresh_display(
     nav_label: &gtk::Label,
     spinner: &gtk::Spinner,
     error_label: &gtk::Label,
+    verify_btn: &gtk::Button,
 ) {
     let mut state = state_rc.borrow_mut();
     spinner.stop();
@@ -555,6 +573,17 @@ fn refresh_display(
 
     if let Some((cache_key, render_key, song_dir, verse, idx, total)) = slide_info {
         nav_label.set_text(&format!("{}/{}", idx + 1, total));
+
+        // Update verify button state
+        let verify_count = read_verify_count(&song_dir, verse);
+        let verified_session = state.verified_this_session.contains(&(song_dir.clone(), verse));
+        if verify_count >= 2 || verified_session {
+            verify_btn.set_label("Verified");
+            verify_btn.set_sensitive(false);
+        } else {
+            verify_btn.set_label("Verify");
+            verify_btn.set_sensitive(true);
+        }
 
         // Check for render error
         if let Some(err) = state.render_errors.get(&render_key) {
@@ -598,6 +627,7 @@ fn refresh_display(
             let nav_label2 = nav_label.clone();
             let spinner2 = spinner.clone();
             let error_label2 = error_label.clone();
+            let verify_btn2 = verify_btn.clone();
             glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
                 match rx.try_recv() {
                     Ok(result) => {
@@ -608,7 +638,7 @@ fn refresh_display(
                                 state.render_errors.insert(render_key.clone(), err);
                             }
                         }
-                        refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2);
+                        refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2);
                         glib::ControlFlow::Break
                     }
                     Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
@@ -627,6 +657,8 @@ fn refresh_display(
     } else {
         picture.set_paintable(None::<&gdk::Texture>);
         nav_label.set_text("0/0");
+        verify_btn.set_label("Verify");
+        verify_btn.set_sensitive(false);
     }
 }
 
@@ -794,6 +826,8 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     let clear_btn = gtk::Button::with_label("Clear liturgy");
     let edit_btn = gtk::ToggleButton::with_label("Edit");
     edit_btn.set_visible(!cli.png); // only show in SVG mode
+    let verify_btn = gtk::Button::with_label("Verify");
+    verify_btn.set_visible(!cli.png); // only show in SVG mode
     let png_label = gtk::Label::new(Some("PNG"));
     let svg_switch = gtk::Switch::new();
     svg_switch.set_active(!cli.png);
@@ -810,6 +844,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
         clear_btn.upcast_ref(),
         spacer.upcast_ref(),
         edit_btn.upcast_ref(),
+        verify_btn.upcast_ref(),
         png_label.upcast_ref(),
         svg_switch.upcast_ref(),
         svg_label.upcast_ref(),
@@ -866,7 +901,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     window.set_child(Some(&vbox));
 
     // Initial display
-    refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
+    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
     refresh_liturgy(&state.borrow(), &liturgy_label);
 
     // ── Helpers for signal closures ──
@@ -912,25 +947,25 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
     });
 
     // Prev / Next
-    connect!(prev_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
+    connect!(prev_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
         state.borrow_mut().navigate(-1);
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
         if editor_panel.is_visible() {
             load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
         }
     });
-    connect!(next_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
+    connect!(next_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
         state.borrow_mut().navigate(1);
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
         if editor_panel.is_visible() {
             load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
         }
     });
 
     // Clear
-    connect!(clear_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, liturgy_label], move |_| {
+    connect!(clear_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, liturgy_label], move |_| {
         { let mut s = state.borrow_mut(); s.liturgy.clear(); s.rebuild_slides(); }
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
         refresh_liturgy(&state.borrow(), &liturgy_label);
     });
 
@@ -943,8 +978,30 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
         }
     });
 
+    // Verify button
+    {
+        let state = state.clone();
+        let picture = picture.clone();
+        let nav_label = nav_label.clone();
+        let spinner = spinner.clone();
+        let error_label = error_label.clone();
+        let verify_btn2 = verify_btn.clone();
+        verify_btn.connect_clicked(move |_| {
+            {
+                let mut s = state.borrow_mut();
+                if let Some(slide) = s.slides.get(s.current_slide) {
+                    let song_dir = slide.song_dir.clone();
+                    let verse = slide.current_verse;
+                    increment_verify(&song_dir, verse);
+                    s.verified_this_session.insert((song_dir, verse));
+                }
+            }
+            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn2);
+        });
+    }
+
     // Save & Re-render
-    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, picture, nav_label, spinner, error_label], move |_| {
+    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, picture, nav_label, spinner, error_label, verify_btn], move |_| {
         save_editor_contents(&state.borrow(), &notes_view, &lyrics_view);
         {
             let mut s = state.borrow_mut();
@@ -958,42 +1015,43 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
                 let _ = std::fs::remove_file(&path);
             }
         }
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
     });
 
     // SVG/PNG toggle
-    connect!(svg_switch, connect_active_notify, [state, picture, nav_label, spinner, error_label, liturgy_label, number_entry, verse_box, edit_btn, editor_panel], move |sw| {
+    connect!(svg_switch, connect_active_notify, [state, picture, nav_label, spinner, error_label, verify_btn, liturgy_label, number_entry, verse_box, edit_btn, editor_panel], move |sw| {
         state.borrow_mut().set_use_svg(sw.is_active());
         edit_btn.set_active(false);
         edit_btn.set_visible(sw.is_active());
+        verify_btn.set_visible(sw.is_active());
         editor_panel.set_visible(false);
         number_entry.set_text("");
         rebuild_verse_checks(&verse_box, &[]);
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
         refresh_liturgy(&state.borrow(), &liturgy_label);
     });
 
     // All button — check all and add immediately
-    connect!(all_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, liturgy_label], move |_| {
+    connect!(all_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, verify_btn, liturgy_label], move |_| {
         check_all(&verse_box);
         if let Ok(num) = number_entry.text().parse::<u32>() {
             let verses = checked_verses(&verse_box);
             state.borrow_mut().add_song_with_verses(song_type(), num, verses);
             number_entry.set_text("");
             rebuild_verse_checks(&verse_box, &[]);
-            refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
+            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
             refresh_liturgy(&state.borrow(), &liturgy_label);
         }
     });
 
     // Add button
-    connect!(add_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, liturgy_label], move |_| {
+    connect!(add_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, verify_btn, liturgy_label], move |_| {
         if let Ok(num) = number_entry.text().parse::<u32>() {
             let verses = checked_verses(&verse_box);
             state.borrow_mut().add_song_with_verses(song_type(), num, verses);
             number_entry.set_text("");
             rebuild_verse_checks(&verse_box, &[]);
-            refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
+            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
             refresh_liturgy(&state.borrow(), &liturgy_label);
         }
     });
@@ -1005,6 +1063,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
         let nav_label = nav_label.clone();
         let spinner = spinner.clone();
         let error_label = error_label.clone();
+        let verify_btn = verify_btn.clone();
         let editor_panel = editor_panel.clone();
         let notes_view = notes_view.clone();
         let lyrics_view = lyrics_view.clone();
@@ -1023,13 +1082,13 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
                         let _ = std::fs::remove_file(&path);
                     }
                 }
-                refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
+                refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
                 return glib::Propagation::Stop;
             }
             match key {
                 gdk::Key::Left => {
                     state.borrow_mut().navigate(-1);
-                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
+                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
                     if editor_panel.is_visible() {
                         load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
                     }
@@ -1037,7 +1096,7 @@ fn build_ui(app: &gtk::Application, cli: &Cli) {
                 }
                 gdk::Key::Right => {
                     state.borrow_mut().navigate(1);
-                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label);
+                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
                     if editor_panel.is_visible() {
                         load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
                     }
