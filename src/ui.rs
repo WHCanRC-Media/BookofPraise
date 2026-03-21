@@ -1,0 +1,723 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use gtk4 as gtk;
+use gtk::gdk;
+use gtk::glib;
+use gtk::prelude::*;
+
+use crate::model::{
+    read_verify_count, increment_verify, AppState, SongLibrary, SongType,
+};
+use crate::render_ly;
+use crate::rendering::{load_slide_texture, DEFAULT_RENDER_WIDTH};
+use crate::updater::{check_for_update, download_and_extract};
+
+// ── UI helpers ──────────────────────────────────────────────────────
+
+fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, lyrics_label: &gtk::Label) {
+    if let Some(slide) = state.slides.get(state.current_slide) {
+        let notes_path = slide.song_dir.join("notes.ly");
+        let lyrics_path = slide.song_dir.join(format!("lyrics_{}.ly", slide.current_verse));
+
+        let notes_text = std::fs::read_to_string(&notes_path).unwrap_or_default();
+        notes_view.buffer().set_text(&notes_text);
+
+        let lyrics_text = std::fs::read_to_string(&lyrics_path).unwrap_or_default();
+        lyrics_view.buffer().set_text(&lyrics_text);
+
+        lyrics_label.set_text(&format!("lyrics_{}.ly", slide.current_verse));
+    } else {
+        notes_view.buffer().set_text("");
+        lyrics_view.buffer().set_text("");
+        lyrics_label.set_text("lyrics.ly");
+    }
+}
+
+fn save_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView) {
+    if let Some(slide) = state.slides.get(state.current_slide) {
+        let notes_path = slide.song_dir.join("notes.ly");
+        let lyrics_path = slide.song_dir.join(format!("lyrics_{}.ly", slide.current_verse));
+
+        let buf = notes_view.buffer();
+        let notes_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
+        let _ = std::fs::write(&notes_path, notes_text.as_str());
+
+        let buf = lyrics_view.buffer();
+        let lyrics_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
+        let _ = std::fs::write(&lyrics_path, lyrics_text.as_str());
+    }
+}
+
+fn needs_render(slide: &crate::model::Slide) -> bool {
+    let is_svg = slide
+        .path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
+    is_svg && !render_ly::is_svg_current(&slide.song_dir, slide.current_verse)
+}
+
+fn refresh_display(
+    state_rc: &Rc<RefCell<AppState>>,
+    picture: &gtk::Picture,
+    nav_label: &gtk::Label,
+    spinner: &gtk::Spinner,
+    error_label: &gtk::Label,
+    verify_btn: &gtk::Button,
+) {
+    let mut state = state_rc.borrow_mut();
+    spinner.stop();
+    spinner.set_visible(false);
+    error_label.set_visible(false);
+
+    // Render at the picture's actual pixel width
+    let w = picture.width();
+    let scale = picture.scale_factor();
+    if w > 0 {
+        let pixel_width = (w as u32) * (scale as u32);
+        state.render_width = pixel_width.max(DEFAULT_RENDER_WIDTH);
+    }
+    let render_width = state.render_width;
+    let slide_info = state.slides.get(state.current_slide).map(|slide| {
+        (
+            (slide.path.clone(), slide.current_verse, render_width),
+            (slide.path.clone(), slide.current_verse),
+            slide.song_dir.clone(),
+            slide.current_verse,
+            state.current_slide,
+            state.slides.len(),
+        )
+    });
+
+    if let Some((cache_key, render_key, song_dir, verse, idx, total)) = slide_info {
+        nav_label.set_text(&format!("{}/{}", idx + 1, total));
+
+        // Update verify button state
+        let verify_count = read_verify_count(&song_dir, verse);
+        let verified_session = state.verified_this_session.contains(&(song_dir.clone(), verse));
+        if verify_count >= 2 || verified_session {
+            verify_btn.set_label("Verified");
+            verify_btn.set_sensitive(false);
+        } else {
+            verify_btn.set_label("Verify");
+            verify_btn.set_sensitive(true);
+        }
+
+        // Check for render error
+        if let Some(err) = state.render_errors.get(&render_key) {
+            picture.set_paintable(None::<&gdk::Texture>);
+            error_label.set_text(err);
+            error_label.set_visible(true);
+            return;
+        }
+
+        // Try loading from cache or disk
+        let tex = state.texture_cache.get(&cache_key).cloned().or_else(|| {
+            load_slide_texture(&state.slides[idx], render_width)
+        });
+        if let Some(tex) = tex {
+            picture.set_paintable(Some(&tex));
+            state.texture_cache.insert(cache_key, tex);
+            return;
+        }
+
+        // Need to render — show spinner and spawn background thread
+        let should_render = !state.rendering.contains(&render_key) && needs_render(&state.slides[idx]);
+        if should_render {
+            state.rendering.insert(render_key.clone());
+
+            // Must drop the borrow before setting up the callback
+            drop(state);
+
+            spinner.set_visible(true);
+            spinner.start();
+            picture.set_paintable(None::<&gdk::Texture>);
+
+            let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+            std::thread::spawn(move || {
+                let result = render_ly::render_svg(&song_dir, verse);
+                let _ = tx.send(result);
+            });
+
+            // Poll for completion from the main thread
+            let state_rc2 = state_rc.clone();
+            let picture2 = picture.clone();
+            let nav_label2 = nav_label.clone();
+            let spinner2 = spinner.clone();
+            let error_label2 = error_label.clone();
+            let verify_btn2 = verify_btn.clone();
+            glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+                match rx.try_recv() {
+                    Ok(result) => {
+                        {
+                            let mut state = state_rc2.borrow_mut();
+                            state.rendering.remove(&render_key);
+                            if let Err(err) = result {
+                                state.render_errors.insert(render_key.clone(), err);
+                            }
+                        }
+                        refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2);
+                        glib::ControlFlow::Break
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    Err(_) => glib::ControlFlow::Break, // sender dropped
+                }
+            });
+            return;
+        }
+
+        // Rendering in progress
+        if state.rendering.contains(&render_key) {
+            spinner.set_visible(true);
+            spinner.start();
+            picture.set_paintable(None::<&gdk::Texture>);
+        }
+    } else {
+        picture.set_paintable(None::<&gdk::Texture>);
+        nav_label.set_text("0/0");
+        verify_btn.set_label("Verify");
+        verify_btn.set_sensitive(false);
+    }
+}
+
+fn refresh_liturgy(state: &AppState, label: &gtk::Label) {
+    if state.liturgy.is_empty() {
+        label.set_text("");
+    } else {
+        let parts: Vec<String> = state
+            .liturgy
+            .iter()
+            .map(|e| {
+                let vs = e.verses.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(",");
+                format!("{} ({})", e.song_name, vs)
+            })
+            .collect();
+        label.set_text(&format!("Liturgy: {}", parts.join(" | ")));
+    }
+}
+
+fn rebuild_verse_checks(verse_box: &gtk::FlowBox, verses: &[u32]) {
+    while let Some(child) = verse_box.first_child() {
+        verse_box.remove(&child);
+    }
+    for &v in verses {
+        let check = gtk::CheckButton::with_label(&format!("V{v}"));
+        check.set_widget_name(&v.to_string());
+        verse_box.insert(&check, -1);
+    }
+}
+
+fn checked_verses(verse_box: &gtk::FlowBox) -> Vec<u32> {
+    let mut out = Vec::new();
+    let mut child = verse_box.first_child();
+    while let Some(w) = child {
+        if let Some(fb) = w.downcast_ref::<gtk::FlowBoxChild>() {
+            if let Some(cb) = fb.child().and_then(|c| c.downcast::<gtk::CheckButton>().ok()) {
+                if cb.is_active() {
+                    if let Ok(v) = cb.widget_name().parse::<u32>() {
+                        out.push(v);
+                    }
+                }
+            }
+        }
+        child = w.next_sibling();
+    }
+    out.sort();
+    out
+}
+
+fn check_all(verse_box: &gtk::FlowBox) {
+    let mut child = verse_box.first_child();
+    while let Some(w) = child {
+        if let Some(fb) = w.downcast_ref::<gtk::FlowBoxChild>() {
+            if let Some(cb) = fb.child().and_then(|c| c.downcast::<gtk::CheckButton>().ok()) {
+                cb.set_active(true);
+            }
+        }
+        child = w.next_sibling();
+    }
+}
+
+// ── UI construction ─────────────────────────────────────────────────
+
+pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
+    let state = Rc::new(RefCell::new(AppState::new(cli)));
+
+    let window = gtk::ApplicationWindow::builder()
+        .application(app)
+        .title("Book of Praise")
+        .default_width(1024)
+        .default_height(768)
+        .build();
+    // Image display
+    let picture = gtk::Picture::new();
+    picture.set_can_shrink(true);
+    picture.set_vexpand(true);
+    picture.set_hexpand(true);
+    picture.set_content_fit(gtk::ContentFit::Contain);
+    picture.add_css_class("slide-image");
+
+    // Loading spinner (centered over picture area)
+    let spinner = gtk::Spinner::new();
+    spinner.set_width_request(48);
+    spinner.set_height_request(48);
+    spinner.set_halign(gtk::Align::Center);
+    spinner.set_valign(gtk::Align::Center);
+    spinner.set_visible(false);
+
+    // Error label (centered over picture area, wrapping)
+    let error_label = gtk::Label::new(None);
+    error_label.set_wrap(true);
+    error_label.set_halign(gtk::Align::Center);
+    error_label.set_valign(gtk::Align::Center);
+    error_label.set_visible(false);
+    error_label.set_selectable(true);
+    error_label.set_margin_start(24);
+    error_label.set_margin_end(24);
+
+    let overlay = gtk::Overlay::new();
+    overlay.set_child(Some(&picture));
+    overlay.add_overlay(&spinner);
+    overlay.add_overlay(&error_label);
+
+    let scroll = gtk::ScrolledWindow::new();
+    scroll.set_child(Some(&overlay));
+    scroll.set_vexpand(true);
+    scroll.set_hexpand(true);
+
+    // Editor panel (right side, hidden by default)
+    let notes_view = gtk::TextView::new();
+    notes_view.set_monospace(true);
+    notes_view.set_wrap_mode(gtk::WrapMode::Word);
+    notes_view.add_css_class("editor-text");
+
+    let notes_scroll = gtk::ScrolledWindow::new();
+    notes_scroll.set_child(Some(&notes_view));
+    notes_scroll.set_vexpand(true);
+
+    let lyrics_view = gtk::TextView::new();
+    lyrics_view.set_monospace(true);
+    lyrics_view.set_wrap_mode(gtk::WrapMode::Word);
+    lyrics_view.add_css_class("editor-text");
+
+    let lyrics_scroll = gtk::ScrolledWindow::new();
+    lyrics_scroll.set_child(Some(&lyrics_view));
+    lyrics_scroll.set_vexpand(true);
+
+    let notes_label = gtk::Label::new(Some("notes.ly"));
+    notes_label.set_xalign(0.0);
+    let lyrics_label = gtk::Label::new(Some("lyrics.ly"));
+    lyrics_label.set_xalign(0.0);
+
+    let save_btn = gtk::Button::with_label("Save & Re-render");
+
+    let editor_panel = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    editor_panel.set_margin_start(4);
+    editor_panel.set_margin_end(4);
+    editor_panel.set_margin_top(4);
+    editor_panel.set_margin_bottom(4);
+    editor_panel.append(&notes_label);
+    editor_panel.append(&notes_scroll);
+    editor_panel.append(&lyrics_label);
+    editor_panel.append(&lyrics_scroll);
+    editor_panel.append(&save_btn);
+    editor_panel.set_visible(false);
+    editor_panel.set_hexpand(true);
+
+    // Horizontal paned: image left, editor right
+    let hpaned = gtk::Paned::new(gtk::Orientation::Horizontal);
+    hpaned.set_start_child(Some(&scroll));
+    hpaned.set_end_child(Some(&editor_panel));
+    hpaned.set_resize_start_child(true);
+    hpaned.set_resize_end_child(true);
+    hpaned.set_vexpand(true);
+
+    // Liturgy label
+    let liturgy_label = gtk::Label::new(None);
+    liturgy_label.set_xalign(0.0);
+    liturgy_label.set_wrap(true);
+
+    // Navigation row
+    let prev_btn = gtk::Button::with_label("Prev");
+    let nav_label = gtk::Label::new(Some("0/0"));
+    let next_btn = gtk::Button::with_label("Next");
+    let clear_btn = gtk::Button::with_label("Clear liturgy");
+    let edit_btn = gtk::ToggleButton::with_label("Edit");
+    edit_btn.set_visible(!cli.png); // only show in SVG mode
+    let verify_btn = gtk::Button::with_label("Verify");
+    verify_btn.set_visible(!cli.png); // only show in SVG mode
+    let png_label = gtk::Label::new(Some("PNG"));
+    let svg_switch = gtk::Switch::new();
+    svg_switch.set_active(!cli.png);
+    let svg_label = gtk::Label::new(Some("SVG"));
+
+    let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    spacer.set_hexpand(true);
+
+    let nav_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    for w in [
+        prev_btn.upcast_ref::<gtk::Widget>(),
+        nav_label.upcast_ref(),
+        next_btn.upcast_ref(),
+        clear_btn.upcast_ref(),
+        spacer.upcast_ref(),
+        edit_btn.upcast_ref(),
+        verify_btn.upcast_ref(),
+        png_label.upcast_ref(),
+        svg_switch.upcast_ref(),
+        svg_label.upcast_ref(),
+    ] {
+        nav_row.append(w);
+    }
+
+    // Song input row
+    let psalm_radio = gtk::CheckButton::with_label("Psalm");
+    let hymn_radio = gtk::CheckButton::with_label("Hymn");
+    hymn_radio.set_group(Some(&psalm_radio));
+    psalm_radio.set_active(true);
+
+    let number_entry = gtk::Entry::new();
+    number_entry.set_width_chars(5);
+
+    let verse_box = gtk::FlowBox::new();
+    verse_box.set_selection_mode(gtk::SelectionMode::None);
+    verse_box.set_max_children_per_line(20);
+    verse_box.set_hexpand(true);
+
+    let all_btn = gtk::Button::with_label("All");
+    let add_btn = gtk::Button::with_label("Add");
+
+    let input_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    input_row.set_valign(gtk::Align::Center);
+    for w in [
+        psalm_radio.upcast_ref::<gtk::Widget>(),
+        hymn_radio.upcast_ref(),
+        gtk::Label::new(Some("#")).upcast_ref(),
+        number_entry.upcast_ref(),
+        verse_box.upcast_ref(),
+        all_btn.upcast_ref(),
+        add_btn.upcast_ref(),
+    ] {
+        input_row.append(w);
+    }
+
+    // Controls container
+    let controls = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    controls.set_margin_start(8);
+    controls.set_margin_end(8);
+    controls.set_margin_top(4);
+    controls.set_margin_bottom(8);
+    controls.append(&liturgy_label);
+    controls.append(&nav_row);
+    controls.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+    controls.append(&input_row);
+
+    // Main layout
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    vbox.append(&hpaned);
+    vbox.append(&controls);
+    window.set_child(Some(&vbox));
+
+    // Initial display
+    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+    refresh_liturgy(&state.borrow(), &liturgy_label);
+
+    // ── Helpers for signal closures ──
+
+    // Macro to reduce clone boilerplate in signal handlers
+    macro_rules! connect {
+        ($widget:expr, $method:ident, [$($clone:ident),*], $body:expr) => {{
+            $(let $clone = $clone.clone();)*
+            $widget.$method($body);
+        }};
+    }
+
+    // Song type from radio state
+    let song_type = {
+        let psalm_radio = psalm_radio.clone();
+        move || {
+            if psalm_radio.is_active() {
+                SongType::Psalm
+            } else {
+                SongType::Hymn
+            }
+        }
+    };
+
+    // ── Signal connections ──
+
+    // Number entry → update verse checkboxes
+    connect!(number_entry, connect_changed, [state, verse_box, song_type], move |entry| {
+        if let Ok(num) = entry.text().parse::<u32>() {
+            let verses = state.borrow().library.get(song_type(), num).cloned().unwrap_or_default();
+            rebuild_verse_checks(&verse_box, &verses);
+        } else {
+            rebuild_verse_checks(&verse_box, &[]);
+        }
+    });
+
+    // Radio toggle → update verse checkboxes
+    connect!(psalm_radio, connect_active_notify, [state, verse_box, number_entry, song_type], move |_| {
+        if let Ok(num) = number_entry.text().parse::<u32>() {
+            let verses = state.borrow().library.get(song_type(), num).cloned().unwrap_or_default();
+            rebuild_verse_checks(&verse_box, &verses);
+        }
+    });
+
+    // Prev / Next
+    connect!(prev_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
+        state.borrow_mut().navigate(-1);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+        if editor_panel.is_visible() {
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+        }
+    });
+    connect!(next_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, lyrics_label], move |_| {
+        state.borrow_mut().navigate(1);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+        if editor_panel.is_visible() {
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+        }
+    });
+
+    // Clear
+    connect!(clear_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, liturgy_label], move |_| {
+        { let mut s = state.borrow_mut(); s.liturgy.clear(); s.rebuild_slides(); }
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+        refresh_liturgy(&state.borrow(), &liturgy_label);
+    });
+
+    // Edit toggle
+    connect!(edit_btn, connect_toggled, [state, editor_panel, notes_view, lyrics_view, lyrics_label], move |btn| {
+        let active = btn.is_active();
+        editor_panel.set_visible(active);
+        if active {
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+        }
+    });
+
+    // Verify button
+    {
+        let state = state.clone();
+        let picture = picture.clone();
+        let nav_label = nav_label.clone();
+        let spinner = spinner.clone();
+        let error_label = error_label.clone();
+        let verify_btn2 = verify_btn.clone();
+        verify_btn.connect_clicked(move |_| {
+            {
+                let mut s = state.borrow_mut();
+                if let Some(slide) = s.slides.get(s.current_slide) {
+                    let song_dir = slide.song_dir.clone();
+                    let verse = slide.current_verse;
+                    increment_verify(&song_dir, verse);
+                    s.verified_this_session.insert((song_dir, verse));
+                }
+            }
+            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn2);
+        });
+    }
+
+    // Save & Re-render
+    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, picture, nav_label, spinner, error_label, verify_btn], move |_| {
+        save_editor_contents(&state.borrow(), &notes_view, &lyrics_view);
+        {
+            let mut s = state.borrow_mut();
+            // Remove cached texture and errors so it re-renders
+            if let Some(slide) = s.slides.get(s.current_slide) {
+                let path = slide.path.clone();
+                let verse = slide.current_verse;
+                s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
+                s.render_errors.remove(&(path.clone(), verse));
+                // Delete the SVG so lilypond re-renders it
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+    });
+
+    // SVG/PNG toggle
+    connect!(svg_switch, connect_active_notify, [state, picture, nav_label, spinner, error_label, verify_btn, liturgy_label, number_entry, verse_box, edit_btn, editor_panel], move |sw| {
+        state.borrow_mut().set_use_svg(sw.is_active());
+        edit_btn.set_active(false);
+        edit_btn.set_visible(sw.is_active());
+        verify_btn.set_visible(sw.is_active());
+        editor_panel.set_visible(false);
+        number_entry.set_text("");
+        rebuild_verse_checks(&verse_box, &[]);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+        refresh_liturgy(&state.borrow(), &liturgy_label);
+    });
+
+    // All button — check all and add immediately
+    connect!(all_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, verify_btn, liturgy_label], move |_| {
+        check_all(&verse_box);
+        if let Ok(num) = number_entry.text().parse::<u32>() {
+            let verses = checked_verses(&verse_box);
+            state.borrow_mut().add_song_with_verses(song_type(), num, verses);
+            number_entry.set_text("");
+            rebuild_verse_checks(&verse_box, &[]);
+            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+            refresh_liturgy(&state.borrow(), &liturgy_label);
+        }
+    });
+
+    // Add button
+    connect!(add_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, verify_btn, liturgy_label], move |_| {
+        if let Ok(num) = number_entry.text().parse::<u32>() {
+            let verses = checked_verses(&verse_box);
+            state.borrow_mut().add_song_with_verses(song_type(), num, verses);
+            number_entry.set_text("");
+            rebuild_verse_checks(&verse_box, &[]);
+            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+            refresh_liturgy(&state.borrow(), &liturgy_label);
+        }
+    });
+
+    // Arrow key navigation
+    {
+        let state = state.clone();
+        let picture = picture.clone();
+        let nav_label = nav_label.clone();
+        let spinner = spinner.clone();
+        let error_label = error_label.clone();
+        let verify_btn = verify_btn.clone();
+        let editor_panel = editor_panel.clone();
+        let notes_view = notes_view.clone();
+        let lyrics_view = lyrics_view.clone();
+        let lyrics_label = lyrics_label.clone();
+        let kc = gtk::EventControllerKey::new();
+        kc.connect_key_pressed(move |_, key, _, modifiers| {
+            if key == gdk::Key::s && modifiers.contains(gdk::ModifierType::CONTROL_MASK) && editor_panel.is_visible() {
+                save_editor_contents(&state.borrow(), &notes_view, &lyrics_view);
+                {
+                    let mut s = state.borrow_mut();
+                    if let Some(slide) = s.slides.get(s.current_slide) {
+                        let path = slide.path.clone();
+                        let verse = slide.current_verse;
+                        s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
+                        s.render_errors.remove(&(path.clone(), verse));
+                        let _ = std::fs::remove_file(&path);
+                    }
+                }
+                refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+                return glib::Propagation::Stop;
+            }
+            match key {
+                gdk::Key::Left => {
+                    state.borrow_mut().navigate(-1);
+                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+                    if editor_panel.is_visible() {
+                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+                    }
+                    glib::Propagation::Stop
+                }
+                gdk::Key::Right => {
+                    state.borrow_mut().navigate(1);
+                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+                    if editor_panel.is_visible() {
+                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &lyrics_label);
+                    }
+                    glib::Propagation::Stop
+                }
+                _ => glib::Propagation::Proceed,
+            }
+        });
+        window.add_controller(kc);
+    }
+
+    window.present();
+
+    // ── Startup update check ──
+    if cli.update {
+        let window = window.clone();
+        let state = state.clone();
+        let picture = picture.clone();
+        let nav_label = nav_label.clone();
+        let spinner = spinner.clone();
+        let error_label = error_label.clone();
+        let verify_btn = verify_btn.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(check_for_update());
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
+            match rx.try_recv() {
+                Ok(Ok(Some((tag, asset_url)))) => {
+                    let dialog = gtk::MessageDialog::new(
+                        Some(&window),
+                        gtk::DialogFlags::MODAL,
+                        gtk::MessageType::Question,
+                        gtk::ButtonsType::YesNo,
+                        &format!("Lilypond update available: {tag}\nDownload and install?"),
+                    );
+                    let window2 = window.clone();
+                    let state2 = state.clone();
+                    let picture2 = picture.clone();
+                    let nav_label2 = nav_label.clone();
+                    let spinner2 = spinner.clone();
+                    let error_label2 = error_label.clone();
+                    let verify_btn2 = verify_btn.clone();
+                    let asset_url = Rc::new(asset_url);
+                    dialog.connect_response(move |dlg, resp| {
+                        dlg.close();
+                        if resp == gtk::ResponseType::Yes {
+                            let asset_url = (*asset_url).clone();
+                            // Show a progress dialog while downloading
+                            let progress = gtk::MessageDialog::new(
+                                Some(&window2),
+                                gtk::DialogFlags::MODAL,
+                                gtk::MessageType::Info,
+                                gtk::ButtonsType::None,
+                                "Downloading update...",
+                            );
+                            progress.show();
+
+                            let tag2 = tag.clone();
+                            let (tx2, rx2) = std::sync::mpsc::channel();
+                            std::thread::spawn(move || {
+                                let _ = tx2.send(download_and_extract(&asset_url, &tag2));
+                            });
+
+                            let state3 = state2.clone();
+                            let picture3 = picture2.clone();
+                            let nav_label3 = nav_label2.clone();
+                            let spinner3 = spinner2.clone();
+                            let error_label3 = error_label2.clone();
+                            let verify_btn3 = verify_btn2.clone();
+                            glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
+                                match rx2.try_recv() {
+                                    Ok(Ok(())) => {
+                                        progress.close();
+                                        // Reload library with new data
+                                        {
+                                            let mut s = state3.borrow_mut();
+                                            s.library = SongLibrary::scan(&s.songs_dir);
+                                            s.texture_cache.clear();
+                                            s.render_errors.clear();
+                                            s.rebuild_slides();
+                                        }
+                                        refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3);
+                                        glib::ControlFlow::Break
+                                    }
+                                    Ok(Err(e)) => {
+                                        progress.close();
+                                        eprintln!("Update failed: {e}");
+                                        glib::ControlFlow::Break
+                                    }
+                                    Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                                    Err(_) => { progress.close(); glib::ControlFlow::Break }
+                                }
+                            });
+                        }
+                    });
+                    dialog.show();
+                    glib::ControlFlow::Break
+                }
+                Ok(_) => glib::ControlFlow::Break, // no update or error
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(_) => glib::ControlFlow::Break,
+            }
+        });
+    }
+}
