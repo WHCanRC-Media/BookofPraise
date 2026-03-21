@@ -72,28 +72,22 @@ fn copy_dlls(manifest: &str) {
     }
 
     // Copy all resolved DLLs to the target directory
-    let _ = std::fs::create_dir_all(&target_dir);
-    let mut copied = 0;
+    std::fs::create_dir_all(&target_dir).expect("failed to create target dir");
     for dll in &all_dlls {
         let src = bin_dir.join(dll);
         let dst = target_dir.join(dll);
         if src.exists() {
-            // Only copy if source is newer or dest doesn't exist
             let should_copy = match (src.metadata(), dst.metadata()) {
-                (Ok(s), Ok(d)) => {
-                    s.modified().ok() > d.modified().ok()
-                }
+                (Ok(s), Ok(d)) => s.modified().ok() > d.modified().ok(),
                 (Ok(_), Err(_)) => true,
                 _ => false,
             };
             if should_copy {
-                if let Ok(_) = std::fs::copy(&src, &dst) {
-                    copied += 1;
-                }
+                std::fs::copy(&src, &dst)
+                    .unwrap_or_else(|e| panic!("failed to copy DLL {}: {e}", src.display()));
             }
         }
     }
-    println!("cargo:warning=Copied {copied} DLLs ({} total resolved) to {}", all_dlls.len(), target_dir.display());
 }
 
 fn copy_data_dirs(manifest: &str) {
@@ -101,14 +95,12 @@ fn copy_data_dirs(manifest: &str) {
     let manifest = PathBuf::from(manifest);
     let target_dir = manifest.join("target").join(&profile);
 
-    let mut copied = 0;
     for dir_name in &["lilypond", "photos"] {
         let src_dir = manifest.join(dir_name);
         if src_dir.exists() {
-            copied += copy_dir_recursive(&src_dir, &target_dir.join(dir_name));
+            copy_dir_recursive(&src_dir, &target_dir.join(dir_name));
         }
     }
-    println!("cargo:warning=Copied {copied} data files (lilypond + photos) to {}", target_dir.display());
 }
 
 fn fetch_lilypond(manifest: &str) {
@@ -120,7 +112,6 @@ fn fetch_lilypond(manifest: &str) {
 
     // Skip if already present
     if dest.join("bin").exists() {
-        println!("cargo:warning=LilyPond already present at {}", dest.display());
         return;
     }
 
@@ -135,10 +126,7 @@ fn fetch_lilypond(manifest: &str) {
             .arg(&zip_path)
             .arg(&url)
             .status();
-        if !status.is_ok_and(|s| s.success()) {
-            println!("cargo:warning=Failed to download LilyPond");
-            return;
-        }
+        assert!(status.is_ok_and(|s| s.success()), "failed to download LilyPond");
         let status = std::process::Command::new("powershell")
             .args([
                 "-NoProfile", "-Command",
@@ -149,15 +137,12 @@ fn fetch_lilypond(manifest: &str) {
                 ),
             ])
             .status();
-        if !status.is_ok_and(|s| s.success()) {
-            println!("cargo:warning=Failed to extract LilyPond");
-            return;
-        }
+        assert!(status.is_ok_and(|s| s.success()), "failed to extract LilyPond");
         let extracted = target_dir.join(format!("lilypond-{VERSION}"));
         if extracted.exists() {
-            let _ = std::fs::rename(&extracted, &dest);
+            std::fs::rename(&extracted, &dest).expect("failed to rename lilypond dir");
         }
-        let _ = std::fs::remove_file(&zip_path);
+        std::fs::remove_file(&zip_path).expect("failed to remove lilypond.zip");
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -171,42 +156,34 @@ fn fetch_lilypond(manifest: &str) {
             .arg(&tar_path)
             .arg(&url)
             .status();
-        if !status.is_ok_and(|s| s.success()) {
-            println!("cargo:warning=Failed to download LilyPond");
-            return;
-        }
+        assert!(status.is_ok_and(|s| s.success()), "failed to download LilyPond");
         let status = std::process::Command::new("tar")
             .args(["xzf"])
             .arg(&tar_path)
             .arg("-C")
             .arg(&target_dir)
             .status();
-        if !status.is_ok_and(|s| s.success()) {
-            println!("cargo:warning=Failed to extract LilyPond");
-            return;
-        }
+        assert!(status.is_ok_and(|s| s.success()), "failed to extract LilyPond");
         let extracted = target_dir.join(format!("lilypond-{VERSION}"));
         if extracted.exists() {
-            let _ = std::fs::rename(&extracted, &dest);
+            std::fs::rename(&extracted, &dest).expect("failed to rename lilypond dir");
         }
-        let _ = std::fs::remove_file(&tar_path);
+        std::fs::remove_file(&tar_path).expect("failed to remove lilypond.tar.gz");
     }
 
-    println!("cargo:warning=LilyPond {VERSION} installed to {}", dest.display());
 }
 
-fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> usize {
-    let _ = std::fs::create_dir_all(dst);
-    let mut copied = 0;
-    let entries = match std::fs::read_dir(src) {
-        Ok(e) => e,
-        Err(_) => return 0,
-    };
-    for entry in entries.flatten() {
+fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) {
+    std::fs::create_dir_all(dst)
+        .unwrap_or_else(|e| panic!("failed to create dir {}: {e}", dst.display()));
+    let entries = std::fs::read_dir(src)
+        .unwrap_or_else(|e| panic!("failed to read dir {}: {e}", src.display()));
+    for entry in entries {
+        let entry = entry.unwrap_or_else(|e| panic!("failed to read entry in {}: {e}", src.display()));
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
         if src_path.is_dir() {
-            copied += copy_dir_recursive(&src_path, &dst_path);
+            copy_dir_recursive(&src_path, &dst_path);
         } else {
             let should_copy = match (src_path.metadata(), dst_path.metadata()) {
                 (Ok(s), Ok(d)) => s.modified().ok() > d.modified().ok(),
@@ -214,11 +191,9 @@ fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> usize {
                 _ => false,
             };
             if should_copy {
-                if std::fs::copy(&src_path, &dst_path).is_ok() {
-                    copied += 1;
-                }
+                std::fs::copy(&src_path, &dst_path)
+                    .unwrap_or_else(|e| panic!("failed to copy {}: {e}", src_path.display()));
             }
         }
     }
-    copied
 }
