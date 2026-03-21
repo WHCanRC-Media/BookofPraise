@@ -744,7 +744,7 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
                         gtk::DialogFlags::MODAL,
                         gtk::MessageType::Question,
                         gtk::ButtonsType::YesNo,
-                        &format!("Lilypond update available: {tag}\nDownload and install?"),
+                        &format!("Song data update available: {tag}\nDownload and install?"),
                     );
                     let window2 = window.clone();
                     let state2 = state.clone();
