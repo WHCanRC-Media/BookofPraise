@@ -86,16 +86,11 @@ fn needs_render(slide: &crate::model::Slide) -> bool {
     is_svg && !render_ly::is_svg_current(&slide.song_dir, slide.current_verse)
 }
 
-/// Spawn a background LilyPond render for the given slide, if not already
-/// running or cached. When the render completes, the callback refreshes the
-/// display and chains to the next unrendered slide via `prefetch_next`.
+/// Spawn a background LilyPond render for the given song_dir/verse.
+/// Only touches state — no UI widgets needed. When the render completes,
+/// updates state and chains to the next unrendered slide.
 fn start_render(
     state_rc: &Rc<RefCell<AppState>>,
-    picture: &gtk::Picture,
-    nav_label: &gtk::Label,
-    spinner: &gtk::Spinner,
-    error_label: &gtk::Label,
-    verify_btn: &gtk::Button,
     song_dir: std::path::PathBuf,
     verse: u32,
 ) {
@@ -103,10 +98,10 @@ fn start_render(
     {
         let mut state = state_rc.borrow_mut();
         if state.rendering.contains(&render_key) {
-            return; // already in progress
+            return;
         }
-        if !needs_render_dir(&song_dir, verse) {
-            return; // already cached
+        if render_ly::is_svg_current(&song_dir, verse) {
+            return;
         }
         state.rendering.insert(render_key.clone());
     }
@@ -118,11 +113,6 @@ fn start_render(
     });
 
     let state_rc2 = state_rc.clone();
-    let picture2 = picture.clone();
-    let nav_label2 = nav_label.clone();
-    let spinner2 = spinner.clone();
-    let error_label2 = error_label.clone();
-    let verify_btn2 = verify_btn.clone();
     glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
         match rx.try_recv() {
             Ok(result) => {
@@ -133,31 +123,18 @@ fn start_render(
                         state.render_errors.insert(render_key.clone(), err);
                     }
                 }
-                refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2);
-                prefetch_next(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2);
+                prefetch_next(&state_rc2);
                 glib::ControlFlow::Break
             }
             Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-            Err(_) => glib::ControlFlow::Break, // sender dropped
+            Err(_) => glib::ControlFlow::Break,
         }
     });
 }
 
-/// Check whether a song directory + verse needs rendering (without a Slide).
-fn needs_render_dir(song_dir: &std::path::Path, verse: u32) -> bool {
-    !render_ly::is_svg_current(song_dir, verse)
-}
-
 /// Find the next slide that needs rendering and start it. Searches forward
 /// from the current slide, wrapping around, so all slides are eventually rendered.
-fn prefetch_next(
-    state_rc: &Rc<RefCell<AppState>>,
-    picture: &gtk::Picture,
-    nav_label: &gtk::Label,
-    spinner: &gtk::Spinner,
-    error_label: &gtk::Label,
-    verify_btn: &gtk::Button,
-) {
+fn prefetch_next(state_rc: &Rc<RefCell<AppState>>) {
     let state = state_rc.borrow();
     let n = state.slides.len();
     if n == 0 {
@@ -170,16 +147,14 @@ fn prefetch_next(
         if !needs_render(slide) {
             continue;
         }
-        if state.rendering.contains(&(slide.song_dir.clone(), slide.current_verse)) {
-            continue;
-        }
-        if state.render_errors.contains_key(&(slide.song_dir.clone(), slide.current_verse)) {
+        let key = (slide.song_dir.clone(), slide.current_verse);
+        if state.rendering.contains(&key) || state.render_errors.contains_key(&key) {
             continue;
         }
         let song_dir = slide.song_dir.clone();
         let verse = slide.current_verse;
         drop(state);
-        start_render(state_rc, picture, nav_label, spinner, error_label, verify_btn, song_dir, verse);
+        start_render(state_rc, song_dir, verse);
         return;
     }
 }
@@ -211,7 +186,7 @@ fn refresh_display(
     let slide_info = state.slides.get(state.current_slide).map(|slide| {
         (
             (slide.path.clone(), slide.current_verse, render_width),
-            (slide.path.clone(), slide.current_verse),
+            (slide.song_dir.clone(), slide.current_verse),
             slide.song_dir.clone(),
             slide.current_verse,
             state.current_slide,
@@ -248,27 +223,42 @@ fn refresh_display(
         if let Some(tex) = tex {
             picture.set_paintable(Some(&tex));
             state.texture_cache.insert(cache_key, tex);
+            drop(state);
+            prefetch_next(state_rc);
             return;
         }
 
-        // Need to render — show spinner and spawn background thread
+        // Need to render — start it if not already running
         if needs_render(&state.slides[idx]) && !state.rendering.contains(&render_key) {
             drop(state);
-
-            spinner.set_visible(true);
-            spinner.start();
-            picture.set_paintable(None::<&gdk::Texture>);
-
-            start_render(state_rc, picture, nav_label, spinner, error_label, verify_btn, song_dir, verse);
-            return;
+            start_render(state_rc, song_dir, verse);
+        } else {
+            drop(state);
         }
 
-        // Rendering in progress
-        if state.rendering.contains(&render_key) {
-            spinner.set_visible(true);
-            spinner.start();
-            picture.set_paintable(None::<&gdk::Texture>);
-        }
+        // Show spinner and poll until the render completes
+        spinner.set_visible(true);
+        spinner.start();
+        picture.set_paintable(None::<&gdk::Texture>);
+
+        let state_rc2 = state_rc.clone();
+        let picture2 = picture.clone();
+        let nav_label2 = nav_label.clone();
+        let spinner2 = spinner.clone();
+        let error_label2 = error_label.clone();
+        let verify_btn2 = verify_btn.clone();
+        glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+            let is_done = {
+                let state = state_rc2.borrow();
+                !state.rendering.contains(&render_key)
+            };
+            if is_done {
+                refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2);
+                glib::ControlFlow::Break
+            } else {
+                glib::ControlFlow::Continue
+            }
+        });
     } else {
         picture.set_paintable(None::<&gdk::Texture>);
         nav_label.set_text("0/0");

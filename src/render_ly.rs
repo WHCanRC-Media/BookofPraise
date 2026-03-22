@@ -227,7 +227,8 @@ pub fn render_svg(song_dir: &Path, verse: u32) -> Result<(), String> {
     fs::create_dir_all(&cache_dir)
         .map_err(|e| format!("Failed to create cache dir: {e}"))?;
 
-    let combined_ly = cache_dir.join(format!("_combined.ly"));
+    let hash = content_hash(&combined);
+    let combined_ly = cache_dir.join(format!("_combined_{hash}.ly"));
     fs::write(&combined_ly, &combined)
         .map_err(|e| format!("Failed to write combined .ly: {e}"))?;
 
