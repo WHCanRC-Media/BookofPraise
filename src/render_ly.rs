@@ -43,18 +43,140 @@ pub fn cached_svg_path(combined_ly_content: &str) -> PathBuf {
     svg_cache_dir().join(format!("{hash}.svg"))
 }
 
-/// Find the lilypond binary: check next to our executable first, then PATH.
-fn lilypond_bin() -> PathBuf {
+const LILYPOND_VERSION: &str = "2.24.4";
+
+/// Return the cache directory for the LilyPond installation.
+fn lilypond_cache_dir() -> PathBuf {
+    let base = if cfg!(windows) {
+        std::env::var("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("C:\\Temp"))
+    } else {
+        std::env::var("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+                PathBuf::from(home).join(".cache")
+            })
+    };
+    base.join("bop").join("lilypond-bin")
+}
+
+/// Check whether LilyPond is available (bundled, cached, or on PATH).
+pub fn lilypond_available() -> bool {
+    let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
+    let bin_name = format!("lilypond{exe_suffix}");
+
+    // Bundled next to executable
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            // Check for bundled lilypond: <exe_dir>/lilypond-bin/bin/lilypond
-            let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
-            let bundled = dir.join("lilypond-bin").join("bin").join(format!("lilypond{exe_suffix}"));
+            if dir.join("lilypond-bin").join("bin").join(&bin_name).exists() {
+                return true;
+            }
+        }
+    }
+
+    // In cache
+    if lilypond_cache_dir().join("bin").join(&bin_name).exists() {
+        return true;
+    }
+
+    // On PATH
+    let which_cmd = if cfg!(windows) { "where" } else { "which" };
+    Command::new(which_cmd).arg("lilypond").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success())
+}
+
+/// Download and extract LilyPond into the cache directory.
+pub fn download_lilypond() -> Result<(), String> {
+    let dest = lilypond_cache_dir();
+    let parent = dest.parent().unwrap();
+    fs::create_dir_all(parent)
+        .map_err(|e| format!("Failed to create cache dir: {e}"))?;
+
+    eprintln!("Downloading LilyPond {LILYPOND_VERSION}...");
+
+    if cfg!(windows) {
+        let url = format!(
+            "https://gitlab.com/lilypond/lilypond/-/releases/v{LILYPOND_VERSION}/downloads/lilypond-{LILYPOND_VERSION}-mingw-x86_64.zip"
+        );
+        let resp = ureq::get(&url).call()
+            .map_err(|e| format!("Failed to download LilyPond: {e}"))?;
+        let zip_path = dest.with_extension("zip");
+        let mut file = fs::File::create(&zip_path)
+            .map_err(|e| format!("Failed to create zip file: {e}"))?;
+        std::io::copy(&mut resp.into_reader(), &mut file)
+            .map_err(|e| format!("Failed to write zip file: {e}"))?;
+
+        let file = fs::File::open(&zip_path)
+            .map_err(|e| format!("Failed to open zip file: {e}"))?;
+        let mut archive = zip::ZipArchive::new(file)
+            .map_err(|e| format!("Failed to read zip archive: {e}"))?;
+
+        let extract_dir = dest.with_extension("extract");
+        archive.extract(&extract_dir)
+            .map_err(|e| format!("Failed to extract zip: {e}"))?;
+
+        let extracted = extract_dir.join(format!("lilypond-{LILYPOND_VERSION}"));
+        if extracted.exists() {
+            fs::rename(&extracted, &dest)
+                .map_err(|e| format!("Failed to rename extracted dir: {e}"))?;
+        }
+        let _ = fs::remove_dir_all(&extract_dir);
+        let _ = fs::remove_file(&zip_path);
+    } else {
+        let url = format!(
+            "https://gitlab.com/lilypond/lilypond/-/releases/v{LILYPOND_VERSION}/downloads/lilypond-{LILYPOND_VERSION}-linux-x86_64.tar.gz"
+        );
+        let resp = ureq::get(&url).call()
+            .map_err(|e| format!("Failed to download LilyPond: {e}"))?;
+        let tar_path = dest.with_extension("tar.gz");
+        let mut file = fs::File::create(&tar_path)
+            .map_err(|e| format!("Failed to create tar file: {e}"))?;
+        std::io::copy(&mut resp.into_reader(), &mut file)
+            .map_err(|e| format!("Failed to write tar file: {e}"))?;
+
+        let status = Command::new("tar")
+            .args(["xzf"])
+            .arg(&tar_path)
+            .arg("-C")
+            .arg(parent)
+            .status()
+            .map_err(|e| format!("Failed to run tar: {e}"))?;
+        if !status.success() {
+            return Err("tar extraction failed".into());
+        }
+
+        let extracted = parent.join(format!("lilypond-{LILYPOND_VERSION}"));
+        if extracted.exists() {
+            fs::rename(&extracted, &dest)
+                .map_err(|e| format!("Failed to rename extracted dir: {e}"))?;
+        }
+        let _ = fs::remove_file(&tar_path);
+    }
+
+    eprintln!("LilyPond {LILYPOND_VERSION} installed to cache.");
+    Ok(())
+}
+
+/// Find the lilypond binary: check next to our executable, then cache, then PATH.
+fn lilypond_bin() -> PathBuf {
+    let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
+    let bin_name = format!("lilypond{exe_suffix}");
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let bundled = dir.join("lilypond-bin").join("bin").join(&bin_name);
             if bundled.exists() {
                 return bundled;
             }
         }
     }
+
+    let cached = lilypond_cache_dir().join("bin").join(&bin_name);
+    if cached.exists() {
+        return cached;
+    }
+
     PathBuf::from("lilypond")
 }
 

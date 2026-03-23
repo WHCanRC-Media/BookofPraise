@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 /// Build script entry point. Compiles the Windows icon resource, copies runtime
-/// DLLs (Windows only), copies song data directories, and fetches a LilyPond binary.
+/// DLLs (Windows only), and copies song data directories.
 fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
 
@@ -25,7 +25,6 @@ fn main() {
     }
 
     copy_data_dirs(&manifest);
-    fetch_lilypond(&manifest);
 }
 
 #[cfg(target_os = "windows")]
@@ -110,77 +109,6 @@ fn copy_data_dirs(manifest: &str) {
     }
 }
 
-/// Download and extract a bundled LilyPond binary if one is not already present
-/// in the target directory.
-fn fetch_lilypond(manifest: &str) {
-    const VERSION: &str = "2.24.4";
-
-    let profile = std::env::var("PROFILE").unwrap();
-    let target_dir = PathBuf::from(manifest).join("target").join(&profile);
-    let dest = target_dir.join("lilypond-bin");
-
-    // Skip if already present
-    if dest.join("bin").exists() {
-        return;
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let url = format!(
-            "https://gitlab.com/lilypond/lilypond/-/releases/v{VERSION}/downloads/lilypond-{VERSION}-mingw-x86_64.zip"
-        );
-        let zip_path = target_dir.join("lilypond.zip");
-        let status = std::process::Command::new("curl")
-            .args(["-L", "-o"])
-            .arg(&zip_path)
-            .arg(&url)
-            .status();
-        assert!(status.is_ok_and(|s| s.success()), "failed to download LilyPond");
-        let status = std::process::Command::new("powershell")
-            .args([
-                "-NoProfile", "-Command",
-                &format!(
-                    "Expand-Archive -Force -Path '{}' -DestinationPath '{}'",
-                    zip_path.display(),
-                    target_dir.display()
-                ),
-            ])
-            .status();
-        assert!(status.is_ok_and(|s| s.success()), "failed to extract LilyPond");
-        let extracted = target_dir.join(format!("lilypond-{VERSION}"));
-        if extracted.exists() {
-            std::fs::rename(&extracted, &dest).expect("failed to rename lilypond dir");
-        }
-        std::fs::remove_file(&zip_path).expect("failed to remove lilypond.zip");
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let url = format!(
-            "https://gitlab.com/lilypond/lilypond/-/releases/v{VERSION}/downloads/lilypond-{VERSION}-linux-x86_64.tar.gz"
-        );
-        let tar_path = target_dir.join("lilypond.tar.gz");
-        let status = std::process::Command::new("curl")
-            .args(["-L", "-o"])
-            .arg(&tar_path)
-            .arg(&url)
-            .status();
-        assert!(status.is_ok_and(|s| s.success()), "failed to download LilyPond");
-        let status = std::process::Command::new("tar")
-            .args(["xzf"])
-            .arg(&tar_path)
-            .arg("-C")
-            .arg(&target_dir)
-            .status();
-        assert!(status.is_ok_and(|s| s.success()), "failed to extract LilyPond");
-        let extracted = target_dir.join(format!("lilypond-{VERSION}"));
-        if extracted.exists() {
-            std::fs::rename(&extracted, &dest).expect("failed to rename lilypond dir");
-        }
-        std::fs::remove_file(&tar_path).expect("failed to remove lilypond.tar.gz");
-    }
-
-}
 
 /// Recursively copy a directory tree, only overwriting files whose source is
 /// newer than the destination.

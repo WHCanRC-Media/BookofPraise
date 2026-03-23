@@ -32,7 +32,6 @@ jobs:
         run: |
           mkdir -p dist
           cp target/release/bop dist/
-          cp -r target/release/lilypond-bin dist/
           cp -r target/release/lilypond dist/
           cp -r target/release/photos dist/
 
@@ -71,7 +70,6 @@ jobs:
           mkdir -p dist
           cp target/release/bop.exe dist/
           cp target/release/*.dll dist/
-          cp -r target/release/lilypond-bin dist/
           cp -r target/release/lilypond dist/
           cp -r target/release/photos dist/
 

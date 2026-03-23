@@ -94,6 +94,9 @@ fn start_render(
     song_dir: std::path::PathBuf,
     verse: u32,
 ) {
+    if !render_ly::lilypond_available() {
+        return;
+    }
     let render_key = (song_dir.clone(), verse);
     {
         let mut state = state_rc.borrow_mut();
@@ -236,29 +239,31 @@ fn refresh_display(
             drop(state);
         }
 
-        // Show spinner and poll until the render completes
-        spinner.set_visible(true);
-        spinner.start();
-        picture.set_paintable(None::<&gdk::Texture>);
+        // Show spinner and poll until the render completes (only if lilypond is available)
+        if render_ly::lilypond_available() {
+            spinner.set_visible(true);
+            spinner.start();
+            picture.set_paintable(None::<&gdk::Texture>);
 
-        let state_rc2 = state_rc.clone();
-        let picture2 = picture.clone();
-        let nav_label2 = nav_label.clone();
-        let spinner2 = spinner.clone();
-        let error_label2 = error_label.clone();
-        let verify_btn2 = verify_btn.clone();
-        glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
-            let is_done = {
-                let state = state_rc2.borrow();
-                !state.rendering.contains(&render_key)
-            };
-            if is_done {
-                refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2);
-                glib::ControlFlow::Break
-            } else {
-                glib::ControlFlow::Continue
-            }
-        });
+            let state_rc2 = state_rc.clone();
+            let picture2 = picture.clone();
+            let nav_label2 = nav_label.clone();
+            let spinner2 = spinner.clone();
+            let error_label2 = error_label.clone();
+            let verify_btn2 = verify_btn.clone();
+            glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+                let is_done = {
+                    let state = state_rc2.borrow();
+                    !state.rendering.contains(&render_key)
+                };
+                if is_done {
+                    refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2);
+                    glib::ControlFlow::Break
+                } else {
+                    glib::ControlFlow::Continue
+                }
+            });
+        }
     } else {
         picture.set_paintable(None::<&gdk::Texture>);
         nav_label.set_text("0/0");
@@ -791,6 +796,66 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     }
 
     window.present();
+
+    // ── Ensure LilyPond is available ──
+    if !render_ly::lilypond_available() {
+        let dialog = gtk::MessageDialog::new(
+            Some(&window),
+            gtk::DialogFlags::MODAL,
+            gtk::MessageType::Question,
+            gtk::ButtonsType::None,
+            "Download GNU LilyPond from the internet? (required)",
+        );
+        dialog.add_button("Exit", gtk::ResponseType::Close);
+        dialog.add_button("Yes", gtk::ResponseType::Yes);
+        let window2 = window.clone();
+        let state2 = state.clone();
+        let picture2 = picture.clone();
+        let nav_label2 = nav_label.clone();
+        let spinner2 = spinner.clone();
+        let error_label2 = error_label.clone();
+        let verify_btn2 = verify_btn.clone();
+        dialog.connect_response(move |dlg, resp| {
+            if resp == gtk::ResponseType::Yes {
+                dlg.set_text(Some("Downloading LilyPond..."));
+                dlg.set_response_sensitive(gtk::ResponseType::Yes, false);
+                dlg.set_response_sensitive(gtk::ResponseType::Close, false);
+                let (tx, rx) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    let _ = tx.send(render_ly::download_lilypond());
+                });
+                let dlg2 = dlg.clone();
+                let window3 = window2.clone();
+                let state3 = state2.clone();
+                let picture3 = picture2.clone();
+                let nav_label3 = nav_label2.clone();
+                let spinner3 = spinner2.clone();
+                let error_label3 = error_label2.clone();
+                let verify_btn3 = verify_btn2.clone();
+                glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
+                    match rx.try_recv() {
+                        Ok(Ok(())) => {
+                            dlg2.hide();
+                            dlg2.destroy();
+                            refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3);
+                            glib::ControlFlow::Break
+                        }
+                        Ok(Err(e)) => {
+                            dlg2.close();
+                            eprintln!("LilyPond download failed: {e}");
+                            window3.destroy();
+                            glib::ControlFlow::Break
+                        }
+                        Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                        Err(_) => { dlg2.close(); window3.destroy(); glib::ControlFlow::Break }
+                    }
+                });
+            } else {
+                window2.destroy();
+            }
+        });
+        dialog.show();
+    }
 
     // ── Startup update check ──
     if cli.update {
