@@ -254,7 +254,12 @@ impl AppState {
         for entry in &self.liturgy {
             for &v in &entry.verses {
                 let dir = self.songs_dir.join(&entry.song_dir);
-                let mut files = find_verse_files(&dir, v);
+                let mut files = if self.use_svg {
+                    // In SVG mode, skip pre-existing SVGs so the render pipeline is used
+                    Vec::new()
+                } else {
+                    find_verse_files(&dir, v)
+                };
 
                 // In SVG mode, create slide for renderable sources even if SVG missing
                 if files.is_empty() && self.use_svg {

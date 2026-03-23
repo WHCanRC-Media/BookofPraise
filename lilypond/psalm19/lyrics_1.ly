@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The spa -- cious heav -- ens de -- clare
+  The spa -- cious heavens de -- clare
 God's glo -- ry ev -- ery -- where;
 the skies pro -- claim his might.
 The knowl -- edge they dis -- play
