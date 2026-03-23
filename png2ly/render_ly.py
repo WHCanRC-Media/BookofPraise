@@ -85,6 +85,15 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
 
     with open(notes_path) as f:
         notes_content = f.read()
+
+    # Calculate width from max notes per line
+    line_contents = _extract_line_contents(notes_content)
+    max_notes = max(
+        len(re.findall(r"[a-gr](is|es)?[',]*\d", line))
+        for line in line_contents
+    ) if line_contents else 8
+    paper_width = max_notes + 2
+
     notes_content = modify_notes(notes_content)
 
     # Read lyrics if provided, sanitize for LilyPond
@@ -101,7 +110,8 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
     combined = f"""\\version "2.24.0"
 
 \\paper {{
-  line-width = 13\\cm
+  paper-width = {paper_width}\\cm
+  line-width = {paper_width}\\cm
   left-margin = 0\\cm
   right-margin = 0\\cm
 }}
@@ -121,7 +131,7 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
     indent = 0
     \\context {{
       \\Lyrics
-      \\override LyricText.self-alignment-X = #LEFT
+      \\override LyricText.self-alignment-X = #CENTER
     }}
   }}
 }}

@@ -112,9 +112,32 @@ fn sanitize_lyrics(content: &str) -> String {
         .to_string()
 }
 
+/// Count the maximum number of note/rest events across all lines in the raw notes content.
+/// Lines are delimited by `\break` or `\bar`. Returns 8 as a fallback minimum.
+fn max_notes_per_line(raw_notes: &str) -> usize {
+    let re = Regex::new(r"[a-gr](is|es)?[',]*\d").unwrap();
+    raw_notes
+        .split("\\break")
+        .flat_map(|s| s.split("\\bar"))
+        .map(|segment| {
+            let content: String = segment
+                .lines()
+                .filter(|l| {
+                    let t = l.trim();
+                    !t.is_empty() && !t.starts_with('%') && !t.starts_with("\\omit")
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            re.find_iter(&content).count()
+        })
+        .max()
+        .unwrap_or(8)
+        .max(8)
+}
+
 /// Assemble a complete LilyPond `.ly` file from notes, lyrics, and an optional
 /// composer credit, ready for rendering.
-fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>) -> String {
+fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_width: usize) -> String {
     let mut header_items = Vec::new();
     if let Some(c) = composer {
         header_items.push(format!("  composer = \"{c}\""));
@@ -132,7 +155,8 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>) -> Strin
         r#"\version "2.24.0"
 
 \paper {{
-  line-width = 13\cm
+  paper-width = {paper_width}\cm
+  line-width = {paper_width}\cm
   left-margin = 0\cm
   right-margin = 0\cm
 }}
@@ -152,7 +176,7 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>) -> Strin
     indent = 0
     \context {{
       \Lyrics
-      \override LyricText.self-alignment-X = #LEFT
+      \override LyricText.self-alignment-X = #CENTER
     }}
   }}
 }}
@@ -171,7 +195,9 @@ fn build_combined_for_verse(song_dir: &Path, verse: u32) -> Option<String> {
         return None;
     }
 
-    let notes_content = modify_notes(&fs::read_to_string(&notes).ok()?);
+    let raw_notes = fs::read_to_string(&notes).ok()?;
+    let paper_width = max_notes_per_line(&raw_notes) + 2;
+    let notes_content = modify_notes(&raw_notes);
     let lyrics_content = if lyrics.exists() {
         sanitize_lyrics(&fs::read_to_string(&lyrics).unwrap_or_default())
     } else {
@@ -181,7 +207,7 @@ fn build_combined_for_verse(song_dir: &Path, verse: u32) -> Option<String> {
         .ok()
         .map(|s| s.trim().to_string());
 
-    Some(build_combined_ly(&notes_content, &lyrics_content, composer.as_deref()))
+    Some(build_combined_ly(&notes_content, &lyrics_content, composer.as_deref(), paper_width))
 }
 
 /// Check whether a cached SVG exists for the current source content.
