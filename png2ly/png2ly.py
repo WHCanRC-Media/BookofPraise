@@ -277,7 +277,8 @@ def parse_musicxml(xml_path):
             if rest_elem is not None:
                 type_elem = note_elem.find("type")
                 note_type = type_elem.text if type_elem is not None else "quarter"
-                notes.append({"is_rest": True, "type": note_type})
+                dot = note_elem.find("dot") is not None
+                notes.append({"is_rest": True, "type": note_type, "dot": dot})
                 continue
 
             pitch_elem = note_elem.find("pitch")
@@ -303,12 +304,15 @@ def parse_musicxml(xml_path):
                     elif slur_elem.get("type") == "stop":
                         slur_stop = True
 
+            dot = note_elem.find("dot") is not None
+
             notes.append({
                 "is_rest": False,
                 "step": step,
                 "octave": octave,
                 "alter": alter,
                 "type": note_type,
+                "dot": dot,
                 "slur_start": slur_start,
                 "slur_stop": slur_stop,
             })
@@ -351,6 +355,8 @@ def note_to_lilypond(note):
     if note["is_rest"]:
         duration_map = {"whole": "1", "half": "2", "quarter": "4", "eighth": "8"}
         dur = duration_map.get(note["type"], "4")
+        if note.get("dot"):
+            dur += "."
         return f"r{dur}"
 
     step = note["step"].lower()
@@ -368,6 +374,8 @@ def note_to_lilypond(note):
         "eighth": "8",
     }
     dur = duration_map.get(note["type"], "4")
+    if note.get("dot"):
+        dur += "."
 
     return f"{step}{dur}"
 
@@ -402,6 +410,8 @@ def note_to_lilypond_fixed(note):
         "eighth": "8",
     }
     dur = duration_map.get(note["type"], "4")
+    if note.get("dot"):
+        dur += "."
 
     result = f"{step}{dur}"
     if note.get("slur_start"):
@@ -468,6 +478,8 @@ def note_to_lilypond_relative(note, prev_step, prev_octave):
     if note["is_rest"]:
         duration_map = {"whole": "1", "half": "2", "quarter": "4", "eighth": "8"}
         dur = duration_map.get(note["type"], "4")
+        if note.get("dot"):
+            dur += "."
         return f"r{dur}", prev_step, prev_octave
 
     step_name = note["step"].lower()
@@ -496,6 +508,8 @@ def note_to_lilypond_relative(note, prev_step, prev_octave):
         "eighth": "8",
     }
     dur = duration_map.get(note["type"], "4")
+    if note.get("dot"):
+        dur += "."
 
     result = f"{step_name}{marks}{dur}"
     if note.get("slur_start"):
