@@ -188,6 +188,30 @@ fn modify_notes(notes: &str) -> String {
     let re_rest_end = Regex::new(r"r[12]\s*(\\break|\\bar)").unwrap();
     let re_break_bar = Regex::new(r"(\s*\\break|\s*\\bar)").unwrap();
 
+    // If 7+ lines, combine pairs by removing \break on odd-numbered lines
+    let notes = {
+        let break_count = notes.matches("\\break").count();
+        if break_count >= 7 {
+            let mut result = String::new();
+            let mut break_idx = 0usize;
+            let mut rest: &str = notes.as_ref();
+            while let Some(pos) = rest.find("\\break") {
+                break_idx += 1;
+                result.push_str(&rest[..pos]);
+                if break_idx % 2 == 1 {
+                    // odd-numbered break: skip it
+                } else {
+                    result.push_str("\\break");
+                }
+                rest = &rest[pos + "\\break".len()..];
+            }
+            result.push_str(rest);
+            result
+        } else {
+            notes.to_string()
+        }
+    };
+
     let notes = notes.replacen("\\break", "\\break\n  \\omit Staff.Clef", 1);
 
     notes
@@ -318,8 +342,8 @@ fn build_combined_for_verse(song_dir: &Path, verse: u32) -> Option<String> {
     }
 
     let raw_notes = fs::read_to_string(&notes).ok()?;
-    let paper_width = max_notes_per_line(&raw_notes) + 2;
     let notes_content = modify_notes(&raw_notes);
+    let paper_width = max_notes_per_line(&notes_content) + 2;
     let lyrics_content = if lyrics.exists() {
         sanitize_lyrics(&fs::read_to_string(&lyrics).unwrap_or_default())
     } else {
