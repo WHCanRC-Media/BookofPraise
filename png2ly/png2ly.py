@@ -157,6 +157,7 @@ def detect_staff_systems(img_path):
 
     if len(staff_rows) < 2:
         raise ValueError("No staff lines detected in image")
+    gaps = np.diff(staff_rows)
     # Adaptive threshold: intra-staff gaps are small (~10-15px),
     # inter-system gaps are much larger (~40+px).
     # Use 2x the median gap as threshold — median will be an intra-staff gap.
@@ -695,9 +696,12 @@ def main():
         if args.psalm:
             psalm_dirs = [os.path.join(photos_dir, args.psalm)]
         else:
-            psalm_dirs = sorted(glob.glob(os.path.join(photos_dir, "psalm*")))
+            psalm_dirs = sorted(
+                glob.glob(os.path.join(photos_dir, "psalm*"))
+                + glob.glob(os.path.join(photos_dir, "hymn*"))
+            )
 
-        print(f"Found {len(psalm_dirs)} psalm directories")
+        print(f"Found {len(psalm_dirs)} song directories")
 
         worker_kwargs = {"no_lyrics": args.no_lyrics, "skip_composer": args.skip_composer}
         work = []
