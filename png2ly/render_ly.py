@@ -68,6 +68,46 @@ def modify_notes(notes_content):
     return notes_content
 
 
+def _count_pitched_notes(notes_content):
+    """Count non-rest notes in a melody definition."""
+    # Strip comments
+    lines = []
+    for line in notes_content.splitlines():
+        line = line.split("%")[0]
+        lines.append(line)
+    content = " ".join(lines)
+    # Match note tokens (letter + optional accidental + octave marks + duration)
+    # but exclude rests (r followed by duration)
+    notes = re.findall(r"[a-g](is|es)?[',]*\d", content)
+    return len(notes)
+
+
+def _count_syllables(lyrics_content):
+    """Count syllables in a lyricmode block.
+
+    Each whitespace-separated token is a syllable, except '--' (hyphen
+    separator) and LilyPond commands.  '_' (melisma extender) counts as
+    consuming a note.
+    """
+    # Strip the \lyricmode { ... } wrapper
+    content = lyrics_content
+    content = re.sub(r"\\lyricmode\s*\{", "", content)
+    content = re.sub(r"verse\s*=\s*", "", content)
+    # Remove trailing }
+    content = re.sub(r"\}\s*$", "", content)
+    # Collapse quoted strings into single tokens (but not escaped quotes \")
+    content = re.sub(r'(?<!\\)"[^"]*(?<!\\)"', 'QUOTED', content)
+    tokens = content.split()
+    count = 0
+    for tok in tokens:
+        if tok == "--":
+            continue
+        if tok.startswith("\\"):
+            continue
+        count += 1
+    return count
+
+
 def render_svg(notes_path, lyrics_path, output_svg, composer=None):
     """Combine notes and lyrics files with header/footer and render to SVG.
 
@@ -105,6 +145,13 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
 
     lyrics_score = ""
     if lyrics_content.strip():
+        note_count = _count_pitched_notes(notes_content)
+        syllable_count = _count_syllables(lyrics_content)
+        if note_count != syllable_count:
+            raise ValueError(
+                f"{notes_path}: note/syllable mismatch: "
+                f"{note_count} notes vs {syllable_count} syllables"
+            )
         lyrics_score = '    \\new Lyrics \\lyricsto "melody" { \\verse }'
 
     combined = f"""\\version "2.24.0"
@@ -197,6 +244,7 @@ def main():
     parser = argparse.ArgumentParser(description="Render all psalm SVGs")
     parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count(), help="Parallel workers (default: nproc)")
     parser.add_argument("--psalm", help="Process only this psalm (e.g. psalm102)")
+    parser.add_argument("--check", action="store_true", help="Check note/syllable counts without rendering")
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -206,8 +254,31 @@ def main():
     if args.psalm:
         pattern = os.path.join(lilypond_dir, args.psalm, "lyrics_*.ly")
     else:
-        pattern = os.path.join(lilypond_dir, "psalm*", "lyrics_*.ly")
+        pattern = os.path.join(lilypond_dir, "*", "lyrics_*.ly")
     lyrics_files = sorted(glob.glob(pattern))
+
+    if args.check:
+        ok = failed = 0
+        for lyrics_path in lyrics_files:
+            song_dir = os.path.dirname(lyrics_path)
+            song_name = os.path.basename(song_dir)
+            notes_path = os.path.join(song_dir, "notes.ly")
+            if not os.path.exists(notes_path):
+                continue
+            with open(notes_path) as f:
+                note_count = _count_pitched_notes(f.read())
+            with open(lyrics_path) as f:
+                syllable_count = _count_syllables(f.read())
+            basename = os.path.basename(lyrics_path).replace("lyrics_", "").replace(".ly", "")
+            label = f"{song_name} v{basename}"
+            if note_count == syllable_count:
+                ok += 1
+            else:
+                failed += 1
+                print(f"  MISMATCH {label}: {note_count} notes vs {syllable_count} syllables")
+        print(f"Checked {ok + failed}, {failed} mismatches")
+        return
+
     print(f"Found {len(lyrics_files)} lyrics files")
 
     work = [(lf,) for lf in lyrics_files]
