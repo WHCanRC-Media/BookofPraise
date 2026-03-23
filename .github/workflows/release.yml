@@ -110,9 +110,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Zip lilypond directory
-        run: zip -r lilypond.zip lilypond/
-
       - uses: actions/download-artifact@v4
         with:
           name: bop-linux
@@ -135,9 +132,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${{ needs.tag.outputs.tag }}" \
-            lilypond.zip \
             bop-linux.zip \
             bop-windows.zip \
             userguide.pdf \
+            --target ${{ github.sha }} \
             --title "${{ needs.tag.outputs.tag }}" \
             --notes "Release ${{ needs.tag.outputs.tag }}"

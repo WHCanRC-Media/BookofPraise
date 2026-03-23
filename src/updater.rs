@@ -28,13 +28,7 @@ fn save_local_version(tag: &str) {
 #[derive(serde::Deserialize)]
 struct ReleaseInfo {
     tag_name: String,
-    assets: Vec<ReleaseAsset>,
-}
-
-#[derive(serde::Deserialize)]
-struct ReleaseAsset {
-    name: String,
-    url: String,
+    zipball_url: String,
 }
 
 /// Check GitHub for a newer release. Returns (tag, asset_download_url) if available.
@@ -54,22 +48,15 @@ pub fn check_for_update() -> Result<Option<(String, String)>, String> {
         return Ok(None);
     }
 
-    // Find the lilypond zip asset
-    let asset = release
-        .assets
-        .iter()
-        .find(|a| a.name.starts_with("lilypond") && a.name.ends_with(".zip"))
-        .ok_or("No lilypond zip asset found in release")?;
-
-    Ok(Some((release.tag_name, asset.url.clone())))
+    Ok(Some((release.tag_name, release.zipball_url)))
 }
 
-/// Download and extract the lilypond zip, replacing the local lilypond/ directory.
-pub fn download_and_extract(asset_url: &str, tag: &str) -> Result<(), String> {
-    // Download the asset (need Accept: application/octet-stream for the redirect)
-    let resp = ureq::get(asset_url)
+/// Download the source-code zip from a GitHub release and extract the
+/// `lilypond/` and `photos/` directories, replacing the local copies.
+pub fn download_and_extract(zipball_url: &str, tag: &str) -> Result<(), String> {
+    let resp = ureq::get(zipball_url)
         .set("Authorization", &format!("Bearer {GITHUB_PAT}"))
-        .set("Accept", "application/octet-stream")
+        .set("Accept", "application/vnd.github+json")
         .set("User-Agent", "bop-rustapp")
         .call()
         .map_err(|e| format!("Download failed: {e}"))?;
@@ -79,24 +66,36 @@ pub fn download_and_extract(asset_url: &str, tag: &str) -> Result<(), String> {
         .read_to_end(&mut bytes)
         .map_err(|e| format!("Read failed: {e}"))?;
 
-    let target_dir = base_dir(true);
+    // The parent directory that contains lilypond/ and photos/
+    let root = base_dir(true)
+        .parent()
+        .ok_or("Cannot determine root directory")?
+        .to_path_buf();
 
-    // Extract zip over the existing directory
     let cursor = std::io::Cursor::new(bytes);
     let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("Zip error: {e}"))?;
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(|e| format!("Zip entry error: {e}"))?;
         let name = file.name().to_string();
 
-        // Strip the top-level directory from the zip (e.g. "lilypond/psalm1/..." → "psalm1/...")
-        let rel = name
-            .strip_prefix("lilypond/")
-            .unwrap_or(&name);
-        if rel.is_empty() {
-            continue;
-        }
+        // Strip the variable top-level prefix (e.g. "owner-repo-sha/")
+        let after_prefix = match name.find('/') {
+            Some(pos) => &name[pos + 1..],
+            None => continue,
+        };
 
-        let out_path = target_dir.join(rel);
+        // Only extract lilypond/ and photos/ directories
+        let rel = if let Some(rest) = after_prefix.strip_prefix("lilypond/") {
+            if rest.is_empty() { continue; }
+            PathBuf::from("lilypond").join(rest)
+        } else if let Some(rest) = after_prefix.strip_prefix("photos/") {
+            if rest.is_empty() { continue; }
+            PathBuf::from("photos").join(rest)
+        } else {
+            continue;
+        };
+
+        let out_path = root.join(&rel);
         if file.is_dir() {
             let _ = std::fs::create_dir_all(&out_path);
         } else {
