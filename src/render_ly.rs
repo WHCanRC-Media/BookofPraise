@@ -13,6 +13,9 @@ use std::process::{Command, Stdio};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
+/// Minimum number of `\break`s before lines are combined in pairs.
+const COMBINE_LINES_THRESHOLD: usize = 7;
+
 /// Return the platform cache directory for rendered SVGs.
 pub fn svg_cache_dir() -> PathBuf {
     let base = if cfg!(windows) {
@@ -180,6 +183,332 @@ fn lilypond_bin() -> PathBuf {
     PathBuf::from("lilypond")
 }
 
+/// Map a LilyPond note name to a pitch class (0–6, matching C=0 .. B=6).
+fn note_name_to_pitch_class(name: &str) -> Option<i32> {
+    let base = match name.chars().next()? {
+        'c' => 0,
+        'd' => 1,
+        'e' => 2,
+        'f' => 3,
+        'g' => 4,
+        'a' => 5,
+        'b' => 6,
+        _ => return None,
+    };
+    Some(base)
+}
+
+/// Convert a pitch class (0–6) back to a LilyPond note name.
+fn pitch_class_to_name(pc: i32) -> &'static str {
+    match pc.rem_euclid(7) {
+        0 => "c",
+        1 => "d",
+        2 => "e",
+        3 => "f",
+        4 => "g",
+        5 => "a",
+        6 => "b",
+        _ => unreachable!(),
+    }
+}
+
+/// Absolute pitch as (pitch_class 0–6, octave) where octave 1 = c' in LilyPond.
+/// Middle C (c') = (0, 1).
+#[derive(Clone, Copy, Debug)]
+struct AbsPitch {
+    pc: i32,   // 0=c, 1=d, ..., 6=b
+    octave: i32, // LilyPond octave: 0 = c (no mark), 1 = c', -1 = c,
+}
+
+impl AbsPitch {
+    /// Parse a LilyPond pitch like `c'`, `gis,`, `bes''` into an absolute pitch.
+    /// The accidentals (is/es) are ignored for pitch tracking since they don't
+    /// affect the relative algorithm's octave placement.
+    fn parse(s: &str) -> Option<Self> {
+        let mut chars = s.chars();
+        let first = chars.next()?;
+        if !('a'..='g').contains(&first) {
+            return None;
+        }
+        let pc = note_name_to_pitch_class(&first.to_string())?;
+        let rest: String = chars.collect();
+        // Skip accidentals (is, es, isis, eses)
+        let rest = rest
+            .trim_start_matches("isis")
+            .trim_start_matches("eses")
+            .trim_start_matches("is")
+            .trim_start_matches("es");
+        let ups = rest.matches('\'').count() as i32;
+        let downs = rest.matches(',').count() as i32;
+        Some(AbsPitch { pc, octave: ups - downs })
+    }
+
+    /// Given the previous absolute pitch, resolve a relative note token to
+    /// its absolute pitch. LilyPond places the note in the octave closest to
+    /// prev (within a fourth), then applies explicit octave marks.
+    fn resolve_relative(prev: AbsPitch, token: &str) -> Option<AbsPitch> {
+        let mut chars = token.chars().peekable();
+        let first = *chars.peek()?;
+        if !('a'..='g').contains(&first) {
+            return None;
+        }
+        chars.next();
+        let name = first.to_string();
+        let pc = note_name_to_pitch_class(&name)?;
+
+        // Consume accidentals
+        let rest: String = chars.collect();
+        let rest = rest
+            .trim_start_matches("isis")
+            .trim_start_matches("eses")
+            .trim_start_matches("is")
+            .trim_start_matches("es");
+        let ups = rest.matches('\'').count() as i32;
+        let downs = rest.matches(',').count() as i32;
+
+        // Closest octave: compute the interval in pitch classes
+        let diff = pc - prev.pc; // -6 to +6
+        // Place in closest octave (within a fourth = 3 steps)
+        let octave = if diff > 3 {
+            prev.octave - 1
+        } else if diff < -3 {
+            prev.octave + 1
+        } else {
+            prev.octave
+        };
+
+        Some(AbsPitch { pc, octave: octave + ups - downs })
+    }
+
+    /// Format as a LilyPond absolute pitch string (e.g., "c'", "g,", "bes''").
+    fn to_ly_string(self) -> String {
+        let name = pitch_class_to_name(self.pc);
+        let marks = if self.octave > 0 {
+            "'".repeat(self.octave as usize)
+        } else if self.octave < 0 {
+            ",".repeat((-self.octave) as usize)
+        } else {
+            String::new()
+        };
+        format!("{name}{marks}")
+    }
+}
+
+/// Track the absolute pitch through a sequence of LilyPond notes in relative mode.
+/// Returns the absolute pitch after the last note in the given content.
+fn track_pitch(content: &str, start: AbsPitch) -> AbsPitch {
+    let re = Regex::new(r"[a-g](is|es|isis|eses)?[',]*").unwrap();
+    let mut current = start;
+    for m in re.find_iter(content) {
+        let token = m.as_str();
+        // Skip if it's just an accidental fragment or part of a command
+        if let Some(resolved) = AbsPitch::resolve_relative(current, token) {
+            current = resolved;
+        }
+    }
+    current
+}
+
+/// Split notes content into `n_parts` groups at `\break` boundaries.
+/// Returns a Vec of complete LilyPond note blocks, each with the correct
+/// `\relative` starting pitch.
+fn split_notes(raw_notes: &str, n_parts: usize) -> Vec<String> {
+    if n_parts <= 1 {
+        return vec![raw_notes.to_string()];
+    }
+
+    // Extract preamble (everything up to and including the opening brace line)
+    // and the body lines
+    let mut preamble_lines = Vec::new();
+    let mut body = String::new();
+    let mut in_body = false;
+    let mut relative_pitch = "c'".to_string();
+
+    for line in raw_notes.lines() {
+        if !in_body {
+            preamble_lines.push(line.to_string());
+            // Extract the relative pitch from the declaration
+            if let Some(pos) = line.find("\\relative") {
+                let after = &line[pos + "\\relative".len()..];
+                let trimmed = after.trim();
+                // Parse pitch up to the opening brace
+                let pitch_str: String = trimmed.chars()
+                    .take_while(|c| *c != '{' && !c.is_whitespace() || *c == '\'' || *c == ',')
+                    .collect();
+                let pitch_str = pitch_str.trim();
+                if !pitch_str.is_empty() {
+                    relative_pitch = pitch_str.to_string();
+                }
+            }
+            if line.contains('{') {
+                in_body = true;
+            }
+        } else {
+            // Skip closing brace
+            if line.trim() == "}" {
+                continue;
+            }
+            body.push_str(line);
+            body.push('\n');
+        }
+    }
+
+    // Split body at \break boundaries into lines
+    let mut note_lines: Vec<String> = Vec::new();
+    let mut current_line = String::new();
+    for line in body.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('%') {
+            // Keep comments/blanks with the current line
+            if !current_line.is_empty() {
+                current_line.push('\n');
+            }
+            current_line.push_str(line);
+            continue;
+        }
+        if !current_line.is_empty() {
+            current_line.push('\n');
+        }
+        current_line.push_str(line);
+        if trimmed.contains("\\break") || trimmed.contains("\\bar") {
+            note_lines.push(current_line.clone());
+            current_line.clear();
+        }
+    }
+    if !current_line.trim().is_empty() {
+        note_lines.push(current_line);
+    }
+
+    let total_lines = note_lines.len();
+    let lines_per_part = (total_lines + n_parts - 1) / n_parts;
+
+    // Build the preamble template (everything except the \relative line)
+    let mut setup_lines = Vec::new();
+    for line in &preamble_lines {
+        if !line.contains("\\relative") && !line.contains("melody") {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() && trimmed != "{" {
+                setup_lines.push(trimmed.to_string());
+            }
+        }
+    }
+
+    let start_pitch = AbsPitch::parse(&relative_pitch)
+        .unwrap_or(AbsPitch { pc: 0, octave: 1 });
+    let mut current_pitch = start_pitch;
+    let mut parts = Vec::new();
+
+    for part_idx in 0..n_parts {
+        let start = part_idx * lines_per_part;
+        let end = ((part_idx + 1) * lines_per_part).min(total_lines);
+        if start >= total_lines {
+            break;
+        }
+
+        let pitch_str = if part_idx == 0 {
+            relative_pitch.clone()
+        } else {
+            current_pitch.to_ly_string()
+        };
+
+        let mut part_body = String::new();
+        for (i, line_idx) in (start..end).enumerate() {
+            let line = &note_lines[line_idx];
+            // For non-last lines in the part, keep \break
+            // For the last line, replace \break with \bar "|." if it's the last part,
+            // or add \bar "|." if not already there
+            if i == end - start - 1 {
+                // Last line of this part
+                let mut l = line.clone();
+                if part_idx < n_parts - 1 {
+                    // Not the final part: replace \break with \bar "|."
+                    l = l.replace("\\break", "\\bar \"|.\"");
+                }
+                part_body.push_str(&l);
+            } else {
+                part_body.push_str(line);
+            }
+            part_body.push('\n');
+
+            // Track pitch through this line
+            current_pitch = track_pitch(line, current_pitch);
+        }
+
+        let setup = setup_lines.join("\n  ");
+        let part = format!(
+            "melody = \\relative {pitch_str} {{\n  {setup}\n\n{part_body}}}\n"
+        );
+        parts.push(part);
+    }
+
+    parts
+}
+
+/// Split lyrics content into `n_parts` groups, matching the note line split.
+/// Each note line corresponds to one lyrics line.
+fn split_lyrics(raw_lyrics: &str, n_parts: usize, total_note_lines: usize) -> Vec<String> {
+    if n_parts <= 1 {
+        return vec![raw_lyrics.to_string()];
+    }
+
+    // Extract lyrics lines (between \lyricmode { and })
+    let mut preamble = String::new();
+    let mut lyric_lines: Vec<String> = Vec::new();
+    let mut in_body = false;
+
+    for line in raw_lyrics.lines() {
+        if !in_body {
+            if line.contains("\\lyricmode") || line.contains("{") {
+                preamble = line.split('{').next().unwrap_or("verse = \\lyricmode").to_string();
+                // Check if there's content after the brace on this line
+                if let Some(after) = line.split('{').nth(1) {
+                    let content = after.trim().trim_end_matches('}').trim();
+                    if !content.is_empty() {
+                        lyric_lines.push(content.to_string());
+                    }
+                }
+                in_body = true;
+            }
+        } else {
+            let trimmed = line.trim();
+            if trimmed == "}" {
+                break;
+            }
+            if !trimmed.is_empty() {
+                lyric_lines.push(trimmed.to_string());
+            }
+        }
+    }
+
+    let lines_per_part = (total_note_lines + n_parts - 1) / n_parts;
+    let mut parts = Vec::new();
+
+    for part_idx in 0..n_parts {
+        let start = part_idx * lines_per_part;
+        let end = ((part_idx + 1) * lines_per_part).min(lyric_lines.len());
+        if start >= lyric_lines.len() {
+            parts.push(format!("{preamble} {{\n}}\n"));
+            continue;
+        }
+
+        let body: String = lyric_lines[start..end]
+            .iter()
+            .map(|l| format!("  {l}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        parts.push(format!("{preamble} {{\n{body}\n}}\n"));
+    }
+
+    parts
+}
+
+/// Count the number of note lines (segments separated by \break or \bar) in raw notes.
+fn count_note_lines(raw_notes: &str) -> usize {
+    let breaks = raw_notes.matches("\\break").count();
+    let bars = raw_notes.matches("\\bar").count();
+    breaks + bars
+}
+
 /// Apply visual tweaks to note content before rendering:
 /// - Hide clef after the first line break
 /// - Add invisible rests at line boundaries for alignment
@@ -188,10 +517,11 @@ fn modify_notes(notes: &str) -> String {
     let re_rest_end = Regex::new(r"r[12]\s*(\\break|\\bar)").unwrap();
     let re_break_bar = Regex::new(r"(\s*\\break|\s*\\bar)").unwrap();
 
-    // If 7+ lines, combine pairs by removing \break on odd-numbered lines
+    // If enough lines, combine pairs by removing \break on odd-numbered lines
+    let break_count = notes.matches("\\break").count();
+    let combined = break_count >= COMBINE_LINES_THRESHOLD;
     let notes = {
-        let break_count = notes.matches("\\break").count();
-        if break_count >= 7 {
+        if combined {
             let mut result = String::new();
             let mut break_idx = 0usize;
             let mut rest: &str = notes.as_ref();
@@ -213,6 +543,10 @@ fn modify_notes(notes: &str) -> String {
     };
 
     let notes = notes.replacen("\\break", "\\break\n  \\omit Staff.Clef", 1);
+
+    if combined {
+        return notes;
+    }
 
     notes
         .lines()
@@ -330,21 +664,28 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_wi
     )
 }
 
-/// Build the combined .ly content for a verse (without rendering).
-/// Returns `None` if notes.ly doesn't exist.
-fn build_combined_for_verse(song_dir: &Path, verse: u32) -> Option<String> {
-    let notes = song_dir.join("notes.ly");
+/// Build the combined .ly content parts for a verse.
+/// Returns empty Vec if notes.ly doesn't exist.
+/// For very long songs (>= 2*COMBINE_LINES_THRESHOLD breaks), returns 3 parts.
+/// Otherwise returns 1 part.
+fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
+    let notes_file = song_dir.join("notes.ly");
     let lyrics = song_dir.join(format!("lyrics_{verse}.ly"));
     let composer_file = song_dir.join("composer.txt");
 
-    if !notes.exists() {
-        return None;
+    if !notes_file.exists() {
+        return Vec::new();
     }
 
-    let raw_notes = fs::read_to_string(&notes).ok()?;
-    let notes_content = modify_notes(&raw_notes);
-    let paper_width = max_notes_per_line(&notes_content) + 2;
-    let lyrics_content = if lyrics.exists() {
+    let raw_notes = match fs::read_to_string(&notes_file) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+
+    let break_count = raw_notes.matches("\\break").count();
+    let n_parts = if break_count >= 2 * COMBINE_LINES_THRESHOLD { 3 } else { 1 };
+
+    let raw_lyrics = if lyrics.exists() {
         sanitize_lyrics(&fs::read_to_string(&lyrics).unwrap_or_default())
     } else {
         String::new()
@@ -353,36 +694,69 @@ fn build_combined_for_verse(song_dir: &Path, verse: u32) -> Option<String> {
         .ok()
         .map(|s| s.trim().to_string());
 
-    Some(build_combined_ly(&notes_content, &lyrics_content, composer.as_deref(), paper_width))
-}
+    if n_parts > 1 {
+        let total_lines = count_note_lines(&raw_notes);
+        let note_parts = split_notes(&raw_notes, n_parts);
+        let lyric_parts = split_lyrics(&raw_lyrics, n_parts, total_lines);
 
-/// Check whether a cached SVG exists for the current source content.
-pub fn is_svg_current(song_dir: &Path, verse: u32) -> bool {
-    match build_combined_for_verse(song_dir, verse) {
-        Some(combined) => cached_svg_path(&combined).exists(),
-        None => false,
+        note_parts.iter().zip(lyric_parts.iter()).map(|(notes, lyrics)| {
+            let modified = modify_notes(notes);
+            let paper_width = max_notes_per_line(&modified) + 2;
+            // Only show composer on the first part
+            let comp = if notes == &note_parts[0] { composer.as_deref() } else { None };
+            build_combined_ly(&modified, lyrics, comp, paper_width)
+        }).collect()
+    } else {
+        // Single part: apply modify_notes (combining / hidden rests)
+        let notes_content = modify_notes(&raw_notes);
+        let paper_width = max_notes_per_line(&notes_content) + 2;
+        eprintln!("max_notes_per_line={} paper_width={paper_width}", paper_width - 2);
+        vec![build_combined_ly(&notes_content, &raw_lyrics, composer.as_deref(), paper_width)]
     }
 }
 
-/// Return the cached SVG path for a verse if it exists, for loading.
-pub fn svg_path_for_verse(song_dir: &Path, verse: u32) -> Option<PathBuf> {
-    let combined = build_combined_for_verse(song_dir, verse)?;
-    let path = cached_svg_path(&combined);
+/// Return the number of parts (slides) needed for a verse.
+pub fn num_parts_for_verse(song_dir: &Path, _verse: u32) -> usize {
+    let notes_file = song_dir.join("notes.ly");
+    if let Ok(raw_notes) = fs::read_to_string(&notes_file) {
+        let break_count = raw_notes.matches("\\break").count();
+        if break_count >= 2 * COMBINE_LINES_THRESHOLD { 3 } else { 1 }
+    } else {
+        1
+    }
+}
+
+/// Check whether a cached SVG exists for the current source content.
+pub fn is_svg_current(song_dir: &Path, verse: u32, part: u32) -> bool {
+    let parts = build_combined_parts_for_verse(song_dir, verse);
+    if let Some(combined) = parts.get(part as usize) {
+        cached_svg_path(combined).exists()
+    } else {
+        false
+    }
+}
+
+/// Return the cached SVG path for a verse part if it exists, for loading.
+pub fn svg_path_for_verse(song_dir: &Path, verse: u32, part: u32) -> Option<PathBuf> {
+    let parts = build_combined_parts_for_verse(song_dir, verse);
+    let combined = parts.get(part as usize)?;
+    let path = cached_svg_path(combined);
     if path.exists() { Some(path) } else { None }
 }
 
-/// Render the SVG for a given verse. Returns `Ok(PathBuf)` with the cached
-/// SVG path on success, `Err(message)` with the LilyPond error output on failure.
+/// Render the SVG for a given verse part. Returns `Ok(())` on success,
+/// `Err(message)` with the LilyPond error output on failure.
 /// This function is safe to call from a background thread.
-pub fn render_svg(song_dir: &Path, verse: u32) -> Result<(), String> {
+pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> {
     let notes = song_dir.join("notes.ly");
     if !notes.exists() {
         return Err("notes.ly not found".into());
     }
 
-    let combined = build_combined_for_verse(song_dir, verse)
+    let parts = build_combined_parts_for_verse(song_dir, verse);
+    let combined = parts.get(part as usize)
         .ok_or("Failed to build combined .ly")?;
-    let svg_out = cached_svg_path(&combined);
+    let svg_out = cached_svg_path(combined);
 
     // Already cached
     if svg_out.exists() {
@@ -393,15 +767,16 @@ pub fn render_svg(song_dir: &Path, verse: u32) -> Result<(), String> {
         .file_name()
         .unwrap_or_default()
         .to_string_lossy();
-    eprintln!("Rendering {dir_name}/{verse}...");
+    eprintln!("Rendering {dir_name}/{verse} part {part}...");
 
     let cache_dir = svg_cache_dir();
     fs::create_dir_all(&cache_dir)
         .map_err(|e| format!("Failed to create cache dir: {e}"))?;
 
-    let hash = content_hash(&combined);
+    let hash = content_hash(combined);
     let combined_ly = cache_dir.join(format!("_combined_{hash}.ly"));
-    fs::write(&combined_ly, &combined)
+    eprintln!("Writing combined .ly to {}", combined_ly.display());
+    fs::write(&combined_ly, combined)
         .map_err(|e| format!("Failed to write combined .ly: {e}"))?;
 
     let stem = svg_out.with_extension("");
@@ -424,13 +799,13 @@ pub fn render_svg(song_dir: &Path, verse: u32) -> Result<(), String> {
             if cropped.exists() {
                 let _ = fs::rename(&cropped, &svg_out);
             }
-            let _ = fs::remove_file(&combined_ly);
+            // let _ = fs::remove_file(&combined_ly);
             Ok(())
         }
         Ok(out) => {
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-            eprintln!("lilypond failed for {dir_name}/{verse}: {stderr}");
-            let _ = fs::remove_file(&combined_ly);
+            eprintln!("lilypond failed for {dir_name}/{verse} part {part}: {stderr}");
+            // let _ = fs::remove_file(&combined_ly);
             Err(stderr)
         }
         Err(e) => {

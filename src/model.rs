@@ -152,11 +152,12 @@ pub struct Slide {
     pub title: String,
     pub all_verses: Vec<u32>,
     pub current_verse: u32,
+    pub part: u32,
     pub path: PathBuf,
     pub song_dir: PathBuf,
 }
 
-pub type CacheKey = (PathBuf, u32, u32); // (path, verse, render_width)
+pub type CacheKey = (PathBuf, u32, u32, u32); // (path, verse, part, render_width)
 
 pub struct AppState {
     pub songs_dir: PathBuf,
@@ -167,8 +168,8 @@ pub struct AppState {
     pub use_svg: bool,
     pub render_width: u32,
     pub texture_cache: HashMap<CacheKey, gdk::Texture>,
-    pub rendering: HashSet<(PathBuf, u32)>,
-    pub render_errors: HashMap<(PathBuf, u32), String>,
+    pub rendering: HashSet<(PathBuf, u32, u32)>,
+    pub render_errors: HashMap<(PathBuf, u32, u32), String>,
     pub verified_this_session: HashSet<(PathBuf, u32)>,
     /// Song dirs that had edits saved this session (for email-patch-on-close).
     pub edited_song_dirs: HashSet<PathBuf>,
@@ -254,26 +255,32 @@ impl AppState {
         for entry in &self.liturgy {
             for &v in &entry.verses {
                 let dir = self.songs_dir.join(&entry.song_dir);
-                let mut files = if self.use_svg {
+                let mut files: Vec<(PathBuf, u32)> = if self.use_svg {
                     // In SVG mode, skip pre-existing SVGs so the render pipeline is used
                     Vec::new()
                 } else {
-                    find_verse_files(&dir, v)
+                    find_verse_files(&dir, v).into_iter().map(|p| (p, 0)).collect()
                 };
 
-                // In SVG mode, create slide for renderable sources even if SVG missing
+                // In SVG mode, create slide(s) for renderable sources even if SVG missing
                 if files.is_empty() && self.use_svg {
                     if dir.join("notes.ly").exists() && dir.join(format!("lyrics_{v}.ly")).exists()
                     {
-                        files.push(dir.join(format!("{v}.svg")));
+                        let n_parts = crate::render_ly::num_parts_for_verse(&dir, v);
+                        let suffixes = ["", "a", "b", "c"];
+                        for part in 0..n_parts {
+                            let suffix = if n_parts > 1 { suffixes.get(part).unwrap_or(&"") } else { &"" };
+                            files.push((dir.join(format!("{v}{suffix}.svg")), part as u32));
+                        }
                     }
                 }
 
-                for path in files {
+                for (path, part) in files {
                     self.slides.push(Slide {
                         title: entry.song_name.clone(),
                         all_verses: entry.verses.clone(),
                         current_verse: v,
+                        part,
                         path,
                         song_dir: dir.clone(),
                     });

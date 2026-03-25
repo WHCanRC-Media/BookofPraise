@@ -69,11 +69,11 @@ fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics
 fn invalidate_song(state: &mut AppState, song_dir: &std::path::Path) {
     let keys: Vec<_> = state.slides.iter()
         .filter(|sl| sl.song_dir == song_dir)
-        .map(|sl| (sl.path.clone(), sl.current_verse))
+        .map(|sl| (sl.path.clone(), sl.current_verse, sl.part))
         .collect();
-    for (path, verse) in keys {
-        state.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
-        state.render_errors.remove(&(path, verse));
+    for (path, verse, part) in keys {
+        state.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
+        state.render_errors.remove(&(path, verse, part));
     }
 }
 
@@ -83,27 +83,28 @@ fn needs_render(slide: &crate::model::Slide) -> bool {
         .path
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
-    is_svg && !render_ly::is_svg_current(&slide.song_dir, slide.current_verse)
+    is_svg && !render_ly::is_svg_current(&slide.song_dir, slide.current_verse, slide.part)
 }
 
-/// Spawn a background LilyPond render for the given song_dir/verse.
+/// Spawn a background LilyPond render for the given song_dir/verse/part.
 /// Only touches state — no UI widgets needed. When the render completes,
 /// updates state and chains to the next unrendered slide.
 fn start_render(
     state_rc: &Rc<RefCell<AppState>>,
     song_dir: std::path::PathBuf,
     verse: u32,
+    part: u32,
 ) {
     if !render_ly::lilypond_available() {
         return;
     }
-    let render_key = (song_dir.clone(), verse);
+    let render_key = (song_dir.clone(), verse, part);
     {
         let mut state = state_rc.borrow_mut();
         if state.rendering.contains(&render_key) {
             return;
         }
-        if render_ly::is_svg_current(&song_dir, verse) {
+        if render_ly::is_svg_current(&song_dir, verse, part) {
             return;
         }
         state.rendering.insert(render_key.clone());
@@ -111,7 +112,7 @@ fn start_render(
 
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     std::thread::spawn(move || {
-        let result = render_ly::render_svg(&song_dir, verse);
+        let result = render_ly::render_svg(&song_dir, verse, part);
         let _ = tx.send(result);
     });
 
@@ -150,14 +151,15 @@ fn prefetch_next(state_rc: &Rc<RefCell<AppState>>) {
         if !needs_render(slide) {
             continue;
         }
-        let key = (slide.song_dir.clone(), slide.current_verse);
+        let key = (slide.song_dir.clone(), slide.current_verse, slide.part);
         if state.rendering.contains(&key) || state.render_errors.contains_key(&key) {
             continue;
         }
         let song_dir = slide.song_dir.clone();
         let verse = slide.current_verse;
+        let part = slide.part;
         drop(state);
-        start_render(state_rc, song_dir, verse);
+        start_render(state_rc, song_dir, verse, part);
         return;
     }
 }
@@ -188,16 +190,17 @@ fn refresh_display(
     let render_width = state.render_width;
     let slide_info = state.slides.get(state.current_slide).map(|slide| {
         (
-            (slide.path.clone(), slide.current_verse, render_width),
-            (slide.song_dir.clone(), slide.current_verse),
+            (slide.path.clone(), slide.current_verse, slide.part, render_width),
+            (slide.song_dir.clone(), slide.current_verse, slide.part),
             slide.song_dir.clone(),
             slide.current_verse,
+            slide.part,
             state.current_slide,
             state.slides.len(),
         )
     });
 
-    if let Some((cache_key, render_key, song_dir, verse, idx, total)) = slide_info {
+    if let Some((cache_key, render_key, song_dir, verse, part, idx, total)) = slide_info {
         nav_label.set_text(&format!("{}/{}", idx + 1, total));
 
         // Update verify button state
@@ -234,7 +237,7 @@ fn refresh_display(
         // Need to render — start it if not already running
         if needs_render(&state.slides[idx]) && !state.rendering.contains(&render_key) {
             drop(state);
-            start_render(state_rc, song_dir, verse);
+            start_render(state_rc, song_dir, verse, part);
         } else {
             drop(state);
         }
@@ -646,11 +649,12 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
                     // and invalidate all cached slides for this song
                     invalidate_song(&mut s, &song_dir);
                 } else {
-                    // Only invalidate current verse
+                    // Only invalidate current verse/part
                     let path = slide.path.clone();
                     let verse = slide.current_verse;
-                    s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
-                    s.render_errors.remove(&(path.clone(), verse));
+                    let part = slide.part;
+                    s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
+                    s.render_errors.remove(&(path.clone(), verse, part));
                 }
             }
         }
@@ -732,8 +736,9 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
                         } else {
                             let path = slide.path.clone();
                             let verse = slide.current_verse;
-                            s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse);
-                            s.render_errors.remove(&(path.clone(), verse));
+                            let part = slide.part;
+                            s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
+                            s.render_errors.remove(&(path.clone(), verse, part));
                             let _ = std::fs::remove_file(&path);
                         }
                     }

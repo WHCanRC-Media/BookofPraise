@@ -160,7 +160,7 @@ pub fn load_slide_texture(slide: &Slide, render_width: u32) -> Option<gdk::Textu
 
     let raw = if is_svg {
         // Resolve the actual cached SVG path
-        let cached = render_ly::svg_path_for_verse(&slide.song_dir, slide.current_verse)?;
+        let cached = render_ly::svg_path_for_verse(&slide.song_dir, slide.current_verse, slide.part)?;
         load_svg_pixmap(&cached, render_width)?
     } else {
         load_png_pixmap(&slide.path, render_width)?
