@@ -1,5 +1,5 @@
 use std::io::Read as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::collections::HashSet;
 
 use lettre::message::{header::ContentType, Attachment, MultiPart, SinglePart};
@@ -119,37 +119,68 @@ const SMTP_USER: &str = "bopnotifications@microridge.ca";
 const SMTP_PASS: &str = "s^]Xd;?@_5UW;MW";
 const NOTIFY_TO: &str = "joelvandergriendt@microridge.ca";
 
-/// Build a unified-diff-style patch for all `.ly` files in the given song
-/// directories. Since the original content is unavailable, each file's full
-/// content is included as additions.
-fn build_patch(edited_dirs: &HashSet<PathBuf>) -> String {
+/// Read patchable files (.ly, song.yaml) from a directory into a map of name → content.
+fn read_patchable_files(dir: &Path) -> std::collections::HashMap<String, String> {
+    let mut files = std::collections::HashMap::new();
+    let Ok(entries) = std::fs::read_dir(dir) else { return files };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.ends_with(".ly") || name == "song.yaml" {
+            if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                files.insert(name, content);
+            }
+        }
+    }
+    files
+}
+
+/// Produce a unified diff for a single file using the `similar` crate.
+fn diff_file(rel_path: &str, old: &str, new: &str) -> String {
+    let old_path = if old.is_empty() { "/dev/null".to_string() } else { format!("a/{rel_path}") };
+    let new_path = if new.is_empty() { "/dev/null".to_string() } else { format!("b/{rel_path}") };
+    similar::TextDiff::from_lines(old, new)
+        .unified_diff()
+        .header(&old_path, &new_path)
+        .context_radius(3)
+        .to_string()
+}
+
+/// Build a unified diff patch comparing current files against originals in the
+/// temp snapshot directory.
+fn build_patch(edited_dirs: &HashSet<PathBuf>, originals_dir: Option<&Path>) -> String {
     let mut patch = String::new();
     for dir in edited_dirs {
         let dir_name = dir.file_name().unwrap_or_default().to_string_lossy();
-        // Collect all .ly files in the directory
-        let Ok(entries) = std::fs::read_dir(dir) else { continue };
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if !name.ends_with(".ly") {
+        let orig_files = originals_dir
+            .map(|base| read_patchable_files(&base.join(dir_name.as_ref())))
+            .unwrap_or_default();
+        let current_files = read_patchable_files(dir);
+
+        let mut all_names: Vec<_> = orig_files.keys()
+            .chain(current_files.keys())
+            .cloned()
+            .collect();
+        all_names.sort();
+        all_names.dedup();
+
+        for name in all_names {
+            let old = orig_files.get(&name).map(|s| s.as_str()).unwrap_or("");
+            let new = current_files.get(&name).map(|s| s.as_str()).unwrap_or("");
+            if old == new {
                 continue;
             }
-            let path = entry.path();
-            let content = std::fs::read_to_string(&path).unwrap_or_default();
-            let rel_path = format!("{dir_name}/{name}");
-            // Format as a simple patch (full file content since we don't have the original)
-            patch.push_str(&format!("--- a/{rel_path}\n+++ b/{rel_path}\n"));
-            for line in content.lines() {
-                patch.push_str(&format!("+{line}\n"));
-            }
-            patch.push('\n');
+            patch.push_str(&diff_file(&format!("{dir_name}/{name}"), old, new));
         }
     }
     patch
 }
 
-/// Send an email with the edited .ly files as a patch attachment.
-pub fn email_edits(edited_dirs: &HashSet<PathBuf>) -> Result<(), String> {
-    let patch = build_patch(edited_dirs);
+/// Send an email with a unified diff patch of edited files.
+pub fn email_edits(
+    edited_dirs: &HashSet<PathBuf>,
+    originals_dir: Option<&Path>,
+) -> Result<(), String> {
+    let patch = build_patch(edited_dirs, originals_dir);
     if patch.is_empty() {
         return Ok(());
     }

@@ -173,6 +173,8 @@ pub struct AppState {
     pub verified_this_session: HashSet<(PathBuf, u32)>,
     /// Song dirs that had edits saved this session (for email-patch-on-close).
     pub edited_song_dirs: HashSet<PathBuf>,
+    /// Temp directory holding original file snapshots (created on first edit).
+    pub originals_dir: Option<tempfile::TempDir>,
 }
 
 impl AppState {
@@ -197,6 +199,7 @@ impl AppState {
             render_errors: HashMap::new(),
             verified_this_session: HashSet::new(),
             edited_song_dirs: HashSet::new(),
+            originals_dir: None,
         };
 
         // Load songs from CLI, defaulting to Psalm 1

@@ -46,13 +46,44 @@ fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_vie
     }
 }
 
+/// Snapshot all patchable files (.ly, song.yaml) in a song directory to a temp
+/// directory, so we can produce a real diff later. Only copies on first edit.
+fn snapshot_originals(state: &mut AppState, song_dir: &std::path::Path) {
+    // Create temp dir on first use
+    if state.originals_dir.is_none() {
+        if let Ok(td) = tempfile::tempdir() {
+            state.originals_dir = Some(td);
+        } else {
+            return;
+        }
+    }
+    let tmp_base = state.originals_dir.as_ref().unwrap().path();
+    let dir_name = song_dir.file_name().unwrap_or_default();
+    let snap_dir = tmp_base.join(dir_name);
+    if snap_dir.exists() {
+        return; // already snapshotted
+    }
+    let _ = std::fs::create_dir_all(&snap_dir);
+    if let Ok(entries) = std::fs::read_dir(song_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.ends_with(".ly") || name == "song.yaml" {
+                let _ = std::fs::copy(entry.path(), snap_dir.join(&name));
+            }
+        }
+    }
+}
+
 /// Write the editor panel's current text back to the corresponding LilyPond
 /// source files on disk and mark the song directory as edited.
 fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, copyright_entry: &gtk::Entry, split_style_dropdown: &gtk::DropDown) {
-    if let Some(slide) = state.slides.get(state.current_slide) {
-        state.edited_song_dirs.insert(slide.song_dir.clone());
-        let notes_path = slide.song_dir.join("notes.ly");
-        let lyrics_path = slide.song_dir.join(format!("lyrics_{}.ly", slide.current_verse));
+    let slide_info = state.slides.get(state.current_slide)
+        .map(|s| (s.song_dir.clone(), s.current_verse));
+    if let Some((song_dir, verse)) = slide_info {
+        snapshot_originals(state, &song_dir);
+        state.edited_song_dirs.insert(song_dir.clone());
+        let notes_path = song_dir.join("notes.ly");
+        let lyrics_path = song_dir.join(format!("lyrics_{verse}.ly"));
 
         let buf = notes_view.buffer();
         let notes_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
@@ -69,7 +100,7 @@ fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics
             .cloned()
             .unwrap_or_default();
         let meta = render_ly::SongMeta { composer, split_style };
-        render_ly::write_song_meta(&slide.song_dir, &meta);
+        render_ly::write_song_meta(&song_dir, &meta);
     }
 }
 
@@ -794,7 +825,10 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     {
         let state = state.clone();
         window.connect_close_request(move |win| {
-            let edited = state.borrow().edited_song_dirs.clone();
+            let s = state.borrow();
+            let edited = s.edited_song_dirs.clone();
+            let originals_path = s.originals_dir.as_ref().map(|td| td.path().to_path_buf());
+            drop(s);
             if edited.is_empty() {
                 return glib::Propagation::Proceed;
             }
@@ -810,7 +844,7 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
             dialog.connect_response(move |dlg, resp| {
                 dlg.close();
                 if resp == gtk::ResponseType::Yes {
-                    if let Err(e) = email_edits(&edited) {
+                    if let Err(e) = email_edits(&edited, originals_path.as_deref()) {
                         eprintln!("Failed to send email: {e}");
                     }
                 }
