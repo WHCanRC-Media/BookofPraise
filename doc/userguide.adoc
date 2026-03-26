@@ -126,6 +126,17 @@ Use the toggle switch (bottom centre) to switch between modes.
 SVG:: Music generated from source files. You can edit the music and lyrics. The *Edit* and *Verify* buttons are available.
 PNG:: Scanned photographs of sheet music. View only.
 
+== Collaborative Proofreading
+
+The music in SVG mode was converted from scanned sheet music and may contain errors. The application includes a built-in workflow for multiple people to proofread and correct the songs together:
+
+. *Edit* -- When you spot a mistake in the notes or lyrics, open the editor and fix it right away.
+. *Email* -- When you close the application after making changes, it offers to email your corrections to the maintainer as a patch.
+. *Update* -- The maintainer incorporates corrections into a new release. The next time anyone starts the application, it downloads the updated songs automatically.
+. *Verify* -- After checking that a verse is correct, mark it as verified. Once a verse has been verified twice (by any combination of people and sessions), it is considered proofread.
+
+This cycle means that every congregation using the application benefits from corrections made anywhere. The sections below explain each step in detail.
+
 == Editing Music and Lyrics (SVG Mode)
 
 In SVG mode you can correct the music notation and lyrics directly in the app.
