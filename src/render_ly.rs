@@ -1,10 +1,11 @@
 //! On-demand LilyPond SVG rendering.
 //!
-//! Combines `notes.ly` + `lyrics_N.ly` + `composer.txt` into a single
+//! Combines `notes.ly` + `lyrics_N.ly` + `song.yaml` into a single
 //! `.ly` file and invokes `lilypond` to produce an SVG. Skips rendering
 //! when the output SVG is already newer than all source files.
 
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -15,6 +16,89 @@ use std::os::windows::process::CommandExt;
 
 /// Minimum number of `\break`s before lines are combined in pairs.
 const COMBINE_LINES_THRESHOLD: usize = 7;
+
+/// How a song's lines should be split across slides.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SplitStyle {
+    /// Automatically decide based on line count thresholds.
+    #[serde(rename = "default")]
+    Default,
+    /// Force rendering across multiple slides.
+    #[serde(rename = "multi slide")]
+    MultiSlide,
+    /// Force combining line pairs into single lines.
+    #[serde(rename = "combine lines")]
+    CombineLines,
+}
+
+impl Default for SplitStyle {
+    fn default() -> Self {
+        SplitStyle::Default
+    }
+}
+
+impl SplitStyle {
+    pub const ALL: &[SplitStyle] = &[
+        SplitStyle::Default,
+        SplitStyle::MultiSlide,
+        SplitStyle::CombineLines,
+    ];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            SplitStyle::Default => "default",
+            SplitStyle::MultiSlide => "multi slide",
+            SplitStyle::CombineLines => "combine lines",
+        }
+    }
+
+}
+
+/// Song metadata stored in `song.yaml`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SongMeta {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composer: Option<String>,
+    #[serde(default)]
+    pub split_style: SplitStyle,
+}
+
+impl Default for SongMeta {
+    fn default() -> Self {
+        SongMeta {
+            composer: None,
+            split_style: SplitStyle::Default,
+        }
+    }
+}
+
+/// Read song metadata from `song.yaml` in the given directory.
+/// Falls back to reading legacy `composer.txt` if `song.yaml` doesn't exist.
+pub fn read_song_meta(song_dir: &Path) -> SongMeta {
+    let yaml_path = song_dir.join("song.yaml");
+    if let Ok(content) = fs::read_to_string(&yaml_path) {
+        serde_yaml::from_str(&content).unwrap_or_default()
+    } else {
+        // Legacy fallback: read composer.txt
+        let composer_path = song_dir.join("composer.txt");
+        let composer = fs::read_to_string(&composer_path)
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        SongMeta {
+            composer,
+            split_style: SplitStyle::Default,
+        }
+    }
+}
+
+/// Write song metadata to `song.yaml` in the given directory.
+pub fn write_song_meta(song_dir: &Path, meta: &SongMeta) {
+    let yaml_path = song_dir.join("song.yaml");
+    if let Ok(content) = serde_yaml::to_string(meta) {
+        let _ = fs::write(&yaml_path, content);
+    }
+}
 
 /// Return the platform cache directory for rendered SVGs.
 pub fn svg_cache_dir() -> PathBuf {
@@ -511,15 +595,15 @@ fn count_note_lines(raw_notes: &str) -> usize {
 
 /// Apply visual tweaks to note content before rendering:
 /// - Hide clef after the first line break
+/// - If `force_combine` or enough lines, combine pairs by removing odd `\break`s
 /// - Add invisible rests at line boundaries for alignment
-fn modify_notes(notes: &str) -> String {
+fn modify_notes(notes: &str, force_combine: bool) -> String {
     let re_note = Regex::new(r"[a-g](is|es)?[0-9]").unwrap();
     let re_rest_end = Regex::new(r"r[12]\s*(\\break|\\bar)").unwrap();
     let re_break_bar = Regex::new(r"(\s*\\break|\s*\\bar)").unwrap();
 
-    // If enough lines, combine pairs by removing \break on odd-numbered lines
-    let break_count = notes.matches("\\break").count();
-    let combined = break_count >= COMBINE_LINES_THRESHOLD;
+    // If forced, combine pairs by removing \break on odd-numbered lines
+    let combined = force_combine;
     let notes = {
         if combined {
             let mut result = String::new();
@@ -664,14 +748,23 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_wi
     )
 }
 
+/// Determine the effective number of slide parts for a song based on its
+/// split style and the number of `\break`s in its notes.
+fn effective_n_parts(split_style: &SplitStyle, break_count: usize) -> usize {
+    match split_style {
+        SplitStyle::MultiSlide => {
+            let total_lines = break_count + 1;
+            (total_lines + COMBINE_LINES_THRESHOLD - 1) / COMBINE_LINES_THRESHOLD
+        }
+        SplitStyle::CombineLines | SplitStyle::Default => 1,
+    }
+}
+
 /// Build the combined .ly content parts for a verse.
 /// Returns empty Vec if notes.ly doesn't exist.
-/// For very long songs (>= 2*COMBINE_LINES_THRESHOLD breaks), returns 3 parts.
-/// Otherwise returns 1 part.
 fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
     let notes_file = song_dir.join("notes.ly");
     let lyrics = song_dir.join(format!("lyrics_{verse}.ly"));
-    let composer_file = song_dir.join("composer.txt");
 
     if !notes_file.exists() {
         return Vec::new();
@@ -682,17 +775,15 @@ fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
         Err(_) => return Vec::new(),
     };
 
+    let meta = read_song_meta(song_dir);
     let break_count = raw_notes.matches("\\break").count();
-    let n_parts = if break_count >= 2 * COMBINE_LINES_THRESHOLD { 3 } else { 1 };
+    let n_parts = effective_n_parts(&meta.split_style, break_count);
 
     let raw_lyrics = if lyrics.exists() {
         sanitize_lyrics(&fs::read_to_string(&lyrics).unwrap_or_default())
     } else {
         String::new()
     };
-    let composer = fs::read_to_string(&composer_file)
-        .ok()
-        .map(|s| s.trim().to_string());
 
     if n_parts > 1 {
         let total_lines = count_note_lines(&raw_notes);
@@ -700,18 +791,19 @@ fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
         let lyric_parts = split_lyrics(&raw_lyrics, n_parts, total_lines);
 
         note_parts.iter().zip(lyric_parts.iter()).map(|(notes, lyrics)| {
-            let modified = modify_notes(notes);
+            let modified = modify_notes(notes, false);
             let paper_width = max_notes_per_line(&modified) + 2;
             // Only show composer on the first part
-            let comp = if notes == &note_parts[0] { composer.as_deref() } else { None };
+            let comp = if notes == &note_parts[0] { meta.composer.as_deref() } else { None };
             build_combined_ly(&modified, lyrics, comp, paper_width)
         }).collect()
     } else {
         // Single part: apply modify_notes (combining / hidden rests)
-        let notes_content = modify_notes(&raw_notes);
+        let force_combine = meta.split_style == SplitStyle::CombineLines;
+        let notes_content = modify_notes(&raw_notes, force_combine);
         let paper_width = max_notes_per_line(&notes_content) + 2;
         eprintln!("max_notes_per_line={} paper_width={paper_width}", paper_width - 2);
-        vec![build_combined_ly(&notes_content, &raw_lyrics, composer.as_deref(), paper_width)]
+        vec![build_combined_ly(&notes_content, &raw_lyrics, meta.composer.as_deref(), paper_width)]
     }
 }
 
@@ -719,8 +811,9 @@ fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
 pub fn num_parts_for_verse(song_dir: &Path, _verse: u32) -> usize {
     let notes_file = song_dir.join("notes.ly");
     if let Ok(raw_notes) = fs::read_to_string(&notes_file) {
+        let meta = read_song_meta(song_dir);
         let break_count = raw_notes.matches("\\break").count();
-        if break_count >= 2 * COMBINE_LINES_THRESHOLD { 3 } else { 1 }
+        effective_n_parts(&meta.split_style, break_count)
     } else {
         1
     }

@@ -5,3 +5,4 @@ venv/
 
 lilypond/*/*.svg
 lilypond/*/*.png
+_combined*.ly
