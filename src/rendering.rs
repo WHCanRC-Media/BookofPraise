@@ -84,13 +84,15 @@ pub fn crop_and_frame(src: &Pixmap, render_width: u32) -> Option<Pixmap> {
     let right = (right + margin).min(w - 1);
     let (cw, ch) = (right - left + 1, bot - top + 1);
 
-    // Scale content to fit frame
-    let avail_h = (output_h - title_pad) as usize;
-    let scale = (output_w as f32 / cw as f32)
+    // Scale content to fit frame with a small margin on the sides
+    let frame_margin = 2_usize;
+    let avail_w = output_w as usize - frame_margin * 2;
+    let avail_h = (output_h - title_pad) as usize - frame_margin * 2;
+    let scale = (avail_w as f32 / cw as f32)
         .min(avail_h as f32 / ch as f32);
     let (sw, sh) = ((cw as f32 * scale) as usize, (ch as f32 * scale) as usize);
-    let x_off = (output_w as usize - sw) / 2;
-    let y_off = title_pad as usize + (avail_h - sh) / 2;
+    let x_off = frame_margin + (avail_w - sw) / 2;
+    let y_off = title_pad as usize + frame_margin + (avail_h - sh) / 2;
 
     let mut out = Pixmap::new(output_w, output_h)?;
     out.fill(resvg::tiny_skia::Color::WHITE);
