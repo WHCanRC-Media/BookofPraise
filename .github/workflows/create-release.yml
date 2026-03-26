@@ -1,0 +1,53 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - id: tag
+        run: echo "tag=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: [tag, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bop-linux
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bop-windows
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: userguide
+
+      - name: Delete existing release if present
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete "${{ needs.tag.outputs.tag }}" --yes --cleanup-tag 2>/dev/null || true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ needs.tag.outputs.tag }}" \
+            bop-linux.zip \
+            bop-windows.zip \
+            userguide.pdf \
+            --target ${{ github.sha }} \
+            --title "${{ needs.tag.outputs.tag }}" \
+            --notes "Release ${{ needs.tag.outputs.tag }}"
