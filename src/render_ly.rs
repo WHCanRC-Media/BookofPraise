@@ -412,11 +412,21 @@ impl AbsPitch {
 /// Track the absolute pitch through a sequence of LilyPond notes in relative mode.
 /// Returns the absolute pitch after the last note in the given content.
 fn track_pitch(content: &str, start: AbsPitch) -> AbsPitch {
+    // Strip LilyPond commands (e.g. \break, \bar, \clef) so their letters
+    // aren't mistaken for note names.
+    let re_cmd = Regex::new(r"\\[a-zA-Z]+").unwrap();
+    let cleaned = re_cmd.replace_all(content, " ");
+    // Also strip quoted strings like "|."
+    let re_str = Regex::new(r#""[^"]*""#).unwrap();
+    let cleaned = re_str.replace_all(&cleaned, " ");
+    // Strip comments
+    let re_comment = Regex::new(r"%.*").unwrap();
+    let cleaned = re_comment.replace_all(&cleaned, " ");
+
     let re = Regex::new(r"[a-g](is|es|isis|eses)?[',]*").unwrap();
     let mut current = start;
-    for m in re.find_iter(content) {
+    for m in re.find_iter(&cleaned) {
         let token = m.as_str();
-        // Skip if it's just an accidental fragment or part of a command
         if let Some(resolved) = AbsPitch::resolve_relative(current, token) {
             current = resolved;
         }
@@ -641,7 +651,7 @@ fn count_note_lines(raw_notes: &str) -> usize {
 /// - Add invisible rests at line boundaries for alignment
 fn modify_notes(notes: &str, force_combine: bool) -> String {
     let re_note = Regex::new(r"[a-g](is|es)?[0-9]").unwrap();
-    let re_rest_end = Regex::new(r"r[12]\s*(\\break|\\bar)").unwrap();
+    let re_rest_end = Regex::new(r"r[0-9]+\.?\s*(\\break|\\bar)").unwrap();
     let re_break_bar = Regex::new(r"(\s*\\break|\s*\\bar)").unwrap();
 
     // If forced, combine pairs by removing \break on odd-numbered lines
@@ -792,6 +802,11 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_wi
   >>
   \layout {{
     indent = 0
+    \context {{
+      \Score
+      \override SpacingSpanner.uniform-stretching = ##t
+      \override SpacingSpanner.strict-note-spacing = ##t
+    }}
     \context {{
       \Lyrics
       \override LyricText.self-alignment-X = #CENTER
