@@ -463,6 +463,17 @@ fn split_notes(raw_notes: &str, n_parts: usize) -> Vec<String> {
             if line.trim() == "}" {
                 continue;
             }
+            // Collect setup commands (\clef, \key, etc.) that appear before any notes
+            let trimmed = line.trim();
+            if !trimmed.is_empty()
+                && (trimmed.starts_with("\\clef")
+                    || trimmed.starts_with("\\key")
+                    || trimmed.starts_with("\\cadenzaOn")
+                    || trimmed.starts_with("\\omit"))
+            {
+                preamble_lines.push(line.to_string());
+                continue;
+            }
             body.push_str(line);
             body.push('\n');
         }
