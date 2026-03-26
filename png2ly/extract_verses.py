@@ -235,7 +235,7 @@ def main():
     if args.psalm:
         psalm_dirs = [os.path.join(photos_dir, args.psalm)]
     else:
-        psalm_dirs = sorted(glob.glob(os.path.join(photos_dir, "psalm*")))
+        psalm_dirs = sorted(glob.glob(os.path.join(photos_dir, "psalm*")) + glob.glob(os.path.join(photos_dir, "hymn*")))
 
     for psalm_photo_dir in psalm_dirs:
         psalm_name = os.path.basename(psalm_photo_dir)
