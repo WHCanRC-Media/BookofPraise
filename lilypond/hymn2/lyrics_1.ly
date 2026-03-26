@@ -1,12 +1,12 @@
 verse = \lyricmode {
-  Our Lord was un -- der Pi -- late cru -- ci -- fied;
-the bur -- den of God's wrath he car -- ried.
-Re -- jec -- ted and des -- pised by men,
-he died for us, and then was bu -- ried,
-de -- scen -- ding in -- to death's do -- main.
-But he the third day rose a -- gain;
-he to his heav -- en -- ly throne a -- scen -- ded,
-at God's right hand, and he, our Head,
-shall come a -- gain with pow -- er and glo -- ry
-to judge the li -- ving and the dead.
+ In God, our heaven -- ly  Fa -- ther, I be -- lieve 
+al -- might -- y Rul -- er, all -- vic -- to -- rious,
+Cre -- a -- tor of both heaven and earth,
+whose ho -- ly name is great and glo -- rious.
+And I be -- lieve in Christ our "Lord –"
+Christ Je -- sus, the in -- car -- nate Word,
+God’s on -- ly Son, our faith -- ful Sav -- iour,
+sent to re -- deem a world for -- lorn;
+who was con -- ceived by God the  Spir -- it 
+and of the vir -- gin Mar -- y born.
 }

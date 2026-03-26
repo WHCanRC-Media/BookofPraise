@@ -123,20 +123,18 @@ fn scan_verses(dir: &Path) -> Vec<u32> {
     verses.into_iter().collect()
 }
 
-/// Read the verification count for a specific verse from its `verify_N.txt` file.
+/// Read the verification count for a specific verse from `song.yaml`.
 pub fn read_verify_count(song_dir: &Path, verse: u32) -> u32 {
-    let path = song_dir.join(format!("verify_{verse}.txt"));
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|s| s.trim().parse().ok())
-        .unwrap_or(0)
+    let meta = crate::render_ly::read_song_meta(song_dir);
+    meta.verified.get(&verse).copied().unwrap_or(0)
 }
 
 /// Increment and persist the verification count for a verse, returning the new count.
 pub fn increment_verify(song_dir: &Path, verse: u32) -> u32 {
-    let count = read_verify_count(song_dir, verse) + 1;
-    let path = song_dir.join(format!("verify_{verse}.txt"));
-    let _ = std::fs::write(path, count.to_string());
+    let mut meta = crate::render_ly::read_song_meta(song_dir);
+    let count = meta.verified.get(&verse).copied().unwrap_or(0) + 1;
+    meta.verified.insert(verse, count);
+    crate::render_ly::write_song_meta(song_dir, &meta);
     count
 }
 

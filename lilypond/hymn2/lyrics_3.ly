@@ -1,7 +1,7 @@
 verse = \lyricmode {
-  In God the Ho -- ly Spi -- rit I be -- \"lieve –\"
+  In God the Ho -- ly Spi -- rit I be -- "lieve –"
 through whom we are a new cre -- a -- tion.
-And I be -- lieve a ca -- tho -- lic church,
+And I be -- lieve a catholic church,
 one ho -- ly Chris -- tian con -- gre -- ga -- tion;
 the true com -- mu -- ni -- on of those
 whom God once as his peo -- ple chose;

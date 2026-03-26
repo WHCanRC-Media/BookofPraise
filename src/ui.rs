@@ -99,7 +99,9 @@ fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics
         let split_style = render_ly::SplitStyle::ALL.get(style_idx)
             .cloned()
             .unwrap_or_default();
-        let meta = render_ly::SongMeta { composer, split_style };
+        let mut meta = render_ly::read_song_meta(&song_dir);
+        meta.composer = composer;
+        meta.split_style = split_style;
         render_ly::write_song_meta(&song_dir, &meta);
     }
 }

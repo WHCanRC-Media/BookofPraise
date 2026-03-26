@@ -66,6 +66,8 @@ pub struct SongMeta {
     pub composer: Option<String>,
     #[serde(default)]
     pub split_style: SplitStyle,
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub verified: std::collections::HashMap<u32, u32>,
 }
 
 impl Default for SongMeta {
@@ -73,6 +75,7 @@ impl Default for SongMeta {
         SongMeta {
             composer: None,
             split_style: SplitStyle::Default,
+            verified: std::collections::HashMap::new(),
         }
     }
 }
@@ -93,6 +96,7 @@ pub fn read_song_meta(song_dir: &Path) -> SongMeta {
         SongMeta {
             composer,
             split_style: SplitStyle::Default,
+            verified: std::collections::HashMap::new(),
         }
     }
 }
@@ -721,6 +725,18 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_wi
         String::new()
     } else {
         "    \\new Lyrics \\lyricsto \"melody\" { \\verse }".into()
+    };
+
+    // If there are no standalone | barline separators, inject \accidentalStyle forget
+    // so accidentals are printed on every note (the whole piece is one long measure).
+    let has_barlines = notes.lines().any(|line| {
+        let trimmed = line.trim();
+        !trimmed.starts_with('%') && trimmed.split_whitespace().any(|tok| tok == "|")
+    });
+    let notes = if has_barlines {
+        notes.to_string()
+    } else {
+        notes.replacen("\\cadenzaOn", "\\cadenzaOn\n  \\accidentalStyle forget", 1)
     };
 
     format!(

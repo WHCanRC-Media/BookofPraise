@@ -5,8 +5,8 @@ Re -- jec -- ted and des -- pised by men,
 he died for us, and then was bu -- ried,
 de -- scen -- ding in -- to death's do -- main.
 But he the third day rose a -- gain;
-he to his heav -- en -- ly throne a -- scen -- ded,
+he to his heaven -- ly throne a -- scen -- ded,
 at God's right hand, and he, our Head,
-shall come a -- gain with pow -- er and glo -- ry
+shall come a -- gain with power and glo -- ry
 to judge the li -- ving and the dead.
 }
