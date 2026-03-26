@@ -10,7 +10,7 @@ use crate::model::{
     read_verify_count, increment_verify, AppState, SongLibrary, SongType,
 };
 use crate::render_ly;
-use crate::rendering::{load_slide_texture, DEFAULT_RENDER_WIDTH};
+use crate::rendering::{current_png_path, load_slide_texture, save_current_png, DEFAULT_RENDER_WIDTH};
 use crate::updater::{check_for_update, download_and_extract, email_edits};
 
 // ── UI helpers ──────────────────────────────────────────────────────
@@ -268,6 +268,7 @@ fn refresh_display(
             load_slide_texture(&state.slides[idx], render_width)
         });
         if let Some(tex) = tex {
+            save_current_png(&tex);
             picture.set_paintable(Some(&tex));
             state.texture_cache.insert(cache_key, tex);
             drop(state);
@@ -570,10 +571,20 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     controls.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
     controls.append(&input_row);
 
+    // Path label at bottom
+    let path_label = gtk::Label::new(None);
+    path_label.set_xalign(0.0);
+    path_label.set_selectable(true);
+    path_label.set_margin_start(4);
+    path_label.set_margin_end(4);
+    let png_path = current_png_path();
+    path_label.set_text(&png_path.to_string_lossy());
+
     // Main layout
     let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
     vbox.append(&hpaned);
     vbox.append(&controls);
+    vbox.append(&path_label);
     window.set_child(Some(&vbox));
 
     // Initial display

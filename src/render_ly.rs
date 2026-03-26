@@ -102,6 +102,9 @@ pub fn write_song_meta(song_dir: &Path, meta: &SongMeta) {
 
 /// Return the platform cache directory for rendered SVGs.
 pub fn svg_cache_dir() -> PathBuf {
+    cache_dir().join("svg")
+}
+pub fn cache_dir() -> PathBuf {
     let base = if cfg!(windows) {
         std::env::var("LOCALAPPDATA")
             .map(PathBuf::from)
@@ -114,7 +117,7 @@ pub fn svg_cache_dir() -> PathBuf {
                 PathBuf::from(home).join(".cache")
             })
     };
-    base.join("bop").join("svg")
+    base.join("bop")
 }
 
 /// Compute a hex-encoded hash of the given string for use as a cache key.

@@ -176,3 +176,23 @@ pub fn load_slide_texture(slide: &Slide, render_width: u32) -> Option<gdk::Textu
             .upcast(),
     )
 }
+
+/// Return the path to the Current.png file in the cache directory.
+pub fn current_png_path() -> std::path::PathBuf {
+    render_ly::cache_dir().join("Current.png")
+}
+
+/// Save a GDK texture as Current.png in the cache directory.
+/// Writes to a temp file first, then renames for atomic update (for OBS).
+pub fn save_current_png(texture: &gdk::Texture) {
+    let current_png = current_png_path();
+    if let Some(parent) = current_png.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let tmp = current_png.with_extension("png.tmp");
+    if texture.save_to_png(&tmp).is_ok() {
+        #[cfg(windows)]
+        let _ = std::fs::remove_file(&current_png);
+        let _ = std::fs::rename(&tmp, &current_png);
+    }
+}
