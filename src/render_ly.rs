@@ -23,6 +23,9 @@ pub enum SplitStyle {
     /// Automatically decide based on line count thresholds.
     #[serde(rename = "default")]
     Default,
+    /// Force everything onto a single slide.
+    #[serde(rename = "single slide")]
+    SingleSlide,
     /// Force rendering across multiple slides.
     #[serde(rename = "multi slide")]
     MultiSlide,
@@ -40,6 +43,7 @@ impl Default for SplitStyle {
 impl SplitStyle {
     pub const ALL: &[SplitStyle] = &[
         SplitStyle::Default,
+        SplitStyle::SingleSlide,
         SplitStyle::MultiSlide,
         SplitStyle::CombineLines,
     ];
@@ -47,6 +51,7 @@ impl SplitStyle {
     pub fn label(&self) -> &'static str {
         match self {
             SplitStyle::Default => "default",
+            SplitStyle::SingleSlide => "single slide",
             SplitStyle::MultiSlide => "multi slide",
             SplitStyle::CombineLines => "combine lines",
         }
@@ -755,11 +760,11 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_wi
 /// split style and the number of `\break`s in its notes.
 fn effective_n_parts(split_style: &SplitStyle, break_count: usize) -> usize {
     match split_style {
-        SplitStyle::MultiSlide => {
+        SplitStyle::Default | SplitStyle::MultiSlide => {
             let total_lines = break_count + 1;
             (total_lines + COMBINE_LINES_THRESHOLD - 1) / COMBINE_LINES_THRESHOLD
         }
-        SplitStyle::CombineLines | SplitStyle::Default => 1,
+        SplitStyle::SingleSlide | SplitStyle::CombineLines => 1,
     }
 }
 
