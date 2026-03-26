@@ -50,6 +50,9 @@ You can also start it from the command line with options to pre-load specific so
 
 | `--png`
 | Start in photograph mode instead of the default music notation mode.
+
+| `--update false`
+| Skip the automatic update check on startup.
 |===
 
 .Example: start with Psalm 42 and Hymn 1
@@ -61,30 +64,23 @@ If you don't specify any songs, the application opens with Psalm 1.
 
 == Main Window Overview
 
-The screenshot below shows the main window with all controls numbered.
+image::main-window-annotated.png[Main window,800]
 
-image::main-window-annotated.png[Annotated main window,800]
+*Slide display* (centre)::
+The main area showing the current verse as sheet music. The title bar at the top of the slide shows the song name and verse numbers. The current verse number is shown in black; the other verses in grey.
 
-[cols="1,4"]
-|===
-| # | Description
+*Liturgy summary* (bottom left)::
+Shows the list of songs you have added for the service (e.g., "Liturgy: Psalm 42 (1,2,3) | Hymn 1 (1,2)").
 
-| 1
-| *Slide display* -- The main area showing the current verse as sheet music. The title bar at the top of the slide shows the song name and verse numbers. The current verse number is shown in black; the other verses in grey.
+*Navigation and toolbar* (bottom centre)::
+*Prev*/*Next* buttons with a slide counter (e.g., "3/12"), *Clear liturgy* to remove all songs, *Edit* to open the music editor (SVG mode only), *Verify* to mark a verse as checked (SVG mode only), and the *PNG/SVG* toggle switch.
 
-| 2
-| *Liturgy summary* -- Shows the list of songs you have added for the service (e.g., "Liturgy: Psalm 42 (1,2,3) \| Hymn 1 (1,2)").
-
-| 3
-| *Navigation and toolbar* -- *Prev*/*Next* buttons with a slide counter (e.g., "3/12"), *Clear liturgy* to remove all songs, *Edit* to open the music editor (SVG mode only), *Verify* to mark a verse as checked (SVG mode only), and the *PNG/SVG* toggle switch.
-
-| 4
-| *Song input* -- Choose *Psalm* or *Hymn*, type a number, tick the verses you want, then click *Add*. Click *All* to select every verse and add it straight away.
-|===
+*Song input* (bottom right)::
+Choose *Psalm* or *Hymn*, type a number, tick the verses you want, then click *Add*. Click *All* to select every verse and add it straight away.
 
 == Navigation
 
-Use the *Prev* and *Next* buttons (3) to move between slides.
+Use the *Prev* and *Next* buttons (bottom centre) to move between slides.
 The counter between them shows which slide you are on (e.g., "3/12").
 
 You can also use the keyboard:
@@ -105,26 +101,26 @@ You can also use the keyboard:
 
 == Building a Liturgy
 
-The liturgy is the list of songs and verses for a service. It is shown in the summary bar (2).
+The liturgy is the list of songs and verses for a service. It is shown in the summary bar (bottom left).
 
 === Adding a Song
 
-. Choose *Psalm* or *Hymn* and type the song number (4).
+. Choose *Psalm* or *Hymn* and type the song number (bottom right).
 . The available verses appear as tick boxes.
 . Tick the verses you want.
 . Click *Add*.
 
 === Adding All Verses
 
-Click *All* (4) to tick every verse and add the song in one step.
+Click *All* (bottom right) to tick every verse and add the song in one step.
 
 === Clearing the Liturgy
 
-Click *Clear liturgy* (3) to remove all songs and start over.
+Click *Clear liturgy* (bottom centre) to remove all songs and start over.
 
 == SVG / PNG Mode
 
-Use the toggle switch (3) to switch between modes.
+Use the toggle switch (bottom centre) to switch between modes.
 
 [horizontal]
 SVG:: Music generated from source files. You can edit the music and lyrics. The *Edit* and *Verify* buttons are available.
@@ -133,26 +129,34 @@ PNG:: Scanned photographs of sheet music. View only.
 == Editing Music and Lyrics (SVG Mode)
 
 In SVG mode you can correct the music notation and lyrics directly in the app.
-Click *Edit* (3) to open the editor panel alongside the slide.
+Click *Edit* (bottom centre) to open the editor panel alongside the slide.
 
-image::editor-annotated.png[Annotated editor panel,800]
+image::editor-annotated.png[Editor panel,800]
 
-[cols="1,4"]
-|===
-| Letter | Description
+*Notes editor* (top right)::
+The musical notation (notes, time signature, key) shared by all verses of the song. Click the *(?)* button next to the label for syntax help.
 
-| A
-| *Notes editor* -- The musical notation (notes, time signature, key) shared by all verses of the song.
+*Lyrics editor* (middle right)::
+The words for the current verse. The label above (e.g., `lyrics_2.ly`) shows which verse you are editing. Click the *(?)* button next to the label for syntax help.
 
-| B
-| *Lyrics editor* -- The words for the current verse. The label above (e.g., `lyrics_2.ly`) shows which verse you are editing.
+*Copyright* (below the lyrics editor)::
+The composer or arranger name. This is displayed on the rendered slide and saved in the song's `song.yaml` file.
 
-| C
-| *Save & Re-render* -- Saves your changes and regenerates the slide. You can also press *Ctrl+S*.
+*Split style* (below the copyright field)::
+Controls how the music is split across slides. Options:
++
+--
+- *Default* -- automatically decides based on the number of lines.
+- *Single slide* -- forces everything onto one slide.
+- *Multi slide* -- forces the music across multiple slides.
+- *Combine lines* -- pairs lines together to fit more on each slide.
+--
 
-| D
-| *Slide preview* -- Shows the result after rendering. A spinner appears while the slide is being generated. If something goes wrong, an error message appears here.
-|===
+*Save & Re-render* (bottom right)::
+Saves your changes and regenerates the slide. You can also press *Ctrl+S*.
+
+*Slide preview* (left)::
+Shows the result after rendering. A spinner appears while the slide is being generated. If something goes wrong, an error message appears here.
 
 === Sending Your Edits
 
@@ -161,12 +165,28 @@ This allows your fixes to be included in future updates.
 
 == Verifying Verses (SVG Mode)
 
-Click *Verify* (3) to mark the current verse as checked and correct.
+Click *Verify* (bottom centre) to mark the current verse as checked and correct.
 
 - You can verify each verse once per session.
 - After a verse has been verified twice (across any number of sessions), it shows *Verified* and no further action is needed.
 
 This helps keep track of which verses have been proofread.
+
+== OBS Integration
+
+Each time a slide is displayed, the application saves it as `Current.png` in the cache directory. The file path is shown at the bottom of the main window. This allows streaming tools such as OBS to use the file as an image source that updates in real time.
+
+The file is written atomically (via a temporary file and rename), so OBS will never read a partially written image.
+
+== LilyPond Download
+
+SVG mode requires LilyPond to render music notation. The application looks for LilyPond in three places:
+
+. Bundled next to the application executable.
+. Cached in `~/.cache/bop/lilypond-bin/` (Linux) or the local app-data cache (Windows).
+. On the system PATH.
+
+If LilyPond is not found, a dialog offers to download and install it automatically into the cache directory. No manual installation is needed.
 
 == Automatic Updates
 
