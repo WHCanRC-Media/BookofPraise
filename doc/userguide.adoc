@@ -199,6 +199,17 @@ SVG mode requires LilyPond to render music notation. The application looks for L
 
 If LilyPond is not found, a dialog offers to download and install it automatically into the cache directory. No manual installation is needed.
 
+== Hymn Usage Tracking
+
+Some hymns are used under licence and their usage must be reported. The application automatically tracks when these hymns are added to a liturgy, recording one entry per hymn per day to a usage log file.
+
+The log is stored at:
+
+- Linux: `~/.local/share/bop/HymnUsage.txt`
+- Windows: `%APPDATA%\bop\HymnUsage.txt`
+
+On the first launch of a new year, if the log contains entries from the previous year, the application shows a dialog offering to email the report. Enter the recipient's email address and click *Send*. The report is sent as an attachment. The application remembers that the report has been sent and will not prompt again until the following year.
+
 == Automatic Updates
 
 The application checks for updates when it starts.

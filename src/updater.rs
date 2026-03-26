@@ -214,3 +214,83 @@ pub fn email_edits(
     mailer.send(&email).map_err(|e| format!("Send error: {e}"))?;
     Ok(())
 }
+
+// ── Hymn usage reporting ────────────────────────────────────────────
+
+/// Return the path to the hymn usage file.
+pub fn hymn_usage_path() -> PathBuf {
+    std::env::var("HYMN_USAGE_TXT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| crate::render_ly::data_dir().join("HymnUsage.txt"))
+}
+
+/// Check whether the usage file has data and we haven't already sent
+/// a report for the current year.
+pub fn should_report_hymn_usage() -> bool {
+    let path = hymn_usage_path();
+    let contents = match std::fs::read_to_string(&path) {
+        Ok(c) if !c.trim().is_empty() => c,
+        _ => return false,
+    };
+    let current_year = current_year_str();
+    // Only prompt if file has entries from a previous year
+    let has_old_entries = contents.lines().any(|line| !line.contains(&current_year));
+    if !has_old_entries {
+        return false;
+    }
+    // Check if we already sent for this year
+    let sent_year = std::fs::read_to_string(usage_sent_marker()).unwrap_or_default();
+    sent_year.trim() != current_year
+}
+
+fn usage_sent_marker() -> PathBuf {
+    crate::render_ly::cache_dir().join("hymn_usage_sent")
+}
+
+fn current_year_str() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let days = secs / 86400;
+    let (year, _, _) = crate::model::epoch_days_to_date(days);
+    year.to_string()
+}
+
+/// Send the hymn usage report to the given email address, then clear the file.
+pub fn email_hymn_usage(to_address: &str) -> Result<(), String> {
+    let path = hymn_usage_path();
+    let contents = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read usage file: {e}"))?;
+    if contents.trim().is_empty() {
+        return Ok(());
+    }
+
+    let attachment = Attachment::new("HymnUsage.txt".to_string())
+        .body(contents, ContentType::TEXT_PLAIN);
+
+    let email = Message::builder()
+        .from(SMTP_USER.parse().map_err(|e| format!("From address error: {e}"))?)
+        .to(to_address.parse().map_err(|e| format!("To address error: {e}"))?)
+        .subject(format!("Hymn Usage Report – {}", current_year_str()))
+        .multipart(
+            MultiPart::mixed()
+                .singlepart(SinglePart::plain(
+                    "Attached is the hymn usage report from the Book of Praise application."
+                        .to_string(),
+                ))
+                .singlepart(attachment),
+        )
+        .map_err(|e| format!("Email build error: {e}"))?;
+
+    let creds = Credentials::new(SMTP_USER.to_string(), SMTP_PASS.to_string());
+    let mailer = SmtpTransport::starttls_relay(SMTP_HOST)
+        .map_err(|e| format!("SMTP relay error: {e}"))?
+        .credentials(creds)
+        .build();
+
+    mailer.send(&email).map_err(|e| format!("Send error: {e}"))?;
+    // Record that we sent for this year
+    let _ = std::fs::write(usage_sent_marker(), current_year_str());
+    Ok(())
+}

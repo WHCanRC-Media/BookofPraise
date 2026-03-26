@@ -113,6 +113,25 @@ pub fn write_song_meta(song_dir: &Path, meta: &SongMeta) {
 pub fn svg_cache_dir() -> PathBuf {
     cache_dir().join("svg")
 }
+/// Return the platform data directory for persistent app data.
+/// Linux: `$XDG_DATA_HOME/bop` (default `~/.local/share/bop`)
+/// Windows: `%APPDATA%\bop`
+pub fn data_dir() -> PathBuf {
+    let base = if cfg!(windows) {
+        std::env::var("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("C:\\Temp"))
+    } else {
+        std::env::var("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+                PathBuf::from(home).join(".local").join("share")
+            })
+    };
+    base.join("bop")
+}
+
 pub fn cache_dir() -> PathBuf {
     let base = if cfg!(windows) {
         std::env::var("LOCALAPPDATA")

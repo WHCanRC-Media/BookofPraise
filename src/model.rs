@@ -138,6 +138,62 @@ pub fn increment_verify(song_dir: &Path, verse: u32) -> u32 {
     count
 }
 
+/// Hymns that require usage tracking (e.g. for copyright/licensing reporting).
+const TRACKED_HYMNS: &[u32] = &[38, 50, 66, 79];
+
+/// Record usage of a tracked hymn to a log file. Each entry is recorded once
+/// per day. The file path is taken from the `HYMN_USAGE_TXT` environment
+/// variable, defaulting to `~/Desktop/HymnUsage.txt`.
+fn record_hymn_usage(song_type: SongType, num: u32) {
+    if song_type != SongType::Hymn || !TRACKED_HYMNS.contains(&num) {
+        return;
+    }
+    let path = std::env::var("HYMN_USAGE_TXT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            let dir = crate::render_ly::data_dir();
+            let _ = std::fs::create_dir_all(&dir);
+            dir.join("HymnUsage.txt")
+        });
+    let path = path.to_string_lossy().to_string();
+    // Format date as Mon-DD-YYYY to match the legacy web app format
+    let now = std::time::SystemTime::now();
+    let secs = now.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    // Simple date calculation: days since epoch
+    let days = secs / 86400;
+    let (year, month, day) = epoch_days_to_date(days);
+    let months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    let entry = format!("{}-{:02}-{} H{num}", months[month as usize - 1], day, year);
+    let contents = std::fs::read_to_string(&path).unwrap_or_default();
+    if contents.lines().any(|line| line.trim() == entry) {
+        return;
+    }
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path);
+    if let Ok(ref mut f) = file {
+        use std::io::Write;
+        let _ = writeln!(f, "{entry}");
+    }
+}
+
+/// Convert days since Unix epoch to (year, month, day).
+pub fn epoch_days_to_date(days: u64) -> (u64, u64, u64) {
+    // Civil calendar algorithm from http://howardhinnant.github.io/date_algorithms.html
+    let z = days + 719468;
+    let era = z / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
+}
+
 #[derive(Clone)]
 pub struct LiturgyEntry {
     pub song_name: String,
@@ -218,6 +274,7 @@ impl AppState {
     /// Add all verses of a song to the liturgy. Returns `true` if the song was found.
     pub fn add_song(&mut self, song_type: SongType, num: u32) -> bool {
         if let Some(verses) = self.library.get(song_type, num).cloned() {
+            record_hymn_usage(song_type, num);
             self.liturgy.push(LiturgyEntry {
                 song_name: song_type.label(num),
                 song_dir: format!("{}{num}", song_type.prefix()),
@@ -234,6 +291,7 @@ impl AppState {
         if verses.is_empty() {
             return;
         }
+        record_hymn_usage(song_type, num);
         self.liturgy.push(LiturgyEntry {
             song_name: song_type.label(num),
             song_dir: format!("{}{num}", song_type.prefix()),

@@ -11,7 +11,7 @@ use crate::model::{
 };
 use crate::render_ly;
 use crate::rendering::{current_png_path, load_slide_texture, save_current_png, DEFAULT_RENDER_WIDTH};
-use crate::updater::{check_for_update, download_and_extract, email_edits};
+use crate::updater::{check_for_update, download_and_extract, email_edits, should_report_hymn_usage, email_hymn_usage};
 
 // ── UI helpers ──────────────────────────────────────────────────────
 
@@ -1018,6 +1018,50 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                 });
             } else {
                 window2.destroy();
+            }
+        });
+        dialog.show();
+    }
+
+    // ── Hymn usage report (new year) ──
+    if should_report_hymn_usage() {
+        let dialog = gtk::Dialog::with_buttons(
+            Some("Hymn Usage Report"),
+            Some(&window),
+            gtk::DialogFlags::MODAL,
+            &[("Send", gtk::ResponseType::Accept), ("Skip", gtk::ResponseType::Cancel)],
+        );
+        let content = dialog.content_area();
+        content.set_spacing(8);
+        content.set_margin_start(12);
+        content.set_margin_end(12);
+        content.set_margin_top(12);
+        content.set_margin_bottom(12);
+
+        let label = gtk::Label::new(Some(
+            "It's a new year. Would you like to email last year's hymn usage report?",
+        ));
+        label.set_wrap(true);
+        content.append(&label);
+
+        let entry_box = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let email_label = gtk::Label::new(Some("Email:"));
+        let email_entry = gtk::Entry::new();
+        email_entry.set_hexpand(true);
+        email_entry.set_placeholder_text(Some("recipient@example.com"));
+        entry_box.append(&email_label);
+        entry_box.append(&email_entry);
+        content.append(&entry_box);
+
+        dialog.connect_response(move |dlg, resp| {
+            dlg.close();
+            if resp == gtk::ResponseType::Accept {
+                let addr = email_entry.text().to_string();
+                if !addr.is_empty() {
+                    if let Err(e) = email_hymn_usage(&addr) {
+                        eprintln!("Failed to send hymn usage report: {e}");
+                    }
+                }
             }
         });
         dialog.show();
