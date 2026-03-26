@@ -384,6 +384,17 @@ fn check_all(verse_box: &gtk::FlowBox) {
 /// Construct the main application window and wire up all widgets and signal handlers.
 /// This is the top-level UI entry point called once on application activation.
 pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
+    // Load help-button CSS
+    let css = gtk::CssProvider::new();
+    css.load_from_data(
+        ".help-btn { border-radius: 50%; border: 1px solid @theme_fg_color; min-width: 18px; min-height: 18px; padding: 0; margin: 0; font-weight: bold; font-size: 12px; } .help-btn label { margin: 0; padding: 0; margin-top: -1px; }",
+    );
+    gtk::style_context_add_provider_for_display(
+        &gdk::Display::default().expect("display"),
+        &css,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+
     let state = Rc::new(RefCell::new(AppState::new(cli)));
 
     let window = gtk::ApplicationWindow::builder()
@@ -449,8 +460,21 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
 
     let notes_label = gtk::Label::new(Some("notes.ly"));
     notes_label.set_xalign(0.0);
+    let notes_help_btn = gtk::Button::with_label("?");
+    notes_help_btn.add_css_class("help-btn");
+    notes_help_btn.set_tooltip_text(Some("Note syntax help"));
+    let notes_label_row = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    notes_label_row.append(&notes_label);
+    notes_label_row.append(&notes_help_btn);
+
     let lyrics_label = gtk::Label::new(Some("lyrics.ly"));
     lyrics_label.set_xalign(0.0);
+    let lyrics_help_btn = gtk::Button::with_label("?");
+    lyrics_help_btn.add_css_class("help-btn");
+    lyrics_help_btn.set_tooltip_text(Some("Lyrics syntax help"));
+    let lyrics_label_row = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    lyrics_label_row.append(&lyrics_label);
+    lyrics_label_row.append(&lyrics_help_btn);
 
     let copyright_label = gtk::Label::new(Some("Copyright"));
     copyright_label.set_xalign(0.0);
@@ -475,13 +499,48 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     editor_panel.append(&copyright_entry);
     editor_panel.append(&split_style_label);
     editor_panel.append(&split_style_dropdown);
-    editor_panel.append(&notes_label);
+    editor_panel.append(&notes_label_row);
     editor_panel.append(&notes_scroll);
-    editor_panel.append(&lyrics_label);
+    editor_panel.append(&lyrics_label_row);
     editor_panel.append(&lyrics_scroll);
     editor_panel.append(&save_btn);
     editor_panel.set_visible(false);
     editor_panel.set_hexpand(true);
+
+    {
+        let window = window.clone();
+        lyrics_help_btn.connect_clicked(move |_| {
+            let dialog = gtk::MessageDialog::new(
+                Some(&window),
+                gtk::DialogFlags::MODAL,
+                gtk::MessageType::Info,
+                gtk::ButtonsType::Ok,
+                "",
+            );
+            dialog.set_markup(
+                "<b>Editing Lyrics</b>\n\n\
+                 <b>Syllables:</b> Separate syllables with spaces.\n\
+                 Each syllable aligns to one note.\n\n\
+                 <b>Hyphens:</b> Use <tt> -- </tt> (space-dash-dash-space)\n\
+                 between syllables of the same word.\n\
+                 Example: <tt>A -- ma -- zing grace</tt>\n\n\
+                 <b>Multi-note syllables (melisma):</b>\n\
+                 Use <tt>_</tt> after a syllable to extend it\n\
+                 over additional notes (adds an extender line).\n\
+                 Example: <tt>grace _ _ how sweet</tt>\n\
+                 This holds \"grace\" across 3 notes.\n\n\
+                 <b>Skipping notes:</b> Use <tt>_</tt> alone to\n\
+                 skip a note without any lyric.\n\n\
+                 <b>Tied notes:</b> When notes are tied together,\n\
+                 they count as one note for lyrics — write\n\
+                 the syllable only once."
+            );
+            dialog.connect_response(|dlg, _| {
+                dlg.close();
+            });
+            dialog.show();
+        });
+    }
 
     // Horizontal paned: image left, editor right
     let hpaned = gtk::Paned::new(gtk::Orientation::Horizontal);
@@ -686,6 +745,40 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
             refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn2);
         });
     }
+
+    // Notes syntax help
+    connect!(notes_help_btn, connect_clicked, [window], move |_| {
+        let help_text = "\
+<b>Notes</b>
+Notes are written as letter names: <tt>c d e f g a b</tt>
+Follow with a duration number: <tt>c4</tt> (quarter), <tt>d2</tt> (half), <tt>e1</tt> (whole), <tt>f8</tt> (eighth)
+Use <tt>r</tt> for rests: <tt>r4</tt> (quarter rest)
+
+<b>Octaves</b>
+Notes use relative mode — each note is placed closest to the previous one.
+To force a note up an octave, add <tt>'</tt> (apostrophe): <tt>c'</tt>
+To force a note down an octave, add <tt>,</tt> (comma): <tt>c,</tt>
+These stack: <tt>c''</tt> = two octaves up
+
+<b>Sharps and Flats</b>
+Sharp: add <tt>is</tt> after the note name: <tt>fis</tt> (F#), <tt>cis</tt> (C#)
+Flat: add <tt>es</tt> after the note name: <tt>bes</tt> (Bb), <tt>ees</tt> (Eb)
+
+<b>Slurs</b>
+Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
+<tt>f8( ees8)</tt> — two slurred eighth notes";
+        let dialog = gtk::MessageDialog::new(
+            Some(&window),
+            gtk::DialogFlags::MODAL,
+            gtk::MessageType::Info,
+            gtk::ButtonsType::Close,
+            "",
+        );
+        dialog.set_title(Some("Note Syntax Help"));
+        dialog.set_markup(help_text);
+        dialog.connect_response(|dlg, _| dlg.close());
+        dialog.show();
+    });
 
     // Save & Re-render
     connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, copyright_entry, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn], move |_| {
