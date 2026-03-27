@@ -20,8 +20,10 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - name: Install LilyPond and rsvg-convert
-        run: sudo apt-get update && sudo apt-get install -y lilypond librsvg2-bin
+      - name: Install LilyPond, rsvg-convert, and PyYAML
+        run: |
+          sudo apt-get update && sudo apt-get install -y lilypond librsvg2-bin
+          pip install pyyaml
 
       - name: Determine changed song dirs
         id: changed
@@ -32,25 +34,14 @@ jobs:
           echo "$DIRS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
-      - name: Render changed songs
+      - name: Render and convert to PNGs
+        id: render
         run: |
-          while IFS= read -r dir; do
-            [ -z "$dir" ] && continue
-            song=$(basename "$dir")
-            echo "Rendering $song..."
-            python3 png2ly/render_ly.py --psalm "$song" || true
-          done <<< "${{ steps.changed.outputs.dirs }}"
-
-      - name: Convert SVGs to PNGs
-        run: |
-          while IFS= read -r dir; do
-            [ -z "$dir" ] && continue
-            for svg in "$dir"/*.svg; do
-              [ -f "$svg" ] || continue
-              png="${svg%.svg}.png"
-              rsvg-convert "$svg" -o "$png"
-            done
-          done <<< "${{ steps.changed.outputs.dirs }}"
+          DIRS=$(echo "${{ steps.changed.outputs.dirs }}" | tr '\n' ' ')
+          PNGS=$(python3 .github/ci_render.py render $DIRS)
+          echo "pngs<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$PNGS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Create render branch and commit images
         run: |
@@ -69,57 +60,22 @@ jobs:
           git commit -m "Render song previews for PR #${{ github.event.pull_request.number }}"
           git push origin "$RENDER_BRANCH" --force
 
-      - name: Collect rendered PNGs
-        id: pngs
-        run: |
-          PNGS=""
-          while IFS= read -r dir; do
-            [ -z "$dir" ] && continue
-            for png in "$dir"/*.png; do
-              [ -f "$png" ] || continue
-              PNGS="$PNGS $png"
-            done
-          done <<< "${{ steps.changed.outputs.dirs }}"
-          echo "list=$PNGS" >> "$GITHUB_OUTPUT"
-
       - name: Post PR comment with previews
-        if: steps.pngs.outputs.list != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const pngs = `${{ steps.pngs.outputs.list }}`.trim().split(/\s+/).filter(Boolean);
-            const branch = `render/${context.payload.pull_request.head.ref}`;
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            let body = '## Rendered Previews\n\n';
-            let lastSong = '';
-            for (const png of pngs) {
-              const parts = png.split('/');
-              const song = parts[parts.length - 2];
-              const verse = parts[parts.length - 1].replace('.png', '');
-              if (song !== lastSong) {
-                body += `### ${song}\n`;
-                lastSong = song;
-              }
-              const pngUrl = `https://github.com/${owner}/${repo}/raw/${branch}/${png}`;
-              body += `**Verse ${verse}**\n![${song} v${verse}](${pngUrl})\n`;
-            }
-            const { data: comments } = await github.rest.issues.listComments({
-              owner, repo, issue_number: context.payload.pull_request.number,
-            });
-            const botComment = comments.find(c =>
-              c.user.type === 'Bot' && c.body.includes('## Rendered Previews')
-            );
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner, repo, comment_id: botComment.id, body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: context.payload.pull_request.number, body,
-              });
-            }
+        if: steps.render.outputs.pngs != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO="${{ github.repository }}"
+          BRANCH="render/${{ github.head_ref }}"
+          PR=${{ github.event.pull_request.number }}
+          BODY=$(echo "${{ steps.render.outputs.pngs }}" | python3 .github/ci_render.py comment --repo "$REPO" --branch "$BRANCH")
+
+          EXISTING=$(gh api "repos/$REPO/issues/$PR/comments" --jq '.[] | select(.user.type == "Bot" and (.body | contains("## Rendered Previews"))) | .id' | head -1)
+          if [ -n "$EXISTING" ]; then
+            gh api "repos/$REPO/issues/comments/$EXISTING" -X PATCH -f body="$BODY"
+          else
+            gh pr comment "$PR" --body "$BODY"
+          fi
 
   cleanup:
     if: github.event.action == 'closed'
