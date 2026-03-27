@@ -14,7 +14,7 @@ melody = \relative c' {
   d2 f4 e4 d4 c4 f4 a4 g4 f4 e2 r2 \break
 
   % Line 4
-  d2 f4 g4 a2 c2 b4 a4 g4 f4 d2( e2) d2 r2 \break
+  d2 f4 g4 a2 c2 b4 a4 g4 f4 d2 e2 d2 r2 \break
 
   % Line 5
   d'2 d4 d4 c2 a2 c4 b4 a4 g4 a2 d,2 r2 \break
