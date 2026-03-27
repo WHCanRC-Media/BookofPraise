@@ -791,33 +791,40 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
     connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, copyright_entry, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn], move |_| {
         {
             let mut s = state.borrow_mut();
-            // Detect if notes were modified (shared across all verses)
-            let notes_changed = if let Some(slide) = s.slides.get(s.current_slide) {
+            // Detect if notes or split style were modified
+            let (notes_changed, split_changed) = if let Some(slide) = s.slides.get(s.current_slide) {
                 let notes_path = slide.song_dir.join("notes.ly");
                 let old = std::fs::read_to_string(&notes_path).unwrap_or_default();
                 let buf = notes_view.buffer();
                 let new = buf.text(&buf.start_iter(), &buf.end_iter(), false);
-                old != new.as_str()
+
+                let old_meta = render_ly::read_song_meta(&slide.song_dir);
+                let new_style_idx = split_style_dropdown.selected() as usize;
+                let new_style = render_ly::SplitStyle::ALL.get(new_style_idx)
+                    .cloned()
+                    .unwrap_or_default();
+                (old != new.as_str(), old_meta.split_style != new_style)
             } else {
-                false
+                (false, false)
             };
 
             save_editor_contents(&mut s, &notes_view, &lyrics_view, &copyright_entry, &split_style_dropdown);
 
-            if let Some(slide) = s.slides.get(s.current_slide) {
-                let song_dir = slide.song_dir.clone();
-                if notes_changed {
-                    // Notes are shared — delete all SVGs in the song dir
-                    // and invalidate all cached slides for this song
+            if notes_changed || split_changed {
+                // Notes or split style changed — part count may differ,
+                // so invalidate and rebuild the slide list.
+                if let Some(slide) = s.slides.get(s.current_slide) {
+                    let song_dir = slide.song_dir.clone();
                     invalidate_song(&mut s, &song_dir);
-                } else {
-                    // Only invalidate current verse/part
-                    let path = slide.path.clone();
-                    let verse = slide.current_verse;
-                    let part = slide.part;
-                    s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
-                    s.render_errors.remove(&(path.clone(), verse, part));
                 }
+                s.rebuild_slides();
+            } else if let Some(slide) = s.slides.get(s.current_slide) {
+                // Only invalidate current verse/part
+                let path = slide.path.clone();
+                let verse = slide.current_verse;
+                let part = slide.part;
+                s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
+                s.render_errors.remove(&(path.clone(), verse, part));
             }
         }
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
@@ -906,30 +913,37 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
             if key == gdk::Key::s && modifiers.contains(gdk::ModifierType::CONTROL_MASK) && editor_panel.is_visible() {
                 {
                     let mut s = state.borrow_mut();
-                    let notes_changed = if let Some(slide) = s.slides.get(s.current_slide) {
+                    let (notes_changed, split_changed) = if let Some(slide) = s.slides.get(s.current_slide) {
                         let notes_path = slide.song_dir.join("notes.ly");
                         let old = std::fs::read_to_string(&notes_path).unwrap_or_default();
                         let buf = notes_view.buffer();
                         let new = buf.text(&buf.start_iter(), &buf.end_iter(), false);
-                        old != new.as_str()
+
+                        let old_meta = render_ly::read_song_meta(&slide.song_dir);
+                        let new_style_idx = split_style_dropdown.selected() as usize;
+                        let new_style = render_ly::SplitStyle::ALL.get(new_style_idx)
+                            .cloned()
+                            .unwrap_or_default();
+                        (old != new.as_str(), old_meta.split_style != new_style)
                     } else {
-                        false
+                        (false, false)
                     };
 
                     save_editor_contents(&mut s, &notes_view, &lyrics_view, &copyright_entry, &split_style_dropdown);
 
-                    if let Some(slide) = s.slides.get(s.current_slide) {
-                        let song_dir = slide.song_dir.clone();
-                        if notes_changed {
+                    if notes_changed || split_changed {
+                        if let Some(slide) = s.slides.get(s.current_slide) {
+                            let song_dir = slide.song_dir.clone();
                             invalidate_song(&mut s, &song_dir);
-                        } else {
-                            let path = slide.path.clone();
-                            let verse = slide.current_verse;
-                            let part = slide.part;
-                            s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
-                            s.render_errors.remove(&(path.clone(), verse, part));
-                            let _ = std::fs::remove_file(&path);
                         }
+                        s.rebuild_slides();
+                    } else if let Some(slide) = s.slides.get(s.current_slide) {
+                        let path = slide.path.clone();
+                        let verse = slide.current_verse;
+                        let part = slide.part;
+                        s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
+                        s.render_errors.remove(&(path.clone(), verse, part));
+                        let _ = std::fs::remove_file(&path);
                     }
                 }
                 refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
