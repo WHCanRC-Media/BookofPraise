@@ -557,8 +557,8 @@ fn split_notes(raw_notes: &str, n_parts: usize) -> Vec<String> {
                 // Last line of this part
                 let mut l = line.clone();
                 if part_idx < n_parts - 1 {
-                    // Not the final part: replace \break with \bar "|."
-                    l = l.replace("\\break", "\\bar \"|.\"");
+                    // Not the final part: just remove the \break, no barline
+                    l = l.replace("\\break", "");
                 }
                 part_body.push_str(&l);
             } else {
@@ -680,10 +680,9 @@ fn modify_notes(notes: &str, force_combine: bool) -> String {
 
     let notes = notes.replacen("\\break", "\\break\n  \\omit Staff.Clef", 1);
 
-    if combined {
-        return notes;
-    }
-
+    // Track which "original" note line we're on so that in combined mode
+    // we only add the starting hidden rest on odd lines (first of each pair).
+    let mut note_line_idx = 0usize;
     notes
         .lines()
         .map(|line| {
@@ -699,8 +698,12 @@ fn modify_notes(notes: &str, force_combine: bool) -> String {
                 return line.to_string();
             }
 
+            let is_odd = note_line_idx % 2 == 0; // 0-indexed: 0,2,4 are odd original lines (1st,3rd,5th)
+            note_line_idx += 1;
+
             let mut out = line.to_string();
-            if !stripped.starts_with('r') {
+            // Add hidden rest at start only for odd lines (or all lines if not combining)
+            if !stripped.starts_with('r') && (!combined || is_odd) {
                 out = out.replacen(stripped, &format!("\\once \\hide Rest r4 {stripped}"), 1);
             }
             if !re_rest_end.is_match(out.trim()) {
@@ -753,7 +756,7 @@ fn max_notes_per_line(raw_notes: &str) -> usize {
 
 /// Assemble a complete LilyPond `.ly` file from notes, lyrics, and an optional
 /// composer credit, ready for rendering.
-fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_width: usize) -> String {
+fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_width_mm: usize) -> String {
     let mut header_items = Vec::new();
     if let Some(c) = composer {
         header_items.push(format!("  composer = \"{c}\""));
@@ -783,8 +786,8 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_wi
         r#"\version "2.24.0"
 
 \paper {{
-  paper-width = {paper_width}\cm
-  line-width = {paper_width}\cm
+  paper-width = {paper_width_mm}\mm
+  line-width = {paper_width_mm}\mm
   left-margin = 0\cm
   right-margin = 0\cm
 }}
@@ -861,18 +864,17 @@ fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
 
         note_parts.iter().zip(lyric_parts.iter()).map(|(notes, lyrics)| {
             let modified = modify_notes(notes, false);
-            let paper_width = max_notes_per_line(&modified) + 2;
+            let paper_width_mm = max_notes_per_line(&modified) * 9 + 20;
             // Only show composer on the first part
             let comp = if notes == &note_parts[0] { meta.composer.as_deref() } else { None };
-            build_combined_ly(&modified, lyrics, comp, paper_width)
+            build_combined_ly(&modified, lyrics, comp, paper_width_mm)
         }).collect()
     } else {
         // Single part: apply modify_notes (combining / hidden rests)
         let force_combine = meta.split_style == SplitStyle::CombineLines;
         let notes_content = modify_notes(&raw_notes, force_combine);
-        let paper_width = max_notes_per_line(&notes_content) + 2;
-        eprintln!("max_notes_per_line={} paper_width={paper_width}", paper_width - 2);
-        vec![build_combined_ly(&notes_content, &raw_lyrics, meta.composer.as_deref(), paper_width)]
+        let paper_width_mm = max_notes_per_line(&notes_content) * 9 + 20;
+        vec![build_combined_ly(&notes_content, &raw_lyrics, meta.composer.as_deref(), paper_width_mm)]
     }
 }
 

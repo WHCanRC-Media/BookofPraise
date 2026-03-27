@@ -11,7 +11,7 @@ use crate::model::{
 };
 use crate::render_ly;
 use crate::rendering::{current_png_path, load_slide_texture, save_current_png, DEFAULT_RENDER_WIDTH};
-use crate::updater::{check_for_update, download_and_extract, email_edits, should_report_hymn_usage, email_hymn_usage};
+use crate::updater::{build_patch, check_for_update, download_and_extract, email_edits, should_report_hymn_usage, email_hymn_usage};
 
 // ── UI helpers ──────────────────────────────────────────────────────
 
@@ -491,6 +491,11 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     split_style_dropdown.set_selected(0);
 
     let save_btn = gtk::Button::with_label("Save & Re-render");
+    let revert_btn = gtk::Button::with_label("Revert");
+
+    let btn_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    btn_row.append(&save_btn);
+    btn_row.append(&revert_btn);
 
     let editor_panel = gtk::Box::new(gtk::Orientation::Vertical, 4);
     editor_panel.set_margin_start(4);
@@ -505,7 +510,7 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     editor_panel.append(&notes_scroll);
     editor_panel.append(&lyrics_label_row);
     editor_panel.append(&lyrics_scroll);
-    editor_panel.append(&save_btn);
+    editor_panel.append(&btn_row);
     editor_panel.set_visible(false);
     editor_panel.set_hexpand(true);
 
@@ -818,6 +823,32 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
     });
 
+    // Revert to original files from snapshot
+    connect!(revert_btn, connect_clicked, [state, notes_view, lyrics_view, lyrics_label, copyright_entry, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn], move |_| {
+        {
+            let mut s = state.borrow_mut();
+            if let Some(slide) = s.slides.get(s.current_slide) {
+                let song_dir = slide.song_dir.clone();
+                if let Some(ref tmp) = s.originals_dir {
+                    let dir_name = song_dir.file_name().unwrap_or_default();
+                    let snap_dir = tmp.path().join(dir_name);
+                    if snap_dir.exists() {
+                        // Copy original files back
+                        if let Ok(entries) = std::fs::read_dir(&snap_dir) {
+                            for entry in entries.flatten() {
+                                let name = entry.file_name();
+                                let _ = std::fs::copy(entry.path(), song_dir.join(&name));
+                            }
+                        }
+                        invalidate_song(&mut s, &song_dir);
+                    }
+                }
+            }
+            load_editor_contents(&s, &notes_view, &lyrics_view, &lyrics_label, &copyright_entry, &split_style_dropdown);
+        }
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+    });
+
     // SVG/PNG toggle
     connect!(svg_switch, connect_active_notify, [state, picture, nav_label, spinner, error_label, verify_btn, liturgy_label, number_entry, verse_box, edit_btn, editor_panel], move |sw| {
         state.borrow_mut().set_use_svg(sw.is_active());
@@ -935,7 +966,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
             let edited = s.edited_song_dirs.clone();
             let originals_path = s.originals_dir.as_ref().map(|td| td.path().to_path_buf());
             drop(s);
-            if edited.is_empty() {
+            if edited.is_empty() || build_patch(&edited, originals_path.as_deref()).is_empty() {
                 return glib::Propagation::Proceed;
             }
 

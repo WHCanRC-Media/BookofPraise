@@ -147,7 +147,7 @@ fn diff_file(rel_path: &str, old: &str, new: &str) -> String {
 
 /// Build a unified diff patch comparing current files against originals in the
 /// temp snapshot directory.
-fn build_patch(edited_dirs: &HashSet<PathBuf>, originals_dir: Option<&Path>) -> String {
+pub fn build_patch(edited_dirs: &HashSet<PathBuf>, originals_dir: Option<&Path>) -> String {
     let mut patch = String::new();
     for dir in edited_dirs {
         let dir_name = dir.file_name().unwrap_or_default().to_string_lossy();
