@@ -103,7 +103,7 @@ jobs:
                 lastSong = song;
               }
               const pngUrl = `https://github.com/${owner}/${repo}/raw/${branch}/${png}`;
-              body += `![${song} v${verse}](${pngUrl})\n`;
+              body += `**Verse ${verse}**\n![${song} v${verse}](${pngUrl})\n`;
             }
             const { data: comments } = await github.rest.issues.listComments({
               owner, repo, issue_number: context.payload.pull_request.number,
