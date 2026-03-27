@@ -1,0 +1,124 @@
+name: Render and Cleanup
+
+on:
+  pull_request:
+    types: [opened, synchronize, closed]
+    paths:
+      - 'lilypond/**'
+
+jobs:
+  render:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install LilyPond and rsvg-convert
+        run: sudo apt-get update && sudo apt-get install -y lilypond librsvg2-bin
+
+      - name: Determine changed song dirs
+        id: changed
+        run: |
+          DIRS=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...HEAD -- lilypond/ \
+            | sed 's|/[^/]*$||' | sort -u)
+          echo "dirs<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$DIRS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Render changed songs
+        run: |
+          while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
+            song=$(basename "$dir")
+            echo "Rendering $song..."
+            python3 png2ly/render_ly.py --psalm "$song" || true
+          done <<< "${{ steps.changed.outputs.dirs }}"
+
+      - name: Convert SVGs to PNGs
+        run: |
+          while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
+            for svg in "$dir"/*.svg; do
+              [ -f "$svg" ] || continue
+              png="${svg%.svg}.png"
+              rsvg-convert "$svg" -o "$png"
+            done
+          done <<< "${{ steps.changed.outputs.dirs }}"
+
+      - name: Create render branch and commit images
+        run: |
+          RENDER_BRANCH="render/${{ github.head_ref }}"
+          git checkout -b "$RENDER_BRANCH"
+          while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
+            git add "$dir"/*.svg "$dir"/*.png 2>/dev/null || true
+          done <<< "${{ steps.changed.outputs.dirs }}"
+          if git diff --cached --quiet; then
+            echo "No rendered files to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Render song previews for PR #${{ github.event.pull_request.number }}"
+          git push origin "$RENDER_BRANCH" --force
+
+      - name: Post PR comment with previews
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const dirs = `${{ steps.changed.outputs.dirs }}`.trim().split('\n').filter(Boolean);
+            const branch = `render/${context.payload.pull_request.head.ref}`;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            let body = '## Rendered Previews\n\n';
+            for (const dir of dirs) {
+              const song = dir.split('/').pop();
+              body += `### ${song}\n`;
+              // Show up to 6 verses
+              for (let v = 1; v <= 6; v++) {
+                const pngUrl = `https://github.com/${owner}/${repo}/raw/${branch}/${dir}/${v}.png`;
+                body += `![${song} v${v}](${pngUrl})\n`;
+              }
+              body += '\n';
+            }
+            // Find and update existing bot comment, or create new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number: context.payload.pull_request.number,
+            });
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('## Rendered Previews')
+            );
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: botComment.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: context.payload.pull_request.number, body,
+              });
+            }
+
+  cleanup:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete PR head branch
+        uses: dawidd6/action-delete-branch@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branches: ${{ github.head_ref }}
+
+      - name: Delete render branch
+        uses: dawidd6/action-delete-branch@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branches: render/${{ github.head_ref }}

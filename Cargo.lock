@@ -163,6 +163,7 @@ dependencies = [
 name = "bop"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "clap",
  "gtk4",
  "image",

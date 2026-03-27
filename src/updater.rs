@@ -1,7 +1,8 @@
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use base64::Engine as _;
 use lettre::message::{header::ContentType, Attachment, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
@@ -112,16 +113,35 @@ pub fn download_and_extract(zipball_url: &str, tag: &str) -> Result<(), String> 
     Ok(())
 }
 
-// ── Email edits as patch ────────────────────────────────────────────
+// ── GitHub API helpers ───────────────────────────────────────────────
 
-const SMTP_HOST: &str = "smtp.purelymail.com";
-const SMTP_USER: &str = "bopnotifications@microridge.ca";
-const SMTP_PASS: &str = "s^]Xd;?@_5UW;MW";
-const NOTIFY_TO: &str = "joelvandergriendt@microridge.ca";
+fn github_api_get(endpoint: &str) -> Result<serde_json::Value, String> {
+    let url = format!("https://api.github.com{endpoint}");
+    let resp = ureq::get(&url)
+        .set("Authorization", &format!("Bearer {GITHUB_PAT}"))
+        .set("Accept", "application/vnd.github+json")
+        .set("User-Agent", "bop-rustapp")
+        .call()
+        .map_err(|e| format!("GET {endpoint}: {e}"))?;
+    resp.into_json().map_err(|e| format!("JSON parse: {e}"))
+}
+
+fn github_api_post(endpoint: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let url = format!("https://api.github.com{endpoint}");
+    let resp = ureq::post(&url)
+        .set("Authorization", &format!("Bearer {GITHUB_PAT}"))
+        .set("Accept", "application/vnd.github+json")
+        .set("User-Agent", "bop-rustapp")
+        .send_json(body)
+        .map_err(|e| format!("POST {endpoint}: {e}"))?;
+    resp.into_json().map_err(|e| format!("JSON parse: {e}"))
+}
+
+// ── Collect edited files for PR ─────────────────────────────────────
 
 /// Read patchable files (.ly, song.yaml) from a directory into a map of name → content.
-fn read_patchable_files(dir: &Path) -> std::collections::HashMap<String, String> {
-    let mut files = std::collections::HashMap::new();
+fn read_patchable_files(dir: &Path) -> HashMap<String, String> {
+    let mut files = HashMap::new();
     let Ok(entries) = std::fs::read_dir(dir) else { return files };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
@@ -175,47 +195,154 @@ pub fn build_patch(edited_dirs: &HashSet<PathBuf>, originals_dir: Option<&Path>)
     patch
 }
 
-/// Send an email with a unified diff patch of edited files.
-pub fn email_edits(
-    edited_dirs: &HashSet<PathBuf>,
-    originals_dir: Option<&Path>,
-) -> Result<(), String> {
-    let patch = build_patch(edited_dirs, originals_dir);
-    if patch.is_empty() {
-        return Ok(());
+/// Collect all current patchable files from edited dirs as repo-relative path → content.
+/// E.g. `lilypond/psalm42/notes.ly` → file contents.
+pub fn collect_pr_files(edited_dirs: &HashSet<PathBuf>) -> HashMap<String, String> {
+    let mut files = HashMap::new();
+    for dir in edited_dirs {
+        let dir_name = dir.file_name().unwrap_or_default().to_string_lossy().to_string();
+        // Find the parent component that is "lilypond" to build repo-relative path
+        let repo_prefix = dir
+            .ancestors()
+            .find(|a| a.file_name().is_some_and(|n| n == "lilypond"))
+            .map(|_| format!("lilypond/{dir_name}"))
+            .unwrap_or(dir_name.clone());
+
+        for (name, content) in read_patchable_files(dir) {
+            files.insert(format!("{repo_prefix}/{name}"), content);
+        }
+    }
+    files
+}
+
+/// Generate a timestamp-based branch name like `bop-edit/20260326-143052`.
+pub fn generate_branch_name() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let days = secs / 86400;
+    let (year, month, day) = crate::model::epoch_days_to_date(days);
+    let day_secs = secs % 86400;
+    let h = day_secs / 3600;
+    let m = (day_secs % 3600) / 60;
+    let s = day_secs % 60;
+    format!("bop-edit/{year:04}{month:02}{day:02}-{h:02}{m:02}{s:02}")
+}
+
+// ── Create PR with files via Git Data API ───────────────────────────
+
+/// Create a GitHub Pull Request with all given files in a single commit.
+/// Returns the PR URL on success.
+pub fn create_pr_with_files(
+    base_branch: &str,
+    new_branch: &str,
+    files: &HashMap<String, String>,
+    title: &str,
+    body: &str,
+) -> Result<String, String> {
+    if files.is_empty() {
+        return Err("No files to commit".into());
     }
 
-    let dir_names: Vec<String> = edited_dirs
-        .iter()
-        .filter_map(|d| d.file_name().map(|n| n.to_string_lossy().to_string()))
-        .collect();
-    let subject = format!("BOP edits: {}", dir_names.join(", "));
+    let repo = GITHUB_REPO;
 
-    let attachment = Attachment::new("edits.patch".to_string())
-        .body(patch, ContentType::TEXT_PLAIN);
+    // Step 1: Get base branch HEAD SHA
+    let ref_json = github_api_get(&format!("/repos/{repo}/git/ref/heads/{base_branch}"))?;
+    let base_sha = ref_json["object"]["sha"]
+        .as_str()
+        .ok_or("Missing base ref SHA")?
+        .to_string();
 
-    let email = Message::builder()
-        .from(SMTP_USER.parse().map_err(|e| format!("From address error: {e}"))?)
-        .to(NOTIFY_TO.parse().map_err(|e| format!("To address error: {e}"))?)
-        .subject(subject)
-        .multipart(
-            MultiPart::mixed()
-                .singlepart(SinglePart::plain("Lilypond edits from Book of Praise app.".to_string()))
-                .singlepart(attachment),
-        )
-        .map_err(|e| format!("Email build error: {e}"))?;
+    // Step 2: Get base commit's tree SHA
+    let commit_json = github_api_get(&format!("/repos/{repo}/git/commits/{base_sha}"))?;
+    let base_tree_sha = commit_json["tree"]["sha"]
+        .as_str()
+        .ok_or("Missing base tree SHA")?
+        .to_string();
 
-    let creds = Credentials::new(SMTP_USER.to_string(), SMTP_PASS.to_string());
-    let mailer = SmtpTransport::starttls_relay(SMTP_HOST)
-        .map_err(|e| format!("SMTP relay error: {e}"))?
-        .credentials(creds)
-        .build();
+    // Step 3: Create blobs for each file
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let mut tree_entries = Vec::new();
+    for (path, content) in files {
+        let blob_json = github_api_post(
+            &format!("/repos/{repo}/git/blobs"),
+            &serde_json::json!({
+                "content": b64.encode(content.as_bytes()),
+                "encoding": "base64"
+            }),
+        )?;
+        let blob_sha = blob_json["sha"]
+            .as_str()
+            .ok_or_else(|| format!("Missing blob SHA for {path}"))?
+            .to_string();
+        tree_entries.push(serde_json::json!({
+            "path": path,
+            "mode": "100644",
+            "type": "blob",
+            "sha": blob_sha
+        }));
+    }
 
-    mailer.send(&email).map_err(|e| format!("Send error: {e}"))?;
-    Ok(())
+    // Step 4: Create tree
+    let tree_json = github_api_post(
+        &format!("/repos/{repo}/git/trees"),
+        &serde_json::json!({
+            "base_tree": base_tree_sha,
+            "tree": tree_entries
+        }),
+    )?;
+    let new_tree_sha = tree_json["sha"]
+        .as_str()
+        .ok_or("Missing new tree SHA")?
+        .to_string();
+
+    // Step 5: Create commit
+    let commit_json = github_api_post(
+        &format!("/repos/{repo}/git/commits"),
+        &serde_json::json!({
+            "message": title,
+            "tree": new_tree_sha,
+            "parents": [base_sha]
+        }),
+    )?;
+    let new_commit_sha = commit_json["sha"]
+        .as_str()
+        .ok_or("Missing new commit SHA")?
+        .to_string();
+
+    // Step 6: Create branch reference
+    github_api_post(
+        &format!("/repos/{repo}/git/refs"),
+        &serde_json::json!({
+            "ref": format!("refs/heads/{new_branch}"),
+            "sha": new_commit_sha
+        }),
+    )?;
+
+    // Step 7: Create Pull Request
+    let pr_json = github_api_post(
+        &format!("/repos/{repo}/pulls"),
+        &serde_json::json!({
+            "title": title,
+            "body": body,
+            "head": new_branch,
+            "base": base_branch
+        }),
+    )?;
+    let pr_url = pr_json["html_url"]
+        .as_str()
+        .ok_or("Missing PR URL")?
+        .to_string();
+
+    Ok(pr_url)
 }
 
 // ── Hymn usage reporting ────────────────────────────────────────────
+
+const SMTP_HOST: &str = "smtp.purelymail.com";
+const SMTP_USER: &str = "bopnotifications@microridge.ca";
+const SMTP_PASS: &str = "s^]Xd;?@_5UW;MW";
 
 /// Return the path to the hymn usage file.
 pub fn hymn_usage_path() -> PathBuf {

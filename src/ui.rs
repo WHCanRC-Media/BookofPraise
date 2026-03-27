@@ -11,7 +11,7 @@ use crate::model::{
 };
 use crate::render_ly;
 use crate::rendering::{current_png_path, load_slide_texture, save_current_png, DEFAULT_RENDER_WIDTH};
-use crate::updater::{build_patch, check_for_update, download_and_extract, email_edits, should_report_hymn_usage, email_hymn_usage};
+use crate::updater::{build_patch, check_for_update, collect_pr_files, create_pr_with_files, download_and_extract, generate_branch_name, should_report_hymn_usage, email_hymn_usage};
 
 // ── UI helpers ──────────────────────────────────────────────────────
 
@@ -958,7 +958,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         window.add_controller(kc);
     }
 
-    // ── Offer to email edits on close ──
+    // ── Offer to submit edits as PR on close ──
     {
         let state = state.clone();
         window.connect_close_request(move |win| {
@@ -975,14 +975,23 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                 gtk::DialogFlags::MODAL,
                 gtk::MessageType::Question,
                 gtk::ButtonsType::YesNo,
-                "You made edits this session. Email a patch to the author?",
+                "You made edits this session. Submit as a Pull Request?",
             );
             let win = win.clone();
             dialog.connect_response(move |dlg, resp| {
                 dlg.close();
                 if resp == gtk::ResponseType::Yes {
-                    if let Err(e) = email_edits(&edited, originals_path.as_deref()) {
-                        eprintln!("Failed to send email: {e}");
+                    let files = collect_pr_files(&edited);
+                    let branch = generate_branch_name();
+                    let dir_names: Vec<String> = edited
+                        .iter()
+                        .filter_map(|d| d.file_name().map(|n| n.to_string_lossy().to_string()))
+                        .collect();
+                    let title = format!("BOP edits: {}", dir_names.join(", "));
+                    let body = "Edits from the Book of Praise application.".to_string();
+                    match create_pr_with_files("master", &branch, &files, &title, &body) {
+                        Ok(url) => eprintln!("PR created: {url}"),
+                        Err(e) => eprintln!("Failed to create PR: {e}"),
                     }
                 }
                 win.destroy();

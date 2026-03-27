@@ -16,6 +16,7 @@ serde_yaml = "0.9"
 tempfile = "3"
 similar = "2"
 zip = "2"
+base64 = "0.22"
 lettre = { version = "0.11", features = ["builder", "rustls-tls", "smtp-transport"] }
 
 [features]
