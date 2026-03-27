@@ -89,9 +89,9 @@ jobs:
         run: sudo gem install asciidoctor-pdf --no-document
 
       - name: Build user guide PDF
-        run: asciidoctor-pdf doc/userguide.adoc -o userguide.pdf
+        run: asciidoctor-pdf doc/userguide.adoc -o BookOfPraise-UserGuide.pdf
 
       - uses: actions/upload-artifact@v4
         with:
           name: userguide
-          path: userguide.pdf
+          path: BookOfPraise-UserGuide.pdf

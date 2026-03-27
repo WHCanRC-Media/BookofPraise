@@ -975,7 +975,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                 gtk::DialogFlags::MODAL,
                 gtk::MessageType::Question,
                 gtk::ButtonsType::YesNo,
-                "You made edits this session. Submit as a Pull Request?",
+                "You made edits this session. Submit your corrections for review?",
             );
             let win = win.clone();
             dialog.connect_response(move |dlg, resp| {

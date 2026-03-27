@@ -76,7 +76,7 @@ jobs:
           gh release create "${{ needs.tag.outputs.tag }}" \
             bop-linux.zip \
             bop-windows.zip \
-            userguide.pdf \
+            BookOfPraise-UserGuide.pdf \
             --target ${{ github.sha }} \
             --title "${{ needs.tag.outputs.tag }}" \
             --notes "Release ${{ needs.tag.outputs.tag }}"
