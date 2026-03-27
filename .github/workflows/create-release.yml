@@ -2,14 +2,41 @@ name: Create Release
 
 on:
   workflow_dispatch:
-  push:
-    branches: [master]
+  schedule:
+    - cron: '0 6 * * *'  # daily at 06:00 UTC
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.check.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes since last release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "")
+          if [ -z "$LATEST" ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          elif [ "$(git rev-list "$LATEST"..HEAD --count)" -gt 0 ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: check
+    if: needs.check.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/build.yml
 
   tag:
+    needs: check
+    if: needs.check.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
