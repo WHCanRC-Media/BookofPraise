@@ -205,12 +205,14 @@ def process_verse(args):
         with open(lyrics_path, "w") as f:
             f.write(build_lyrics_ly(lyrics))
 
-        # Read composer
+        # Read composer from song.yaml
         composer = None
-        composer_path = os.path.join(out_dir, "composer.txt")
-        if os.path.exists(composer_path):
-            with open(composer_path) as f:
-                composer = f.read().strip()
+        yaml_path = os.path.join(out_dir, "song.yaml")
+        if os.path.exists(yaml_path):
+            import yaml
+            with open(yaml_path) as f:
+                meta = yaml.safe_load(f) or {}
+            composer = meta.get("composer")
 
         # Render SVG
         svg_path = os.path.join(out_dir, f"{verse_num}.svg")

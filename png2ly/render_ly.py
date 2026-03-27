@@ -28,18 +28,28 @@ def _extract_line_contents(notes_content):
 def modify_notes(notes_content):
     """Apply visual adjustments to notes content for rendering.
 
+    - Inject accidentalStyle forget if no barlines
     - Hide clef after first line
     - Add hidden rests at start/end of lines for alignment
     """
+    # If no standalone | barline separators, inject accidentalStyle forget
+    has_barlines = any(
+        "|" in tok
+        for line in notes_content.splitlines()
+        if not line.strip().startswith("%")
+        for tok in line.split()
+        if tok == "|"
+    )
+    if not has_barlines:
+        notes_content = notes_content.replace(
+            "\\cadenzaOn", "\\cadenzaOn\n  \\accidentalStyle forget", 1
+        )
+
     # Hide clef after first line
     notes_content = notes_content.replace(
         "\\break", "\\break\n  \\omit Staff.Clef", 1
     )
 
-    # Check if any line starts/ends with a rest
-    line_contents = _extract_line_contents(notes_content)
-
-    first_note_line = True
     new_lines = []
     for segment in notes_content.split("\n"):
         stripped = segment.strip()
@@ -53,14 +63,12 @@ def modify_notes(notes_content):
         if not re.search(r"[a-g](is|es)?[',]*[0-9]", stripped):
             new_lines.append(segment)
             continue
-        # Add hidden rest at start (skip first line)
-        if first_note_line:
-            first_note_line = False
-        elif not stripped.startswith("r"):
+        # Add hidden rest at start
+        if not stripped.startswith("r"):
             segment = segment.replace(stripped, "\\once \\hide Rest r4 " + stripped, 1)
             stripped = "\\once \\hide Rest r4 " + stripped
-        # Add hidden rest at end if needed
-        if not re.search(r'r[12]\s*(\\break|\\bar)', stripped):
+        # Add hidden rest at end if needed (match any rest duration, not just r1/r2)
+        if not re.search(r'r[0-9]+\.?\s*(\\break|\\bar)', stripped):
             segment = re.sub(r'(\s*\\break|\s*\\bar)', r' \\once \\hide Rest r2\1', segment, count=1)
         new_lines.append(segment)
     notes_content = "\n".join(new_lines)
@@ -132,7 +140,7 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
         len(re.findall(r"[a-gr](is|es)?[',]*\d", line))
         for line in line_contents
     ) if line_contents else 8
-    paper_width = max_notes + 2
+    paper_width_mm = max_notes * 9 + 20
 
     notes_content = modify_notes(notes_content)
 
@@ -157,8 +165,8 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
     combined = f"""\\version "2.24.0"
 
 \\paper {{
-  paper-width = {paper_width}\\cm
-  line-width = {paper_width}\\cm
+  paper-width = {paper_width_mm}\\mm
+  line-width = {paper_width_mm}\\mm
   left-margin = 0\\cm
   right-margin = 0\\cm
 }}
@@ -177,8 +185,13 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None):
   \\layout {{
     indent = 0
     \\context {{
+      \\Score
+      \\override SpacingSpanner.uniform-stretching = ##t
+      \\override SpacingSpanner.strict-note-spacing = ##t
+    }}
+    \\context {{
       \\Lyrics
-      \\override LyricText.self-alignment-X = #CENTER
+      \\override LyricText.self-alignment-X = #LEFT
     }}
   }}
 }}
@@ -230,10 +243,12 @@ def _render_one(args):
     svg_path = os.path.join(psalm_dir, f"{verse_num}.svg")
 
     composer = None
-    composer_path = os.path.join(psalm_dir, "composer.txt")
-    if os.path.exists(composer_path):
-        with open(composer_path) as f:
-            composer = f.read().strip()
+    yaml_path = os.path.join(psalm_dir, "song.yaml")
+    if os.path.exists(yaml_path):
+        import yaml
+        with open(yaml_path) as f:
+            meta = yaml.safe_load(f) or {}
+        composer = meta.get("composer")
 
     ok = render_svg(notes_path, lyrics_path, svg_path, composer=composer)
     return (f"{psalm_name} v{verse_num}", "OK" if ok else "FAILED")
