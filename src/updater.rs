@@ -8,8 +8,8 @@ use lettre::{Message, SmtpTransport, Transport};
 
 use crate::model::base_dir;
 
-pub const GITHUB_REPO: &str = "vanjoe/bookOfPraise";
-pub const GITHUB_PAT: &str = "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";
+pub const GITHUB_REPO: &str = "WHCanRC-Media/BookofPraise";
+pub const GITHUB_PAT: &str = "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";
 const VERSION_FILE: &str = "lilypond_version.txt";
 
 /// Read the locally stored version tag from `lilypond_version.txt`.
