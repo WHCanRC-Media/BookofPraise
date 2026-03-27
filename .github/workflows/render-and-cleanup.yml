@@ -58,7 +58,7 @@ jobs:
           git checkout -b "$RENDER_BRANCH"
           while IFS= read -r dir; do
             [ -z "$dir" ] && continue
-            git add "$dir"/*.svg "$dir"/*.png 2>/dev/null || true
+            git add -f "$dir"/*.svg "$dir"/*.png 2>/dev/null || true
           done <<< "${{ steps.changed.outputs.dirs }}"
           if git diff --cached --quiet; then
             echo "No rendered files to commit"
@@ -69,26 +69,42 @@ jobs:
           git commit -m "Render song previews for PR #${{ github.event.pull_request.number }}"
           git push origin "$RENDER_BRANCH" --force
 
+      - name: Collect rendered PNGs
+        id: pngs
+        run: |
+          PNGS=""
+          while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
+            for png in "$dir"/*.png; do
+              [ -f "$png" ] || continue
+              PNGS="$PNGS $png"
+            done
+          done <<< "${{ steps.changed.outputs.dirs }}"
+          echo "list=$PNGS" >> "$GITHUB_OUTPUT"
+
       - name: Post PR comment with previews
+        if: steps.pngs.outputs.list != ''
         uses: actions/github-script@v7
         with:
           script: |
-            const dirs = `${{ steps.changed.outputs.dirs }}`.trim().split('\n').filter(Boolean);
+            const fs = require('fs');
+            const pngs = `${{ steps.pngs.outputs.list }}`.trim().split(/\s+/).filter(Boolean);
             const branch = `render/${context.payload.pull_request.head.ref}`;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             let body = '## Rendered Previews\n\n';
-            for (const dir of dirs) {
-              const song = dir.split('/').pop();
-              body += `### ${song}\n`;
-              // Show up to 6 verses
-              for (let v = 1; v <= 6; v++) {
-                const pngUrl = `https://github.com/${owner}/${repo}/raw/${branch}/${dir}/${v}.png`;
-                body += `![${song} v${v}](${pngUrl})\n`;
+            let lastSong = '';
+            for (const png of pngs) {
+              const parts = png.split('/');
+              const song = parts[parts.length - 2];
+              const verse = parts[parts.length - 1].replace('.png', '');
+              if (song !== lastSong) {
+                body += `### ${song}\n`;
+                lastSong = song;
               }
-              body += '\n';
+              const pngUrl = `https://github.com/${owner}/${repo}/raw/${branch}/${png}`;
+              body += `![${song} v${verse}](${pngUrl})\n`;
             }
-            // Find and update existing bot comment, or create new one
             const { data: comments } = await github.rest.issues.listComments({
               owner, repo, issue_number: context.payload.pull_request.number,
             });
