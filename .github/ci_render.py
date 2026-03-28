@@ -39,6 +39,7 @@ def cmd_render(args):
         subprocess.run(
             [sys.executable, render_ly, "--psalm", song],
             check=False,
+            stdout=sys.stderr,
         )
 
         for svg in sorted(
@@ -63,7 +64,7 @@ def cmd_render(args):
 
 def cmd_comment(args):
     """Generate markdown PR comment body from a list of PNG paths."""
-    pngs = [line.strip() for line in sys.stdin if line.strip()]
+    pngs = [line.strip() for line in sys.stdin if line.strip().endswith(".png")]
     if not pngs:
         return
 
