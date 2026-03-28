@@ -1,2 +1,6 @@
 composer: George Job Elvey, 1858
-split_style: default
+split_style: combine lines
+verified:
+  1: 1
+  4: 1
+  2: 1
