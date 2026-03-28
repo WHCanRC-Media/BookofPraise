@@ -1,6 +1,6 @@
 verse = \lyricmode {
   All this world is God's own field,
-fruit un -- to his praise to \"yield –\"
+fruit un -- to his praise to "yield –"
 wheat and tares, to -- geth -- er sown,
 un -- to joy or sor -- row grown;
 first the blade and then the ear,

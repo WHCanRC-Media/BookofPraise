@@ -1,2 +1,9 @@
-composer: There is no composer or tune attribution text visible in this image. The image contains only the musical notation and lyrics, with no attribution in the top right corner or elsewhere.
-split_style: default
+composer: Strasbourg, 1539 / Geneva, 1551
+split_style: combine lines
+verified:
+  6: 1
+  7: 1
+  2: 1
+  5: 1
+  1: 1
+  3: 1
