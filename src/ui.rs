@@ -1017,6 +1017,168 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
 
     window.present();
 
+    // Closure for dialogs that should only appear after LilyPond is confirmed
+    // available, so that multiple modal dialogs don't stack on top of each other.
+    let run_post_lilypond_dialogs: Rc<dyn Fn()> = {
+        let window = window.clone();
+        let state = state.clone();
+        let picture = picture.clone();
+        let nav_label = nav_label.clone();
+        let spinner = spinner.clone();
+        let error_label = error_label.clone();
+        let verify_btn = verify_btn.clone();
+        let cli_update = cli.update;
+        Rc::new(move || {
+            // Closure for the update check, called after the hymn dialog (if any) is dismissed.
+            let run_update_check: Rc<dyn Fn()> = {
+                let window = window.clone();
+                let state = state.clone();
+                let picture = picture.clone();
+                let nav_label = nav_label.clone();
+                let spinner = spinner.clone();
+                let error_label = error_label.clone();
+                let verify_btn = verify_btn.clone();
+                Rc::new(move || {
+                    if !cli_update { return; }
+                    let window = window.clone();
+                    let state = state.clone();
+                    let picture = picture.clone();
+                    let nav_label = nav_label.clone();
+                    let spinner = spinner.clone();
+                    let error_label = error_label.clone();
+                    let verify_btn = verify_btn.clone();
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    std::thread::spawn(move || {
+                        let _ = tx.send(check_for_update());
+                    });
+                    glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
+                        match rx.try_recv() {
+                            Ok(Ok(Some((tag, asset_url)))) => {
+                                let dialog = gtk::MessageDialog::new(
+                                    Some(&window),
+                                    gtk::DialogFlags::MODAL,
+                                    gtk::MessageType::Question,
+                                    gtk::ButtonsType::YesNo,
+                                    &format!("Song data update available: {tag}\nDownload and install?"),
+                                );
+                                let window2 = window.clone();
+                                let state2 = state.clone();
+                                let picture2 = picture.clone();
+                                let nav_label2 = nav_label.clone();
+                                let spinner2 = spinner.clone();
+                                let error_label2 = error_label.clone();
+                                let verify_btn2 = verify_btn.clone();
+                                let asset_url = Rc::new(asset_url);
+                                dialog.connect_response(move |dlg, resp| {
+                                    dlg.close();
+                                    if resp == gtk::ResponseType::Yes {
+                                        let asset_url = (*asset_url).clone();
+                                        let progress = gtk::MessageDialog::new(
+                                            Some(&window2),
+                                            gtk::DialogFlags::MODAL,
+                                            gtk::MessageType::Info,
+                                            gtk::ButtonsType::None,
+                                            "Downloading update...",
+                                        );
+                                        progress.show();
+
+                                        let tag2 = tag.clone();
+                                        let (tx2, rx2) = std::sync::mpsc::channel();
+                                        std::thread::spawn(move || {
+                                            let _ = tx2.send(download_and_extract(&asset_url, &tag2));
+                                        });
+
+                                        let state3 = state2.clone();
+                                        let picture3 = picture2.clone();
+                                        let nav_label3 = nav_label2.clone();
+                                        let spinner3 = spinner2.clone();
+                                        let error_label3 = error_label2.clone();
+                                        let verify_btn3 = verify_btn2.clone();
+                                        glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
+                                            match rx2.try_recv() {
+                                                Ok(Ok(())) => {
+                                                    progress.close();
+                                                    {
+                                                        let mut s = state3.borrow_mut();
+                                                        s.library = SongLibrary::scan(&s.songs_dir);
+                                                        s.texture_cache.clear();
+                                                        s.render_errors.clear();
+                                                        s.rebuild_slides();
+                                                    }
+                                                    refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3);
+                                                    glib::ControlFlow::Break
+                                                }
+                                                Ok(Err(e)) => {
+                                                    progress.close();
+                                                    eprintln!("Update failed: {e}");
+                                                    glib::ControlFlow::Break
+                                                }
+                                                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                                                Err(_) => { progress.close(); glib::ControlFlow::Break }
+                                            }
+                                        });
+                                    }
+                                });
+                                dialog.show();
+                                glib::ControlFlow::Break
+                            }
+                            Ok(_) => glib::ControlFlow::Break,
+                            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                            Err(_) => glib::ControlFlow::Break,
+                        }
+                    });
+                })
+            };
+
+            // ── Hymn usage report (new year) ──
+            if should_report_hymn_usage() {
+                let dialog = gtk::Dialog::with_buttons(
+                    Some("Hymn Usage Report"),
+                    Some(&window),
+                    gtk::DialogFlags::MODAL,
+                    &[("Send", gtk::ResponseType::Accept), ("Skip", gtk::ResponseType::Cancel)],
+                );
+                let content = dialog.content_area();
+                content.set_spacing(8);
+                content.set_margin_start(12);
+                content.set_margin_end(12);
+                content.set_margin_top(12);
+                content.set_margin_bottom(12);
+
+                let label = gtk::Label::new(Some(
+                    "It\u{2019}s a new year. Would you like to email last year\u{2019}s hymn usage report?",
+                ));
+                label.set_wrap(true);
+                content.append(&label);
+
+                let entry_box = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                let email_label = gtk::Label::new(Some("Email:"));
+                let email_entry = gtk::Entry::new();
+                email_entry.set_hexpand(true);
+                email_entry.set_placeholder_text(Some("recipient@example.com"));
+                entry_box.append(&email_label);
+                entry_box.append(&email_entry);
+                content.append(&entry_box);
+
+                dialog.connect_response(move |dlg, resp| {
+                    dlg.close();
+                    if resp == gtk::ResponseType::Accept {
+                        let addr = email_entry.text().to_string();
+                        if !addr.is_empty() {
+                            if let Err(e) = email_hymn_usage(&addr) {
+                                eprintln!("Failed to send hymn usage report: {e}");
+                            }
+                        }
+                    }
+                    run_update_check();
+                });
+                dialog.show();
+            } else {
+                run_update_check();
+            }
+        })
+    };
+
     // ── Ensure LilyPond is available ──
     if !render_ly::lilypond_available() {
         let dialog = gtk::MessageDialog::new(
@@ -1052,12 +1214,14 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                 let spinner3 = spinner2.clone();
                 let error_label3 = error_label2.clone();
                 let verify_btn3 = verify_btn2.clone();
+                let post_dialogs = run_post_lilypond_dialogs.clone();
                 glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
                     match rx.try_recv() {
                         Ok(Ok(())) => {
                             dlg2.hide();
                             dlg2.destroy();
                             refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3);
+                            post_dialogs();
                             glib::ControlFlow::Break
                         }
                         Ok(Err(e)) => {
@@ -1075,142 +1239,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
             }
         });
         dialog.show();
-    }
-
-    // ── Hymn usage report (new year) ──
-    if should_report_hymn_usage() {
-        let dialog = gtk::Dialog::with_buttons(
-            Some("Hymn Usage Report"),
-            Some(&window),
-            gtk::DialogFlags::MODAL,
-            &[("Send", gtk::ResponseType::Accept), ("Skip", gtk::ResponseType::Cancel)],
-        );
-        let content = dialog.content_area();
-        content.set_spacing(8);
-        content.set_margin_start(12);
-        content.set_margin_end(12);
-        content.set_margin_top(12);
-        content.set_margin_bottom(12);
-
-        let label = gtk::Label::new(Some(
-            "It's a new year. Would you like to email last year's hymn usage report?",
-        ));
-        label.set_wrap(true);
-        content.append(&label);
-
-        let entry_box = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        let email_label = gtk::Label::new(Some("Email:"));
-        let email_entry = gtk::Entry::new();
-        email_entry.set_hexpand(true);
-        email_entry.set_placeholder_text(Some("recipient@example.com"));
-        entry_box.append(&email_label);
-        entry_box.append(&email_entry);
-        content.append(&entry_box);
-
-        dialog.connect_response(move |dlg, resp| {
-            dlg.close();
-            if resp == gtk::ResponseType::Accept {
-                let addr = email_entry.text().to_string();
-                if !addr.is_empty() {
-                    if let Err(e) = email_hymn_usage(&addr) {
-                        eprintln!("Failed to send hymn usage report: {e}");
-                    }
-                }
-            }
-        });
-        dialog.show();
-    }
-
-    // ── Startup update check ──
-    if cli.update {
-        let window = window.clone();
-        let state = state.clone();
-        let picture = picture.clone();
-        let nav_label = nav_label.clone();
-        let spinner = spinner.clone();
-        let error_label = error_label.clone();
-        let verify_btn = verify_btn.clone();
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(check_for_update());
-        });
-        glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
-            match rx.try_recv() {
-                Ok(Ok(Some((tag, asset_url)))) => {
-                    let dialog = gtk::MessageDialog::new(
-                        Some(&window),
-                        gtk::DialogFlags::MODAL,
-                        gtk::MessageType::Question,
-                        gtk::ButtonsType::YesNo,
-                        &format!("Song data update available: {tag}\nDownload and install?"),
-                    );
-                    let window2 = window.clone();
-                    let state2 = state.clone();
-                    let picture2 = picture.clone();
-                    let nav_label2 = nav_label.clone();
-                    let spinner2 = spinner.clone();
-                    let error_label2 = error_label.clone();
-                    let verify_btn2 = verify_btn.clone();
-                    let asset_url = Rc::new(asset_url);
-                    dialog.connect_response(move |dlg, resp| {
-                        dlg.close();
-                        if resp == gtk::ResponseType::Yes {
-                            let asset_url = (*asset_url).clone();
-                            // Show a progress dialog while downloading
-                            let progress = gtk::MessageDialog::new(
-                                Some(&window2),
-                                gtk::DialogFlags::MODAL,
-                                gtk::MessageType::Info,
-                                gtk::ButtonsType::None,
-                                "Downloading update...",
-                            );
-                            progress.show();
-
-                            let tag2 = tag.clone();
-                            let (tx2, rx2) = std::sync::mpsc::channel();
-                            std::thread::spawn(move || {
-                                let _ = tx2.send(download_and_extract(&asset_url, &tag2));
-                            });
-
-                            let state3 = state2.clone();
-                            let picture3 = picture2.clone();
-                            let nav_label3 = nav_label2.clone();
-                            let spinner3 = spinner2.clone();
-                            let error_label3 = error_label2.clone();
-                            let verify_btn3 = verify_btn2.clone();
-                            glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
-                                match rx2.try_recv() {
-                                    Ok(Ok(())) => {
-                                        progress.close();
-                                        // Reload library with new data
-                                        {
-                                            let mut s = state3.borrow_mut();
-                                            s.library = SongLibrary::scan(&s.songs_dir);
-                                            s.texture_cache.clear();
-                                            s.render_errors.clear();
-                                            s.rebuild_slides();
-                                        }
-                                        refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3);
-                                        glib::ControlFlow::Break
-                                    }
-                                    Ok(Err(e)) => {
-                                        progress.close();
-                                        eprintln!("Update failed: {e}");
-                                        glib::ControlFlow::Break
-                                    }
-                                    Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                                    Err(_) => { progress.close(); glib::ControlFlow::Break }
-                                }
-                            });
-                        }
-                    });
-                    dialog.show();
-                    glib::ControlFlow::Break
-                }
-                Ok(_) => glib::ControlFlow::Break, // no update or error
-                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                Err(_) => glib::ControlFlow::Break,
-            }
-        });
+    } else {
+        run_post_lilypond_dialogs();
     }
 }
