@@ -1,10 +1,10 @@
 verse = \lyricmode {
-  With wick -- ed men they him a grave as -- sign'd,
-And with a rich man him a tomb -- bed find;
-al -- tho' no vio -- lence in his mouth de -- clin'd,
-nor for his blame -- less.
-It was God's will to grieve him by op -- pres -- sion;
-He, when at last his life he yiel -- ded here misseen,
-all his soul too.
-The \"Text:\" field appears to be empty — no lyric text was provided. Could you share the words you'd like split into 4 syllables?
+With wick -- ed men they him a grave as -- signed,
+but then a rich man him a tomb did find,
+since he had not been to de -- ceit in -- clined,
+for he was blame -- less.
+It was God’s will to grieve him by op --- pres -- sion:
+he made his Son an offering  for trans -- gres -- sion.
+He, when at last he has ful -- filled his mis -- sion,
+shall see his seed.
 }

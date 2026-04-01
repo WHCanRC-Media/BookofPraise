@@ -720,8 +720,19 @@ fn modify_notes(notes: &str, force_combine: bool) -> String {
 /// Strip or replace LaTeX-style markup from lyrics content so it can be safely
 /// used in LilyPond's `\lyricmode`.
 fn sanitize_lyrics(content: &str) -> String {
-    // Replace escaped straight quotes with curly quotes (safe in lyricmode)
-    let s = content.replace("\\\"", "\u{201c}");
+    // Replace escaped straight quotes with directional curly quotes (safe in lyricmode).
+    // Alternates between opening " (U+201C) and closing " (U+201D).
+    let mut open = true;
+    let mut s = String::with_capacity(content.len());
+    let mut parts = content.split("\\\"");
+    if let Some(first) = parts.next() {
+        s.push_str(first);
+    }
+    for part in parts {
+        s.push(if open { '\u{201c}' } else { '\u{201d}' });
+        open = !open;
+        s.push_str(part);
+    }
     let s = Regex::new(r"\\(left|right|textit|textbf|emph)\s*")
         .unwrap()
         .replace_all(&s, "");
