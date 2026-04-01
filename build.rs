@@ -101,10 +101,14 @@ fn copy_data_dirs(manifest: &str) {
     let manifest = PathBuf::from(manifest);
     let target_dir = manifest.join("target").join(&profile);
 
-    for dir_name in &["lilypond", "photos"] {
-        let src_dir = manifest.join(dir_name);
-        if src_dir.exists() {
-            copy_dir_recursive(&src_dir, &target_dir.join(dir_name));
+    // In release builds, lilypond/ and photos/ are downloaded at runtime
+    // by the updater. Only bundle them for local debug builds.
+    if profile == "debug" {
+        for dir_name in &["lilypond", "photos"] {
+            let src_dir = manifest.join(dir_name);
+            if src_dir.exists() {
+                copy_dir_recursive(&src_dir, &target_dir.join(dir_name));
+            }
         }
     }
 }
