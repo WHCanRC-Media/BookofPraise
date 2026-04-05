@@ -248,8 +248,7 @@ fn refresh_display(
 
         // Update verify button state
         let verify_count = read_verify_count(&song_dir, verse);
-        let verified_session = state.verified_this_session.contains(&(song_dir.clone(), verse));
-        if verify_count >= 2 || verified_session {
+        if verify_count >= 1 {
             verify_btn.set_label("Verified");
             verify_btn.set_sensitive(false);
         } else {
@@ -741,12 +740,9 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
         let verify_btn2 = verify_btn.clone();
         verify_btn.connect_clicked(move |_| {
             {
-                let mut s = state.borrow_mut();
+                let s = state.borrow();
                 if let Some(slide) = s.slides.get(s.current_slide) {
-                    let song_dir = slide.song_dir.clone();
-                    let verse = slide.current_verse;
-                    increment_verify(&song_dir, verse);
-                    s.verified_this_session.insert((song_dir, verse));
+                    increment_verify(&slide.song_dir, slide.current_verse);
                 }
             }
             refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn2);

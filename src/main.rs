@@ -27,6 +27,9 @@ fn main() -> glib::ExitCode {
     unsafe { std::env::set_var("GTK_CSD", "0") };
 
     let cli = Cli::parse();
+    if cli.update {
+        model::enable_data_dir_mode();
+    }
     let app = gtk::Application::builder()
         .application_id("org.bop.bookofpraise")
         .build();

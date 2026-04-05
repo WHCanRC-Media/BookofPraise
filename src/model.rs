@@ -1,11 +1,25 @@
 use clap::Parser;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use gtk4 as gtk;
 use gtk::gdk;
 
 use crate::rendering::DEFAULT_RENDER_WIDTH;
+
+/// When true, `base_dir` resolves to the platform data directory instead of cwd/exe.
+static USE_DATA_DIR: AtomicBool = AtomicBool::new(false);
+
+/// Call once at startup when `--update` is set so that `base_dir` and the
+/// updater use the platform data directory (`%APPDATA%\bop` / `~/.local/share/bop`).
+pub fn enable_data_dir_mode() {
+    USE_DATA_DIR.store(true, Ordering::Relaxed);
+}
+
+pub fn data_dir_mode() -> bool {
+    USE_DATA_DIR.load(Ordering::Relaxed)
+}
 
 // ── CLI ─────────────────────────────────────────────────────────────
 
@@ -224,7 +238,6 @@ pub struct AppState {
     pub texture_cache: HashMap<CacheKey, gdk::Texture>,
     pub rendering: HashSet<(PathBuf, u32, u32)>,
     pub render_errors: HashMap<(PathBuf, u32, u32), String>,
-    pub verified_this_session: HashSet<(PathBuf, u32)>,
     /// Song dirs that had edits saved this session (for email-patch-on-close).
     pub edited_song_dirs: HashSet<PathBuf>,
     /// Temp directory holding original file snapshots (created on first edit).
@@ -251,7 +264,6 @@ impl AppState {
             texture_cache: HashMap::new(),
             rendering: HashSet::new(),
             render_errors: HashMap::new(),
-            verified_this_session: HashSet::new(),
             edited_song_dirs: HashSet::new(),
             originals_dir: None,
         };
@@ -381,24 +393,20 @@ impl AppState {
     }
 }
 
-/// Return the directory containing the running executable, falling back to the
-/// current working directory.
-pub fn exe_dir() -> PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
-}
-
-/// Resolve the base song data directory (`lilypond/` for SVG mode, `photos/` for PNG),
-/// checking the current working directory first, then falling back to the executable's directory.
+/// Resolve the base song data directory (`lilypond/` for SVG mode, `photos/` for PNG).
+///
+/// When `--update` mode is active the platform data directory is preferred
+/// (`%APPDATA%\bop` on Windows, `~/.local/share/bop` on Linux).
+/// Otherwise falls back to the current working directory.
 pub fn base_dir(use_svg: bool) -> PathBuf {
     let sub = if use_svg { "lilypond" } else { "photos" };
-    let cwd = std::env::current_dir().unwrap_or_default().join(sub);
-    if cwd.exists() {
-        return cwd;
+    if data_dir_mode() {
+        let data = crate::render_ly::data_dir().join(sub);
+        if data.exists() {
+            return data;
+        }
     }
-    exe_dir().join(sub)
+    std::env::current_dir().unwrap_or_default().join(sub)
 }
 
 /// Find image files for a verse number, sorted (handles multi-part: 1a.svg, 1b.svg).

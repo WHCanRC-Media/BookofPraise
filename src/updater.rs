@@ -7,23 +7,26 @@ use lettre::message::{header::ContentType, Attachment, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 
-use crate::model::base_dir;
-
 pub const GITHUB_REPO: &str = "WHCanRC-Media/BookofPraise";
 pub const GITHUB_PAT: &str = "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";
 const VERSION_FILE: &str = "lilypond_version.txt";
 
+/// Root directory for update operations (version file + extracted content).
+fn update_root() -> PathBuf {
+    let dir = crate::render_ly::data_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
 /// Read the locally stored version tag from `lilypond_version.txt`.
 fn current_local_version() -> Option<String> {
-    let path = base_dir(true).parent()?.join(VERSION_FILE);
+    let path = update_root().join(VERSION_FILE);
     std::fs::read_to_string(path).ok().map(|s| s.trim().to_string())
 }
 
 /// Persist the given version tag to `lilypond_version.txt` for future update checks.
 fn save_local_version(tag: &str) {
-    if let Some(parent) = base_dir(true).parent() {
-        let _ = std::fs::write(parent.join(VERSION_FILE), tag);
-    }
+    let _ = std::fs::write(update_root().join(VERSION_FILE), tag);
 }
 
 #[derive(serde::Deserialize)]
@@ -68,10 +71,7 @@ pub fn download_and_extract(zipball_url: &str, tag: &str) -> Result<(), String> 
         .map_err(|e| format!("Read failed: {e}"))?;
 
     // The parent directory that contains lilypond/ and photos/
-    let root = base_dir(true)
-        .parent()
-        .ok_or("Cannot determine root directory")?
-        .to_path_buf();
+    let root = update_root();
 
     let cursor = std::io::Cursor::new(bytes);
     let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("Zip error: {e}"))?;
