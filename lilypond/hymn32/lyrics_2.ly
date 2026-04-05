@@ -1,6 +1,6 @@
 verse = \lyricmode {
-  Lives again our glorious King, Alleluia!
-Where, O death, is now your sting? Alleluia!
-Once he died, our souls to save, Al -- le -- lu -- i -- a, Al -- le -- lu -- i -- a!
-Where your victory, O grave? Alleluia!
+  Lives a -- gain our glor -- ious King, Al -- le -- lu -- ia!
+Where, O death, is now your sting? Al -- le -- lu -- ia!
+Once he died, our souls to save, Al -- le -- lu -- ia!
+Where your vict -- o -- ry, O grave? Al -- le -- lu -- ia!
 }

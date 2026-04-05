@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Je -- ru -- sa -- lem, de -- signed so well,
-built as a close- -- knit u- -- ni -- \"ty –\"
+built as a close- -- knit u -- ni -- "ty –"
 there flock to -- geth -- er joy -- ful -- ly
 the tribes and clans of Is -- ra -- el.
 They to Je -- ru -- sa -- lem a -- scend,

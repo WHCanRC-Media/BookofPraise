@@ -1,2 +1,6 @@
-composer: No attribution text is visible in this image. The image shows only the music and lyrics without a composer or tune attribution in the top right corner.
-split_style: default
+composer: Thomas John Williams, 1890
+split_style: combine lines
+verified:
+  3: 1
+  1: 1
+  2: 1

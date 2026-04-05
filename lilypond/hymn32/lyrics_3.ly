@@ -1,6 +1,6 @@
 verse = \lyricmode {
-  Christ's redeeming work is done, Alleluia!
-Fought the fight, the battle won, Alleluia!
-Death in vain forbids him rise, Alleluia!
-Christ has opened paradise, Alleluia!
+  Christ's re -- deem -- ing work is done, Al -- le -- lu -- ia!
+Fought the fight, the bat -- tle won, Al -- le -- lu -- ia!
+Death in vain for -- bids him rise, Al -- le -- lu -- ia!
+Christ has o -- pened pa -- ra -- dise, Al -- le -- lu -- ia!
 }
