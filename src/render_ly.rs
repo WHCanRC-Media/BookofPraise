@@ -105,6 +105,7 @@ pub fn read_song_meta(song_dir: &Path) -> SongMeta {
 pub fn write_song_meta(song_dir: &Path, meta: &SongMeta) {
     let yaml_path = song_dir.join("song.yaml");
     if let Ok(content) = serde_yaml::to_string(meta) {
+        let content = content.strip_prefix("---\n").unwrap_or(&content);
         let _ = fs::write(&yaml_path, content);
     }
 }
