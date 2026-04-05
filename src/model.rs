@@ -268,16 +268,12 @@ impl AppState {
             originals_dir: None,
         };
 
-        // Load songs from CLI, defaulting to Psalm 1
-        let mut any = false;
+        // Load songs from CLI
         for &n in &cli.psalm {
-            any |= state.add_song(SongType::Psalm, n);
+            state.add_song(SongType::Psalm, n);
         }
         for &n in &cli.hymn {
-            any |= state.add_song(SongType::Hymn, n);
-        }
-        if !any {
-            state.add_song(SongType::Psalm, 1);
+            state.add_song(SongType::Hymn, n);
         }
         state.rebuild_slides();
         state
