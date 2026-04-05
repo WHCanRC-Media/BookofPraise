@@ -1,8 +1,8 @@
 verse = \lyricmode {
   Christ has ri -- sen! He, our Sav -- iour,
-freed us from the pow -- ers of hell.
+freed us from the powers of hell.
 We are his! In him for -- ev -- er
-we have tri -- um -- phed o -- ver all.
+we have tri -- umphed o -- ver all.
 Sun of Right -- eous -- ness and Glo -- ry,
 dawn -- ing with your heal -- ing light,
 you have put all gloom to flight!

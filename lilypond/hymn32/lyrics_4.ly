@@ -1,6 +1,6 @@
 verse = \lyricmode {
-  Hail the Lord of earth and heaven, Alleluia!
-Praise to you by all be given, Alleluia!
-Risen Christ, triumphant now, Alleluia!
-Every knee to you shall bow, Alleluia!
+  Hail the Lord of earth and heaven, Al -- le -- lu -- ia!
+Praise to you by all be given, Al -- le -- lu -- ia!
+Ris -- en Christ, tri -- um -- phant now, Al -- le -- lu -- ia!
+Ev -- ery knee to you shall bow, Al -- le -- lu -- ia!
 }
