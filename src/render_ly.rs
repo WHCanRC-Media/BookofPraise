@@ -66,8 +66,8 @@ pub struct SongMeta {
     pub composer: Option<String>,
     #[serde(default)]
     pub split_style: SplitStyle,
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub verified: std::collections::HashMap<u32, u32>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub verified: std::collections::BTreeMap<u32, u32>,
 }
 
 impl Default for SongMeta {
@@ -75,7 +75,7 @@ impl Default for SongMeta {
         SongMeta {
             composer: None,
             split_style: SplitStyle::Default,
-            verified: std::collections::HashMap::new(),
+            verified: std::collections::BTreeMap::new(),
         }
     }
 }
@@ -96,7 +96,7 @@ pub fn read_song_meta(song_dir: &Path) -> SongMeta {
         SongMeta {
             composer,
             split_style: SplitStyle::Default,
-            verified: std::collections::HashMap::new(),
+            verified: std::collections::BTreeMap::new(),
         }
     }
 }
