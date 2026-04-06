@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::LazyLock;
 
 use gtk4 as gtk;
 use gtk::gdk;
@@ -12,6 +13,12 @@ pub const DEFAULT_RENDER_WIDTH: u32 = 2400;
 
 pub type Pixmap = resvg::tiny_skia::Pixmap;
 
+static FONTDB: LazyLock<resvg::usvg::fontdb::Database> = LazyLock::new(|| {
+    let mut db = resvg::usvg::fontdb::Database::new();
+    db.load_system_fonts();
+    db
+});
+
 /// Parse and rasterize an SVG file into a pixmap, scaling to `render_width` pixels
 /// while preserving aspect ratio. Replaces `currentColor` with black for compatibility.
 pub fn load_svg_pixmap(path: &Path, render_width: u32) -> Option<Pixmap> {
@@ -20,7 +27,7 @@ pub fn load_svg_pixmap(path: &Path, render_width: u32) -> Option<Pixmap> {
         .replace("currentColor", "black")
         .into_bytes();
     let mut opt = resvg::usvg::Options::default();
-    opt.fontdb_mut().load_system_fonts();
+    *opt.fontdb_mut() = FONTDB.clone();
     let tree = resvg::usvg::Tree::from_data(&data, &opt).ok()?;
     let size = tree.size();
     if size.width() == 0.0 || size.height() == 0.0 {
@@ -142,7 +149,7 @@ fn render_title(pixmap: &mut Pixmap, slide: &Slide, render_width: u32) {
     );
 
     let mut opt = resvg::usvg::Options::default();
-    opt.fontdb_mut().load_system_fonts();
+    *opt.fontdb_mut() = FONTDB.clone();
     if let Ok(tree) = resvg::usvg::Tree::from_data(svg.as_bytes(), &opt) {
         resvg::render(
             &tree,

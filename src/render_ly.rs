@@ -7,10 +7,12 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{LazyLock, Mutex, OnceLock};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
@@ -110,14 +112,8 @@ pub fn write_song_meta(song_dir: &Path, meta: &SongMeta) {
     }
 }
 
-/// Return the platform cache directory for rendered SVGs.
-pub fn svg_cache_dir() -> PathBuf {
-    cache_dir().join("svg")
-}
-/// Return the platform data directory for persistent app data.
-/// Linux: `$XDG_DATA_HOME/bop` (default `~/.local/share/bop`)
-/// Windows: `%APPDATA%\bop`
-pub fn data_dir() -> PathBuf {
+static SVG_CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| cache_dir().join("svg"));
+static DATA_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let base = if cfg!(windows) {
         std::env::var("APPDATA")
             .map(PathBuf::from)
@@ -131,9 +127,8 @@ pub fn data_dir() -> PathBuf {
             })
     };
     base.join("bop")
-}
-
-pub fn cache_dir() -> PathBuf {
+});
+static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let base = if cfg!(windows) {
         std::env::var("LOCALAPPDATA")
             .map(PathBuf::from)
@@ -147,6 +142,21 @@ pub fn cache_dir() -> PathBuf {
             })
     };
     base.join("bop")
+});
+
+/// Return the platform cache directory for rendered SVGs.
+pub fn svg_cache_dir() -> PathBuf {
+    SVG_CACHE_DIR.clone()
+}
+/// Return the platform data directory for persistent app data.
+/// Linux: `$XDG_DATA_HOME/bop` (default `~/.local/share/bop`)
+/// Windows: `%APPDATA%\bop`
+pub fn data_dir() -> PathBuf {
+    DATA_DIR.clone()
+}
+
+pub fn cache_dir() -> PathBuf {
+    CACHE_DIR.clone()
 }
 
 /// Compute a hex-encoded hash of the given string for use as a cache key.
@@ -164,25 +174,38 @@ pub fn cached_svg_path(combined_ly_content: &str) -> PathBuf {
 
 const LILYPOND_VERSION: &str = "2.24.4";
 
+static LILYPOND_CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    cache_dir().join("lilypond-bin")
+});
+
 /// Return the cache directory for the LilyPond installation.
 fn lilypond_cache_dir() -> PathBuf {
-    let base = if cfg!(windows) {
-        std::env::var("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("C:\\Temp"))
-    } else {
-        std::env::var("XDG_CACHE_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-                PathBuf::from(home).join(".cache")
-            })
-    };
-    base.join("bop").join("lilypond-bin")
+    LILYPOND_CACHE_DIR.clone()
 }
+
+static LILYPOND_AVAILABLE: OnceLock<bool> = OnceLock::new();
+static LILYPOND_BIN: OnceLock<PathBuf> = OnceLock::new();
+
+/// Reset cached LilyPond availability after download.
+pub fn reset_lilypond_cache() {
+    // OnceLock doesn't support reset, so we use a different strategy:
+    // After download, the next call to the inner check functions will succeed.
+    // We work around this by using an atomic bool override.
+    LILYPOND_DOWNLOADED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+static LILYPOND_DOWNLOADED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// Check whether LilyPond is available (bundled, cached, or on PATH).
 pub fn lilypond_available() -> bool {
+    if LILYPOND_DOWNLOADED.load(std::sync::atomic::Ordering::Relaxed) {
+        return true;
+    }
+    *LILYPOND_AVAILABLE.get_or_init(lilypond_available_inner)
+}
+
+fn lilypond_available_inner() -> bool {
     let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
     let bin_name = format!("lilypond{exe_suffix}");
 
@@ -274,11 +297,19 @@ pub fn download_lilypond() -> Result<(), String> {
     }
 
     eprintln!("LilyPond {LILYPOND_VERSION} installed to cache.");
+    reset_lilypond_cache();
     Ok(())
 }
 
 /// Find the lilypond binary: check next to our executable, then cache, then PATH.
 fn lilypond_bin() -> PathBuf {
+    if LILYPOND_DOWNLOADED.load(std::sync::atomic::Ordering::Relaxed) {
+        return lilypond_bin_inner();
+    }
+    LILYPOND_BIN.get_or_init(lilypond_bin_inner).clone()
+}
+
+fn lilypond_bin_inner() -> PathBuf {
     let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
     let bin_name = format!("lilypond{exe_suffix}");
 
@@ -844,6 +875,33 @@ fn effective_n_parts(split_style: &SplitStyle, break_count: usize) -> usize {
     }
 }
 
+/// Cache of combined .ly parts keyed by (song_dir, verse).
+/// Invalidated per song_dir when the user saves edits.
+static COMBINED_PARTS_CACHE: LazyLock<Mutex<HashMap<(PathBuf, u32), Vec<String>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Invalidate cached combined parts for a song directory (call after edits are saved).
+pub fn invalidate_combined_cache(song_dir: &Path) {
+    if let Ok(mut cache) = COMBINED_PARTS_CACHE.lock() {
+        cache.retain(|(dir, _), _| dir != song_dir);
+    }
+}
+
+/// Get cached combined .ly content parts for a verse, computing if absent.
+fn get_combined_parts(song_dir: &Path, verse: u32) -> Vec<String> {
+    let key = (song_dir.to_path_buf(), verse);
+    if let Ok(cache) = COMBINED_PARTS_CACHE.lock() {
+        if let Some(parts) = cache.get(&key) {
+            return parts.clone();
+        }
+    }
+    let parts = build_combined_parts_for_verse(song_dir, verse);
+    if let Ok(mut cache) = COMBINED_PARTS_CACHE.lock() {
+        cache.insert(key, parts.clone());
+    }
+    parts
+}
+
 /// Build the combined .ly content parts for a verse.
 /// Returns empty Vec if notes.ly doesn't exist.
 fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
@@ -891,20 +949,14 @@ fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
 }
 
 /// Return the number of parts (slides) needed for a verse.
-pub fn num_parts_for_verse(song_dir: &Path, _verse: u32) -> usize {
-    let notes_file = song_dir.join("notes.ly");
-    if let Ok(raw_notes) = fs::read_to_string(&notes_file) {
-        let meta = read_song_meta(song_dir);
-        let break_count = raw_notes.matches("\\break").count();
-        effective_n_parts(&meta.split_style, break_count)
-    } else {
-        1
-    }
+pub fn num_parts_for_verse(song_dir: &Path, verse: u32) -> usize {
+    let parts = get_combined_parts(song_dir, verse);
+    if parts.is_empty() { 1 } else { parts.len() }
 }
 
 /// Check whether a cached SVG exists for the current source content.
 pub fn is_svg_current(song_dir: &Path, verse: u32, part: u32) -> bool {
-    let parts = build_combined_parts_for_verse(song_dir, verse);
+    let parts = get_combined_parts(song_dir, verse);
     if let Some(combined) = parts.get(part as usize) {
         cached_svg_path(combined).exists()
     } else {
@@ -914,7 +966,7 @@ pub fn is_svg_current(song_dir: &Path, verse: u32, part: u32) -> bool {
 
 /// Return the cached SVG path for a verse part if it exists, for loading.
 pub fn svg_path_for_verse(song_dir: &Path, verse: u32, part: u32) -> Option<PathBuf> {
-    let parts = build_combined_parts_for_verse(song_dir, verse);
+    let parts = get_combined_parts(song_dir, verse);
     let combined = parts.get(part as usize)?;
     let path = cached_svg_path(combined);
     if path.exists() { Some(path) } else { None }
@@ -929,7 +981,7 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
         return Err("notes.ly not found".into());
     }
 
-    let parts = build_combined_parts_for_verse(song_dir, verse);
+    let parts = get_combined_parts(song_dir, verse);
     let combined = parts.get(part as usize)
         .ok_or("Failed to build combined .ly")?;
     let svg_out = cached_svg_path(combined);

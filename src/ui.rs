@@ -110,6 +110,7 @@ fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics
 /// slides in that song. The SVG cache is content-addressed so stale entries
 /// are harmless — new content will hash to a different filename.
 fn invalidate_song(state: &mut AppState, song_dir: &std::path::Path) {
+    render_ly::invalidate_combined_cache(song_dir);
     let keys: Vec<_> = state.slides.iter()
         .filter(|sl| sl.song_dir == song_dir)
         .map(|sl| (sl.path.clone(), sl.current_verse, sl.part))
