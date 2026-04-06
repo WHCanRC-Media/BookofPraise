@@ -397,7 +397,7 @@ def render_svg_from_content(notes_content, lyrics_content, output_svg, composer=
     }}
     \\context {{
       \\Lyrics
-      \\override LyricText.self-alignment-X = #LEFT
+      \\override LyricText.self-alignment-X = #CENTER
     }}
   }}
 }}
@@ -449,16 +449,16 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None, split_style="
     with open(notes_path) as f:
         notes_content = f.read()
 
-    # Calculate width from max notes per line
+    force_combine = split_style == "combine lines"
+    notes_content = modify_notes(notes_content, force_combine=force_combine)
+
+    # Calculate width from max notes per line (after modify_notes, matching Rust)
     line_contents = _extract_line_contents(notes_content)
     max_notes = max(
         len(re.findall(r"[a-gr](is|es)?[',]*\d", line))
         for line in line_contents
     ) if line_contents else 8
     paper_width_mm = max_notes * 9 + 20
-
-    force_combine = split_style == "combine lines"
-    notes_content = modify_notes(notes_content, force_combine=force_combine)
 
     # Read lyrics if provided, sanitize for LilyPond
     lyrics_content = ""
@@ -508,7 +508,7 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None, split_style="
     }}
     \\context {{
       \\Lyrics
-      \\override LyricText.self-alignment-X = #LEFT
+      \\override LyricText.self-alignment-X = #CENTER
     }}
   }}
 }}
@@ -533,12 +533,10 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None, split_style="
     )
 
     if result.returncode == 0:
-        # Replace full-page SVG with cropped version
         abs_svg = os.path.abspath(output_svg)
         cropped_svg = os.path.splitext(abs_svg)[0] + ".cropped.svg"
         if os.path.exists(cropped_svg):
             os.replace(cropped_svg, abs_svg)
-        # Clean up temp file
         if os.path.exists(combined_ly):
             os.remove(combined_ly)
 

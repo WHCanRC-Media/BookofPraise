@@ -23,7 +23,7 @@ jobs:
       - name: Install LilyPond, rsvg-convert, and PyYAML
         run: |
           sudo apt-get update && sudo apt-get install -y lilypond librsvg2-bin
-          pip install pyyaml
+          pip install pyyaml pillow numpy
 
       - name: Determine changed song dirs
         id: changed
@@ -34,11 +34,11 @@ jobs:
           echo "$DIRS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
-      - name: Render and convert to PNGs
+      - name: Render PNGs and create diffs
         id: render
         run: |
           DIRS=$(echo "${{ steps.changed.outputs.dirs }}" | tr '\n' ' ')
-          PNGS=$(python3 .github/ci_render.py render $DIRS)
+          PNGS=$(python3 .github/ci_render.py render --base-sha ${{ github.event.pull_request.base.sha }} $DIRS)
           echo "pngs<<EOF" >> "$GITHUB_OUTPUT"
           echo "$PNGS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
