@@ -55,6 +55,8 @@ jobs:
             unzip
             zip
 
+      - uses: Swatinem/rust-cache@v2
+
       - name: Build
         run: cargo build --release --features auto-update
 
