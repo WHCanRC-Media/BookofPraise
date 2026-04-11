@@ -902,10 +902,17 @@ fn get_combined_parts(song_dir: &Path, verse: u32) -> Vec<String> {
     parts
 }
 
+/// Return the path to the notes file for a given verse.
+/// Uses `notes_N.ly` if it exists, otherwise falls back to `notes.ly`.
+pub fn notes_path_for_verse(song_dir: &Path, verse: u32) -> PathBuf {
+    let verse_specific = song_dir.join(format!("notes_{verse}.ly"));
+    if verse_specific.exists() { verse_specific } else { song_dir.join("notes.ly") }
+}
+
 /// Build the combined .ly content parts for a verse.
 /// Returns empty Vec if notes.ly doesn't exist.
 fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
-    let notes_file = song_dir.join("notes.ly");
+    let notes_file = notes_path_for_verse(song_dir, verse);
     let lyrics = song_dir.join(format!("lyrics_{verse}.ly"));
 
     if !notes_file.exists() {

@@ -66,7 +66,7 @@ def render_base_pngs(base_sha, song_dir):
         composer = meta.get("composer")
         split_style = meta.get("split_style", "default")
 
-    # Retrieve all lyrics files at base commit
+    # Retrieve all lyrics and verse-specific notes files at base commit
     result = subprocess.run(
         ["git", "ls-tree", "--name-only", base_sha, f"{repo_song_dir}/"],
         capture_output=True, text=True,
@@ -75,24 +75,28 @@ def render_base_pngs(base_sha, song_dir):
     if result.returncode == 0:
         for line in result.stdout.splitlines():
             filename = os.path.basename(line)
-            if filename.startswith("lyrics_") and filename.endswith(".ly"):
+            if (filename.startswith("lyrics_") or filename.startswith("notes_")) and filename.endswith(".ly"):
                 data = git_show_file(base_sha, f"{repo_song_dir}/{filename}")
                 if data is not None:
                     lpath = os.path.join(base_dir, filename)
                     with open(lpath, "wb") as f:
                         f.write(data)
-                    lyrics_files.append(lpath)
-
-    # Read notes for splitting
-    with open(notes_path) as f:
-        raw_notes = f.read()
-
-    break_count = raw_notes.count("\\break")
-    n_parts = render_ly._effective_n_parts(split_style, break_count)
+                    if filename.startswith("lyrics_"):
+                        lyrics_files.append(lpath)
 
     base_pngs = {}
     for lyrics_path in sorted(lyrics_files):
         verse_num = os.path.basename(lyrics_path).replace("lyrics_", "").replace(".ly", "")
+
+        # Use verse-specific notes if available, otherwise fall back to notes.ly
+        verse_notes_path = os.path.join(base_dir, f"notes_{verse_num}.ly")
+        cur_notes_path = verse_notes_path if os.path.exists(verse_notes_path) else notes_path
+
+        with open(cur_notes_path) as f:
+            raw_notes = f.read()
+
+        break_count = raw_notes.count("\\break")
+        n_parts = render_ly._effective_n_parts(split_style, break_count)
 
         if n_parts > 1:
             with open(lyrics_path) as f:
@@ -108,7 +112,7 @@ def render_base_pngs(base_sha, song_dir):
                 render_ly.render_svg_from_content(notes_part, lyrics_part, svg_path, composer=comp)
         else:
             svg_path = os.path.join(base_dir, f"{verse_num}.svg")
-            render_ly.render_svg(notes_path, lyrics_path, svg_path, composer=composer, split_style=split_style)
+            render_ly.render_svg(cur_notes_path, lyrics_path, svg_path, composer=composer, split_style=split_style)
 
     # Convert SVGs to PNGs
     for f in os.listdir(base_dir):

@@ -548,13 +548,16 @@ def _render_one(args):
     lyrics_path, = args
     psalm_dir = os.path.dirname(lyrics_path)
     psalm_name = os.path.basename(psalm_dir)
-    notes_path = os.path.join(psalm_dir, "notes.ly")
-
-    if not os.path.exists(notes_path):
-        return (f"{psalm_name}", "SKIP")
 
     basename = os.path.basename(lyrics_path)
     verse_num = basename.replace("lyrics_", "").replace(".ly", "")
+
+    # Use verse-specific notes file if it exists, otherwise fall back to notes.ly
+    verse_notes_path = os.path.join(psalm_dir, f"notes_{verse_num}.ly")
+    notes_path = verse_notes_path if os.path.exists(verse_notes_path) else os.path.join(psalm_dir, "notes.ly")
+
+    if not os.path.exists(notes_path):
+        return (f"{psalm_name}", "SKIP")
 
     composer = None
     split_style = "default"
@@ -618,14 +621,15 @@ def main():
         for lyrics_path in lyrics_files:
             song_dir = os.path.dirname(lyrics_path)
             song_name = os.path.basename(song_dir)
-            notes_path = os.path.join(song_dir, "notes.ly")
+            basename = os.path.basename(lyrics_path).replace("lyrics_", "").replace(".ly", "")
+            verse_notes_path = os.path.join(song_dir, f"notes_{basename}.ly")
+            notes_path = verse_notes_path if os.path.exists(verse_notes_path) else os.path.join(song_dir, "notes.ly")
             if not os.path.exists(notes_path):
                 continue
             with open(notes_path) as f:
                 note_count = _count_pitched_notes(f.read())
             with open(lyrics_path) as f:
                 syllable_count = _count_syllables(f.read())
-            basename = os.path.basename(lyrics_path).replace("lyrics_", "").replace(".ly", "")
             label = f"{song_name} v{basename}"
             if note_count == syllable_count:
                 ok += 1
