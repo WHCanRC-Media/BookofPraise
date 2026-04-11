@@ -31,6 +31,7 @@ jobs:
         run: cd dist && zip -r ../bop-linux.zip .
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'push'
         with:
           name: bop-linux
           path: bop-linux.zip
@@ -72,6 +73,7 @@ jobs:
         run: cd dist && zip -r ../bop-windows.zip .
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'push'
         with:
           name: bop-windows
           path: bop-windows.zip
@@ -88,6 +90,7 @@ jobs:
         run: asciidoctor-pdf doc/userguide.adoc -o BookOfPraise-UserGuide.pdf
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'push'
         with:
           name: userguide
           path: BookOfPraise-UserGuide.pdf
