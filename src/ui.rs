@@ -109,6 +109,53 @@ fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics
 /// Invalidate all verses of a song: clear cached textures/errors for any
 /// slides in that song. The SVG cache is content-addressed so stale entries
 /// are harmless — new content will hash to a different filename.
+/// Save editor contents, detect what changed, and invalidate the appropriate caches.
+fn save_and_invalidate(
+    state: &mut AppState,
+    notes_view: &gtk::TextView,
+    lyrics_view: &gtk::TextView,
+    copyright_entry: &gtk::Entry,
+    split_style_dropdown: &gtk::DropDown,
+) {
+    let (notes_changed, split_changed) = if let Some(slide) = state.slides.get(state.current_slide) {
+        let notes_path = slide.song_dir.join("notes.ly");
+        let old = std::fs::read_to_string(&notes_path).unwrap_or_default();
+        let buf = notes_view.buffer();
+        let new = buf.text(&buf.start_iter(), &buf.end_iter(), false);
+
+        let old_meta = render_ly::read_song_meta(&slide.song_dir);
+        let new_style_idx = split_style_dropdown.selected() as usize;
+        let new_style = render_ly::SplitStyle::ALL.get(new_style_idx)
+            .cloned()
+            .unwrap_or_default();
+        (old != new.as_str(), old_meta.split_style != new_style)
+    } else {
+        (false, false)
+    };
+
+    save_editor_contents(state, notes_view, lyrics_view, copyright_entry, split_style_dropdown);
+
+    if notes_changed || split_changed {
+        // Notes or split style changed — part count may differ,
+        // so invalidate and rebuild the slide list.
+        if let Some(slide) = state.slides.get(state.current_slide) {
+            let song_dir = slide.song_dir.clone();
+            invalidate_song(state, &song_dir);
+        }
+        state.rebuild_slides();
+    } else if let Some(slide) = state.slides.get(state.current_slide) {
+        // Only invalidate current verse/part
+        let song_dir = slide.song_dir.clone();
+        let path = slide.path.clone();
+        let verse = slide.current_verse;
+        let part = slide.part;
+        render_ly::invalidate_combined_cache(&song_dir);
+        state.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
+        state.render_errors.remove(&(path.clone(), verse, part));
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
 fn invalidate_song(state: &mut AppState, song_dir: &std::path::Path) {
     render_ly::invalidate_combined_cache(song_dir);
     let keys: Vec<_> = state.slides.iter()
@@ -786,44 +833,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
 
     // Save & Re-render
     connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, copyright_entry, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn], move |_| {
-        {
-            let mut s = state.borrow_mut();
-            // Detect if notes or split style were modified
-            let (notes_changed, split_changed) = if let Some(slide) = s.slides.get(s.current_slide) {
-                let notes_path = slide.song_dir.join("notes.ly");
-                let old = std::fs::read_to_string(&notes_path).unwrap_or_default();
-                let buf = notes_view.buffer();
-                let new = buf.text(&buf.start_iter(), &buf.end_iter(), false);
-
-                let old_meta = render_ly::read_song_meta(&slide.song_dir);
-                let new_style_idx = split_style_dropdown.selected() as usize;
-                let new_style = render_ly::SplitStyle::ALL.get(new_style_idx)
-                    .cloned()
-                    .unwrap_or_default();
-                (old != new.as_str(), old_meta.split_style != new_style)
-            } else {
-                (false, false)
-            };
-
-            save_editor_contents(&mut s, &notes_view, &lyrics_view, &copyright_entry, &split_style_dropdown);
-
-            if notes_changed || split_changed {
-                // Notes or split style changed — part count may differ,
-                // so invalidate and rebuild the slide list.
-                if let Some(slide) = s.slides.get(s.current_slide) {
-                    let song_dir = slide.song_dir.clone();
-                    invalidate_song(&mut s, &song_dir);
-                }
-                s.rebuild_slides();
-            } else if let Some(slide) = s.slides.get(s.current_slide) {
-                // Only invalidate current verse/part
-                let path = slide.path.clone();
-                let verse = slide.current_verse;
-                let part = slide.part;
-                s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
-                s.render_errors.remove(&(path.clone(), verse, part));
-            }
-        }
+        save_and_invalidate(&mut state.borrow_mut(), &notes_view, &lyrics_view, &copyright_entry, &split_style_dropdown);
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
     });
 
@@ -908,41 +918,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         let kc = gtk::EventControllerKey::new();
         kc.connect_key_pressed(move |_, key, _, modifiers| {
             if key == gdk::Key::s && modifiers.contains(gdk::ModifierType::CONTROL_MASK) && editor_panel.is_visible() {
-                {
-                    let mut s = state.borrow_mut();
-                    let (notes_changed, split_changed) = if let Some(slide) = s.slides.get(s.current_slide) {
-                        let notes_path = slide.song_dir.join("notes.ly");
-                        let old = std::fs::read_to_string(&notes_path).unwrap_or_default();
-                        let buf = notes_view.buffer();
-                        let new = buf.text(&buf.start_iter(), &buf.end_iter(), false);
-
-                        let old_meta = render_ly::read_song_meta(&slide.song_dir);
-                        let new_style_idx = split_style_dropdown.selected() as usize;
-                        let new_style = render_ly::SplitStyle::ALL.get(new_style_idx)
-                            .cloned()
-                            .unwrap_or_default();
-                        (old != new.as_str(), old_meta.split_style != new_style)
-                    } else {
-                        (false, false)
-                    };
-
-                    save_editor_contents(&mut s, &notes_view, &lyrics_view, &copyright_entry, &split_style_dropdown);
-
-                    if notes_changed || split_changed {
-                        if let Some(slide) = s.slides.get(s.current_slide) {
-                            let song_dir = slide.song_dir.clone();
-                            invalidate_song(&mut s, &song_dir);
-                        }
-                        s.rebuild_slides();
-                    } else if let Some(slide) = s.slides.get(s.current_slide) {
-                        let path = slide.path.clone();
-                        let verse = slide.current_verse;
-                        let part = slide.part;
-                        s.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
-                        s.render_errors.remove(&(path.clone(), verse, part));
-                        let _ = std::fs::remove_file(&path);
-                    }
-                }
+                save_and_invalidate(&mut state.borrow_mut(), &notes_view, &lyrics_view, &copyright_entry, &split_style_dropdown);
                 refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
                 return glib::Propagation::Stop;
             }
