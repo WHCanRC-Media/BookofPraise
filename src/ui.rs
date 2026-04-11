@@ -957,6 +957,23 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                 return glib::Propagation::Proceed;
             }
 
+            if crate::updater::GITHUB_PAT.is_empty() {
+                let dialog = gtk::MessageDialog::new(
+                    Some(win),
+                    gtk::DialogFlags::MODAL,
+                    gtk::MessageType::Info,
+                    gtk::ButtonsType::Ok,
+                    "This app was built without the ability to share updates.",
+                );
+                let win = win.clone();
+                dialog.connect_response(move |dlg, _| {
+                    dlg.close();
+                    win.destroy();
+                });
+                dialog.show();
+                return glib::Propagation::Stop;
+            }
+
             let dialog = gtk::MessageDialog::new(
                 Some(win),
                 gtk::DialogFlags::MODAL,
