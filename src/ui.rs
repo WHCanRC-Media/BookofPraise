@@ -11,7 +11,7 @@ use crate::model::{
 };
 use crate::render_ly;
 use crate::rendering::{current_png_path, load_slide_texture, save_current_png, DEFAULT_RENDER_WIDTH};
-use crate::updater::{build_patch, check_for_update, collect_pr_files, create_pr_with_files, download_and_extract, generate_branch_name, should_report_hymn_usage, email_hymn_usage};
+use crate::updater::{has_changes, check_for_update, collect_pr_files, create_pr_with_files, download_and_extract, generate_branch_name, should_report_hymn_usage, email_hymn_usage};
 
 // ── UI helpers ──────────────────────────────────────────────────────
 
@@ -953,7 +953,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
             let edited = s.edited_song_dirs.clone();
             let originals_path = s.originals_dir.as_ref().map(|td| td.path().to_path_buf());
             drop(s);
-            if edited.is_empty() || build_patch(&edited, originals_path.as_deref()).is_empty() {
+            if edited.is_empty() || !has_changes(&edited, originals_path.as_deref()) {
                 return glib::Propagation::Proceed;
             }
 

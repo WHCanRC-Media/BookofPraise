@@ -157,21 +157,8 @@ fn read_patchable_files(dir: &Path) -> HashMap<String, String> {
     files
 }
 
-/// Produce a unified diff for a single file using the `similar` crate.
-fn diff_file(rel_path: &str, old: &str, new: &str) -> String {
-    let old_path = if old.is_empty() { "/dev/null".to_string() } else { format!("a/{rel_path}") };
-    let new_path = if new.is_empty() { "/dev/null".to_string() } else { format!("b/{rel_path}") };
-    similar::TextDiff::from_lines(old, new)
-        .unified_diff()
-        .header(&old_path, &new_path)
-        .context_radius(3)
-        .to_string()
-}
-
-/// Build a unified diff patch comparing current files against originals in the
-/// temp snapshot directory.
-pub fn build_patch(edited_dirs: &HashSet<PathBuf>, originals_dir: Option<&Path>) -> String {
-    let mut patch = String::new();
+/// Check whether any patchable files differ between the edited dirs and their originals.
+pub fn has_changes(edited_dirs: &HashSet<PathBuf>, originals_dir: Option<&Path>) -> bool {
     for dir in edited_dirs {
         let dir_name = dir.file_name().unwrap_or_default().to_string_lossy();
         let orig_files = originals_dir
@@ -179,23 +166,17 @@ pub fn build_patch(edited_dirs: &HashSet<PathBuf>, originals_dir: Option<&Path>)
             .unwrap_or_default();
         let current_files = read_patchable_files(dir);
 
-        let mut all_names: Vec<_> = orig_files.keys()
-            .chain(current_files.keys())
-            .cloned()
-            .collect();
-        all_names.sort();
-        all_names.dedup();
-
-        for name in all_names {
-            let old = orig_files.get(&name).map(|s| s.as_str()).unwrap_or("");
-            let new = current_files.get(&name).map(|s| s.as_str()).unwrap_or("");
-            if old == new {
-                continue;
+        if orig_files.len() != current_files.len() {
+            return true;
+        }
+        for (name, old) in &orig_files {
+            match current_files.get(name) {
+                Some(new) if new == old => {}
+                _ => return true,
             }
-            patch.push_str(&diff_file(&format!("{dir_name}/{name}"), old, new));
         }
     }
-    patch
+    false
 }
 
 /// Collect all current patchable files from edited dirs as repo-relative path → content.
