@@ -8,7 +8,10 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 
 pub const GITHUB_REPO: &str = "WHCanRC-Media/BookofPraise";
-pub const GITHUB_PAT: &str = "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";
+#[cfg(feature = "auto-update")]
+pub const GITHUB_PAT: &str = env!("BOP_PAT");
+#[cfg(not(feature = "auto-update"))]
+pub const GITHUB_PAT: &str = "";
 const VERSION_FILE: &str = "lilypond_version.txt";
 
 /// Root directory for update operations (version file + extracted content).
