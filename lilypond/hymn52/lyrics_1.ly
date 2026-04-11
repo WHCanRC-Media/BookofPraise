@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The church's one foun -- da -- tion
+  The chur -- ch's one foun -- da -- tion
 is Je -- sus Christ her Lord;
 she is his new cre -- a -- tion
 by wa -- ter and the Word.
