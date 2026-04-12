@@ -7,6 +7,10 @@ use std::path::PathBuf;
 fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
 
+    println!("cargo:rerun-if-env-changed=BOP_PAT");
+    let pat = std::env::var("BOP_PAT").unwrap_or_default();
+    println!("cargo:rustc-env=BOP_PAT={}", pat.trim());
+
     #[cfg(target_os = "windows")]
     {
         let out = std::env::var("OUT_DIR").unwrap();
