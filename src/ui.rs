@@ -620,6 +620,14 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     edit_btn.set_visible(!cli.png); // only show in SVG mode
     let verify_btn = gtk::Button::with_label("Verify");
     verify_btn.set_visible(!cli.png); // only show in SVG mode
+    let lyrics_mag_label = gtk::Label::new(Some("Lyrics ×"));
+    let lyrics_mag_spin = gtk::SpinButton::with_range(0.5, 3.0, 0.1);
+    lyrics_mag_spin.set_digits(1);
+    lyrics_mag_spin.set_value(render_ly::lyrics_magnification());
+    lyrics_mag_spin.set_tooltip_text(Some("Lyrics font-size magnification"));
+    lyrics_mag_spin.set_visible(!cli.png);
+    lyrics_mag_label.set_visible(!cli.png);
+
     let png_label = gtk::Label::new(Some("PNG"));
     let svg_switch = gtk::Switch::new();
     svg_switch.set_active(!cli.png);
@@ -637,6 +645,8 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
         spacer.upcast_ref(),
         edit_btn.upcast_ref(),
         verify_btn.upcast_ref(),
+        lyrics_mag_label.upcast_ref(),
+        lyrics_mag_spin.upcast_ref(),
         png_label.upcast_ref(),
         svg_switch.upcast_ref(),
         svg_label.upcast_ref(),
@@ -865,12 +875,26 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
     });
 
+    // Lyrics magnification
+    connect!(lyrics_mag_spin, connect_value_changed, [state, picture, nav_label, spinner, error_label, verify_btn], move |spin| {
+        render_ly::set_lyrics_magnification(spin.value());
+        render_ly::invalidate_all_combined_cache();
+        {
+            let mut s = state.borrow_mut();
+            s.texture_cache.clear();
+            s.render_errors.clear();
+        }
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+    });
+
     // SVG/PNG toggle
-    connect!(svg_switch, connect_active_notify, [state, picture, nav_label, spinner, error_label, verify_btn, liturgy_label, number_entry, verse_box, edit_btn, editor_panel], move |sw| {
+    connect!(svg_switch, connect_active_notify, [state, picture, nav_label, spinner, error_label, verify_btn, liturgy_label, number_entry, verse_box, edit_btn, editor_panel, lyrics_mag_label, lyrics_mag_spin], move |sw| {
         state.borrow_mut().set_use_svg(sw.is_active());
         edit_btn.set_active(false);
         edit_btn.set_visible(sw.is_active());
         verify_btn.set_visible(sw.is_active());
+        lyrics_mag_label.set_visible(sw.is_active());
+        lyrics_mag_spin.set_visible(sw.is_active());
         editor_panel.set_visible(false);
         number_entry.set_text("");
         rebuild_verse_checks(&verse_box, &[]);

@@ -12,7 +12,24 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock};
+
+/// Lyrics font-size magnification as thousandths (1000 = 1.0×).
+/// Accessed from both UI and background render threads.
+static LYRICS_MAGNIFICATION_MILLI: AtomicU32 = AtomicU32::new(1000);
+
+/// Get the current lyrics font-size magnification (1.0 = unchanged).
+pub fn lyrics_magnification() -> f64 {
+    LYRICS_MAGNIFICATION_MILLI.load(Ordering::Relaxed) as f64 / 1000.0
+}
+
+/// Set the lyrics font-size magnification. Callers should also invalidate
+/// the combined-parts cache and any texture caches so the change takes effect.
+pub fn set_lyrics_magnification(mag: f64) {
+    let clamped = mag.clamp(0.1, 10.0);
+    LYRICS_MAGNIFICATION_MILLI.store((clamped * 1000.0).round() as u32, Ordering::Relaxed);
+}
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
@@ -799,7 +816,7 @@ fn max_notes_per_line(raw_notes: &str) -> usize {
 
 /// Assemble a complete LilyPond `.ly` file from notes, lyrics, and an optional
 /// composer credit, ready for rendering.
-fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_width_mm: usize) -> String {
+fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_width_mm: usize, lyrics_mag: f64) -> String {
     let mut header_items = Vec::new();
     if let Some(c) = composer {
         header_items.push(format!("  composer = \"{c}\""));
@@ -811,6 +828,14 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_wi
         String::new()
     } else {
         "    \\new Lyrics \\lyricsto \"melody\" { \\verse }".into()
+    };
+
+    let lyrics_font_override = if (lyrics_mag - 1.0).abs() < 1e-6 {
+        String::new()
+    } else {
+        format!(
+            "      \\override LyricText.font-size = #(magnification->font-size {lyrics_mag})\n"
+        )
     };
 
     // If there are no standalone | barline separators, inject \accidentalStyle forget
@@ -856,7 +881,7 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_wi
     \context {{
       \Lyrics
       \override LyricText.self-alignment-X = #CENTER
-    }}
+{lyrics_font_override}    }}
   }}
 }}
 "#
@@ -875,21 +900,30 @@ fn effective_n_parts(split_style: &SplitStyle, break_count: usize) -> usize {
     }
 }
 
-/// Cache of combined .ly parts keyed by (song_dir, verse).
+/// Cache of combined .ly parts keyed by (song_dir, verse, lyrics_mag_milli).
 /// Invalidated per song_dir when the user saves edits.
-static COMBINED_PARTS_CACHE: LazyLock<Mutex<HashMap<(PathBuf, u32), Vec<String>>>> =
+static COMBINED_PARTS_CACHE: LazyLock<Mutex<HashMap<(PathBuf, u32, u32), Vec<String>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Invalidate cached combined parts for a song directory (call after edits are saved).
 pub fn invalidate_combined_cache(song_dir: &Path) {
     if let Ok(mut cache) = COMBINED_PARTS_CACHE.lock() {
-        cache.retain(|(dir, _), _| dir != song_dir);
+        cache.retain(|(dir, _, _), _| dir != song_dir);
+    }
+}
+
+/// Invalidate every cached combined-parts entry (e.g. when a global setting
+/// like lyrics magnification changes).
+pub fn invalidate_all_combined_cache() {
+    if let Ok(mut cache) = COMBINED_PARTS_CACHE.lock() {
+        cache.clear();
     }
 }
 
 /// Get cached combined .ly content parts for a verse, computing if absent.
 fn get_combined_parts(song_dir: &Path, verse: u32) -> Vec<String> {
-    let key = (song_dir.to_path_buf(), verse);
+    let mag_milli = LYRICS_MAGNIFICATION_MILLI.load(Ordering::Relaxed);
+    let key = (song_dir.to_path_buf(), verse, mag_milli);
     if let Ok(cache) = COMBINED_PARTS_CACHE.lock() {
         if let Some(parts) = cache.get(&key) {
             return parts.clone();
@@ -934,6 +968,8 @@ fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
         String::new()
     };
 
+    let lyrics_mag = lyrics_magnification();
+
     if n_parts > 1 {
         let total_lines = count_note_lines(&raw_notes);
         let note_parts = split_notes(&raw_notes, n_parts);
@@ -944,14 +980,14 @@ fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
             let paper_width_mm = max_notes_per_line(&modified) * 9 + 20;
             // Only show composer on the first part
             let comp = if notes == &note_parts[0] { meta.composer.as_deref() } else { None };
-            build_combined_ly(&modified, lyrics, comp, paper_width_mm)
+            build_combined_ly(&modified, lyrics, comp, paper_width_mm, lyrics_mag)
         }).collect()
     } else {
         // Single part: apply modify_notes (combining / hidden rests)
         let force_combine = meta.split_style == SplitStyle::CombineLines;
         let notes_content = modify_notes(&raw_notes, force_combine);
         let paper_width_mm = max_notes_per_line(&notes_content) * 9 + 20;
-        vec![build_combined_ly(&notes_content, &raw_lyrics, meta.composer.as_deref(), paper_width_mm)]
+        vec![build_combined_ly(&notes_content, &raw_lyrics, meta.composer.as_deref(), paper_width_mm, lyrics_mag)]
     }
 }
 
