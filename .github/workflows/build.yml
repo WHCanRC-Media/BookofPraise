@@ -19,6 +19,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
+      - name: Diag BOP_PAT
+        run: echo "BOP_PAT_LEN=${#BOP_PAT}"
+        env:
+          BOP_PAT: ${{ secrets.BOP_PAT }}
+
       - name: Build
         run: cargo build --release --features auto-update
         env:
