@@ -8,10 +8,6 @@ fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
 
     println!("cargo:rerun-if-env-changed=BOP_PAT");
-    let pat = std::env::var("BOP_PAT").unwrap_or_default();
-    let trimmed = pat.trim();
-    println!("cargo:warning=build.rs saw BOP_PAT len={} trimmed_len={}", pat.len(), trimmed.len());
-    println!("cargo:rustc-env=BOP_PAT={}", trimmed);
 
     #[cfg(target_os = "windows")]
     {
