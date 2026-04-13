@@ -7,7 +7,7 @@ use gtk::glib;
 use gtk::prelude::*;
 
 use crate::model::{
-    read_verify_count, increment_verify, AppState, SongLibrary, SongType,
+    base_dir, read_verify_count, increment_verify, AppState, SongLibrary, SongType,
 };
 use crate::render_ly;
 use crate::rendering::{current_png_path, load_slide_texture, save_current_png, DEFAULT_RENDER_WIDTH};
@@ -1117,6 +1117,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                                                     progress.close();
                                                     {
                                                         let mut s = state3.borrow_mut();
+                                                        s.songs_dir = base_dir(s.use_svg);
                                                         s.library = SongLibrary::scan(&s.songs_dir);
                                                         s.texture_cache.clear();
                                                         s.render_errors.clear();
