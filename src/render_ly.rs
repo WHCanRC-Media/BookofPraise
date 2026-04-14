@@ -817,11 +817,8 @@ fn max_notes_per_line(raw_notes: &str) -> usize {
 /// Assemble a complete LilyPond `.ly` file from notes, lyrics, and an optional
 /// composer credit, ready for rendering.
 fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_width_mm: usize, lyrics_mag: f64) -> String {
-    let mut header_items = Vec::new();
-    if let Some(c) = composer {
-        header_items.push(format!("  composer = \"{c}\""));
-    }
-    header_items.push("  tagline = ##f".into());
+    let _ = composer;
+    let header_items: Vec<String> = vec!["  tagline = ##f".into()];
     let header = format!("\\header {{\n{}\n}}", header_items.join("\n"));
 
     let lyrics_score = if lyrics.trim().is_empty() {

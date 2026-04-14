@@ -17,7 +17,7 @@ use crate::updater::{has_changes, check_for_update, collect_pr_files, create_pr_
 
 /// Populate the editor panel's text views and entry fields from the current slide's
 /// LilyPond source files (`notes.ly`, `lyrics_N.ly`, `song.yaml`).
-fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, notes_label: &gtk::Label, lyrics_label: &gtk::Label, copyright_entry: &gtk::Entry, split_style_dropdown: &gtk::DropDown) {
+fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, notes_label: &gtk::Label, lyrics_label: &gtk::Label, split_style_dropdown: &gtk::DropDown) {
     if let Some(slide) = state.slides.get(state.current_slide) {
         let notes_path = render_ly::notes_path_for_verse(&slide.song_dir, slide.current_verse);
         let lyrics_path = slide.song_dir.join(format!("lyrics_{}.ly", slide.current_verse));
@@ -29,8 +29,6 @@ fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_vie
         lyrics_view.buffer().set_text(&lyrics_text);
 
         let meta = render_ly::read_song_meta(&slide.song_dir);
-        copyright_entry.set_text(meta.composer.as_deref().unwrap_or(""));
-
         let style_idx = render_ly::SplitStyle::ALL.iter()
             .position(|s| *s == meta.split_style)
             .unwrap_or(0);
@@ -41,7 +39,6 @@ fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_vie
     } else {
         notes_view.buffer().set_text("");
         lyrics_view.buffer().set_text("");
-        copyright_entry.set_text("");
         split_style_dropdown.set_selected(0);
         notes_label.set_text("notes.ly");
         lyrics_label.set_text("lyrics.ly");
@@ -78,7 +75,7 @@ fn snapshot_originals(state: &mut AppState, song_dir: &std::path::Path) {
 
 /// Write the editor panel's current text back to the corresponding LilyPond
 /// source files on disk and mark the song directory as edited.
-fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, copyright_entry: &gtk::Entry, split_style_dropdown: &gtk::DropDown) {
+fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, split_style_dropdown: &gtk::DropDown) {
     let slide_info = state.slides.get(state.current_slide)
         .map(|s| (s.song_dir.clone(), s.current_verse));
     if let Some((song_dir, verse)) = slide_info {
@@ -95,14 +92,11 @@ fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics
         let lyrics_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
         let _ = std::fs::write(&lyrics_path, lyrics_text.as_str());
 
-        let composer_text = copyright_entry.text();
-        let composer = if composer_text.is_empty() { None } else { Some(composer_text.to_string()) };
         let style_idx = split_style_dropdown.selected() as usize;
         let split_style = render_ly::SplitStyle::ALL.get(style_idx)
             .cloned()
             .unwrap_or_default();
         let mut meta = render_ly::read_song_meta(&song_dir);
-        meta.composer = composer;
         meta.split_style = split_style;
         render_ly::write_song_meta(&song_dir, &meta);
     }
@@ -116,7 +110,6 @@ fn save_and_invalidate(
     state: &mut AppState,
     notes_view: &gtk::TextView,
     lyrics_view: &gtk::TextView,
-    copyright_entry: &gtk::Entry,
     split_style_dropdown: &gtk::DropDown,
 ) {
     let (notes_changed, split_changed) = if let Some(slide) = state.slides.get(state.current_slide) {
@@ -135,7 +128,7 @@ fn save_and_invalidate(
         (false, false)
     };
 
-    save_editor_contents(state, notes_view, lyrics_view, copyright_entry, split_style_dropdown);
+    save_editor_contents(state, notes_view, lyrics_view, split_style_dropdown);
 
     if notes_changed || split_changed {
         // Notes or split style changed — part count may differ,
@@ -527,10 +520,6 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     lyrics_label_row.append(&lyrics_label);
     lyrics_label_row.append(&lyrics_help_btn);
 
-    let copyright_label = gtk::Label::new(Some("Copyright"));
-    copyright_label.set_xalign(0.0);
-    let copyright_entry = gtk::Entry::new();
-
     let split_style_label = gtk::Label::new(Some("Split style"));
     split_style_label.set_xalign(0.0);
     let split_style_items: Vec<&str> = render_ly::SplitStyle::ALL.iter()
@@ -551,8 +540,6 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     editor_panel.set_margin_end(4);
     editor_panel.set_margin_top(4);
     editor_panel.set_margin_bottom(4);
-    editor_panel.append(&copyright_label);
-    editor_panel.append(&copyright_entry);
     editor_panel.append(&split_style_label);
     editor_panel.append(&split_style_dropdown);
     editor_panel.append(&notes_label_row);
@@ -759,18 +746,18 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     });
 
     // Prev / Next
-    connect!(prev_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, copyright_entry, split_style_dropdown], move |_| {
+    connect!(prev_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown], move |_| {
         state.borrow_mut().navigate(-1);
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
         if editor_panel.is_visible() {
-            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &copyright_entry, &split_style_dropdown);
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
         }
     });
-    connect!(next_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, copyright_entry, split_style_dropdown], move |_| {
+    connect!(next_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown], move |_| {
         state.borrow_mut().navigate(1);
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
         if editor_panel.is_visible() {
-            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &copyright_entry, &split_style_dropdown);
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
         }
     });
 
@@ -782,11 +769,11 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     });
 
     // Edit toggle
-    connect!(edit_btn, connect_toggled, [state, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, copyright_entry, split_style_dropdown], move |btn| {
+    connect!(edit_btn, connect_toggled, [state, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown], move |btn| {
         let active = btn.is_active();
         editor_panel.set_visible(active);
         if active {
-            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &copyright_entry, &split_style_dropdown);
+            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
         }
     });
 
@@ -844,13 +831,13 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
     });
 
     // Save & Re-render
-    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, copyright_entry, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn], move |_| {
-        save_and_invalidate(&mut state.borrow_mut(), &notes_view, &lyrics_view, &copyright_entry, &split_style_dropdown);
+    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn], move |_| {
+        save_and_invalidate(&mut state.borrow_mut(), &notes_view, &lyrics_view, &split_style_dropdown);
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
     });
 
     // Revert to original files from snapshot
-    connect!(revert_btn, connect_clicked, [state, notes_view, lyrics_view, notes_label, lyrics_label, copyright_entry, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn], move |_| {
+    connect!(revert_btn, connect_clicked, [state, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn], move |_| {
         {
             let mut s = state.borrow_mut();
             if let Some(slide) = s.slides.get(s.current_slide) {
@@ -870,7 +857,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                     }
                 }
             }
-            load_editor_contents(&s, &notes_view, &lyrics_view, &notes_label, &lyrics_label, &copyright_entry, &split_style_dropdown);
+            load_editor_contents(&s, &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
         }
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
     });
@@ -940,12 +927,11 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         let lyrics_view = lyrics_view.clone();
         let notes_label = notes_label.clone();
         let lyrics_label = lyrics_label.clone();
-        let copyright_entry = copyright_entry.clone();
         let split_style_dropdown = split_style_dropdown.clone();
         let kc = gtk::EventControllerKey::new();
         kc.connect_key_pressed(move |_, key, _, modifiers| {
             if key == gdk::Key::s && modifiers.contains(gdk::ModifierType::CONTROL_MASK) && editor_panel.is_visible() {
-                save_and_invalidate(&mut state.borrow_mut(), &notes_view, &lyrics_view, &copyright_entry, &split_style_dropdown);
+                save_and_invalidate(&mut state.borrow_mut(), &notes_view, &lyrics_view, &split_style_dropdown);
                 refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
                 return glib::Propagation::Stop;
             }
@@ -954,7 +940,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                     state.borrow_mut().navigate(-1);
                     refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
                     if editor_panel.is_visible() {
-                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &copyright_entry, &split_style_dropdown);
+                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
                     }
                     glib::Propagation::Stop
                 }
@@ -962,7 +948,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                     state.borrow_mut().navigate(1);
                     refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
                     if editor_panel.is_visible() {
-                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &copyright_entry, &split_style_dropdown);
+                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
                     }
                     glib::Propagation::Stop
                 }

@@ -352,8 +352,6 @@ def render_svg_from_content(notes_content, lyrics_content, output_svg, composer=
     Used for multi-part rendering where notes/lyrics have already been split.
     """
     header_items = []
-    if composer:
-        header_items.append(f'  composer = "{composer}"')
     header_items.append("  tagline = ##f")
     header_block = "\\header {\n" + "\n".join(header_items) + "\n}"
 
@@ -441,8 +439,6 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None, split_style="
         split_style: One of "default", "single slide", "multi slide", "combine lines"
     """
     header_items = []
-    if composer:
-        header_items.append(f'  composer = "{composer}"')
     header_items.append("  tagline = ##f")
     header_block = "\\header {\n" + "\n".join(header_items) + "\n}"
 
