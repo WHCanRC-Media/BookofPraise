@@ -307,17 +307,17 @@ def _split_lyrics(raw_lyrics, n_parts, total_note_lines):
 
 
 def _count_pitched_notes(notes_content):
-    """Count non-rest notes in a melody definition."""
-    # Strip comments
+    """Count syllables' worth of notes: a slurred group counts as one."""
     lines = []
     for line in notes_content.splitlines():
         line = line.split("%")[0]
         lines.append(line)
     content = " ".join(lines)
-    # Match note tokens (letter + optional accidental + octave marks + duration)
-    # but exclude rests (r followed by duration)
-    notes = re.findall(r"[a-g](is|es)?[',]*\d", content)
-    return len(notes)
+    note_re = r"[a-g](is|es)?[',]*\d"
+    total = len(re.findall(note_re, content))
+    for m in re.finditer(r"\([^)]*\)", content):
+        total -= len(re.findall(note_re, m.group()))
+    return total
 
 
 def _count_syllables(lyrics_content):
