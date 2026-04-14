@@ -1,7 +1,7 @@
 verse = \lyricmode {
-  To the choirmaster: according to Mahalath.
-A Mas -- kil of Da -- vid. _ _ _ _ _
-Ge -- ne -- va, 1 -- 5 -- 4 -- 2 -- /1 -- 5 -- 4 -- 3
-The fool says in his heart, \"There is no God.\"
-They are cor-rupt, their hor-rid deeds they cher-ish;
+  The fool says in his heart, \"There is no God.\"
+  They are cor -- rupt, their hor -- rid deeds they cher -- ish;
+  not one of them does good, while just men per -- ish.
+  None calls up -- on the Lord, none sings his laud
+  or fears his rod.
 }

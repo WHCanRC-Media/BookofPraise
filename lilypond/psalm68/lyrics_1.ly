@@ -1,14 +1,14 @@
 verse = \lyricmode {
-  God is in the midst
-put all his ev' -- 'em -- ies to flight;
-his tri -- umph will be glo -- rious.
+  God shall a -- rise and by his might
+put all his en -- e -- mies to flight;
+his tri -- umph will be glor -- ious.
 When those who hate him, scat -- tered, flee
-be -- fore his pow'er and maj -- es -- ty,
-our God will be ex -- al -- ted.
+be -- fore his pow'r and ma -- jes -- ty,
+our God will be vic -- to -- rious.
 For just as wind blows smoke a -- way,
-he will dis- -- perse the proud of ter- -- ray
-of those who hate the Lord that day.
-they will be van -- quished by God's might.
-the wok of all will per -- ish.
-The **Text** field is \"empty —\" no lyric line was provided. Please share the text you'd like split into 7 syllables.
+he will dis -- perse the proud ar -- ray
+of those who e -- vil cher -- ish.
+Like wax that melts be -- fore the fire,
+they will be van -- quished by God's ire;
+the wick -- ed all will per -- ish.
 }
