@@ -3,5 +3,5 @@ verse = \lyricmode {
 they in their hearts my ru -- in crave.
 Their throats are like an o -- pen grave;
 they car -- ry on de -- ceit -- ful chat -- ter
-with ton -- gues that flat -- ter.
+with tongues that flat -- ter.
 }

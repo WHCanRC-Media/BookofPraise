@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The heav -- ens with joy re -- ceived their Lord,
+  The heav'ns with joy re -- ceived their Lord,
 by saints, by an -- gel hosts a -- dored.
 O day of ex -- ul -- ta -- tion!
 O earth, a -- dore your glo -- rious King!

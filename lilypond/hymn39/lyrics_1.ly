@@ -1,6 +1,6 @@
 verse = \lyricmode {
-  Our Sav -- iour, when he told his own
+ Our Sav -- iour, when he told his own
 that he ere long would leave,
 these bless -- ed words of com -- fort spoke
-lest they _ and we should grieve:
+lest they and we should grieve:
 }

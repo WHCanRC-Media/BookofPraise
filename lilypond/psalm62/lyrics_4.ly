@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  On God rests my de -- liv -- erance,
+  On God rests my de -- liv -- er -- ance,
 and he my ho -- nour will ad -- vance;
 he is my migh -- ty rock, my shel -- ter.
 O peo -- ple, trust in God a -- lone;

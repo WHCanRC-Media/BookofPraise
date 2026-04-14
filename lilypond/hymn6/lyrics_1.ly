@@ -3,5 +3,5 @@ verse = \lyricmode {
 Praise his great name and of his glo -- ry sing;
 with shouts of joy your thank -- ful prais -- es bring.
 Let him by all his peo -- ple be a -- dored,
-ac -- knowl -- edged as their sov -- er -- eign Lord and King.
+ac -- knowl -- edged as their sov -- reign Lord and King.
 }

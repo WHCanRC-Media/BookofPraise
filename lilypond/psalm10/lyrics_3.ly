@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  He proud -- ly thinks, \"I shall for -- ev -- er stand,
+  He proud -- ly thinks, “I shall for -- ev -- er stand,
 for I shall nev -- er with mis -- for -- tunes meet;
 there's noth -- ing that can stop what I have planned.\"
 His mouth is filled with curs -- ing and con -- ceit;

@@ -1,6 +1,6 @@
 verse = \lyricmode {
   O Je -- sus Christ, our God and Lord,
-Son of the hea -- ven -- ly Fa -- ther,
+Son of the heav'n -- ly Fa -- ther,
 O thou, who hast our peace re -- stored,
 the stray -- ing sheep dost ga -- ther;
 thou Lamb of God, to thee on high

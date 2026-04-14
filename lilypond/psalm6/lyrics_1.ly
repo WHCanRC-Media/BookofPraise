@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Re-buke me, LORD, no long-er,
+  Re -- buke me, LORD, no long -- er,
 nor chas -- ten me in an -- ger.
 In mer -- cy hear my groans;
 O LORD, see how I lan -- guish

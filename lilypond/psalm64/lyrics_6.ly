@@ -3,5 +3,5 @@ verse = \lyricmode {
 Let all the just in him de -- light;
 let them seek ref -- uge in his might
 and thank him for their pres -- er -- va -- tion
-with jubilation.
+with ju -- bi -- la -- tion.
 }
