@@ -4,5 +4,5 @@ and him streng -- then.
 May his reign go on and on.
 Rich -- ly bless all his en -- deav -- our;
 let him ev -- er
-sit be -- fore you on his throne.
+sit be -- fore you on "his throne."
 }

@@ -3,6 +3,6 @@ verse = \lyricmode {
 heard how your ver -- dict thun -- dered forth
 when you, O God, in judg -- ment rose
 to save the hum -- ble from their foes.
-Al -- l mere -- ly hu -- man wrath and fu -- ry
+All mere -- ly hu -- man wrath and fu -- ry
 will but in -- crease your praise and glo -- ry.
 }

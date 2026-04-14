@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Our God, en -- throned on heav -- en's cher -- u -- bim,
+  Our God, en -- throned on heav'ns cher -- u -- bim,
 will bring to pass what -- ev -- er pleas -- es him,
 The i -- dols of the na -- tions,
 though skil -- ful works of sil -- ver and of gold,

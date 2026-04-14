@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  May he, the LORD, give you a rich in -- crease,
+  May he, the LORD, give you a rich increase,
 you and your chil -- dren with his boun -- ties please.
 May God bless you from heav -- en;
 he shaped cre -- a -- tion as he brought it forth.

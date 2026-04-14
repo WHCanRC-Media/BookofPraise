@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O LORD, you formed my in -- ward \"parts –\"
+  O LORD, you formed my in -- ward \"parts–\"
 my in -- most self, my mind and heart.
 You shaped them in my moth -- er's womb,
 wove them to -- geth -- er on your loom.

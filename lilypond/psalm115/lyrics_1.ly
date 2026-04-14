@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  No, not to us, O LORD, but to your name
+  No, not to us, "O LORD," but to your name
 be all the glo -- ry. With our loud ac -- claim
 we hon -- our and a -- dore you.
 Your stead -- fast love and faith -- ful -- ness we laud.

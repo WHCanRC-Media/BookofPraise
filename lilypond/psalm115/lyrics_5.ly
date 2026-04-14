@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O Is -- ra -- el, trust on -- ly in the LORD!
+  O Is -- rael, trust on -- ly in the LORD!
 Praise him, your help and shield, with one ac -- cord;
 his pow -- er will pro -- tect you.
 O house of Aar -- on, put in God your trust;

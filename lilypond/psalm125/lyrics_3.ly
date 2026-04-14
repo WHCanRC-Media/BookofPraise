@@ -1,8 +1,8 @@
 verse = \lyricmode {
-  The -- wic -- ked's scep -- tre will not hum -- ble
+  The wic -- ked's scep -- tre will not hum -- ble
 the land he did en -- trust
 to peo -- ple right and just,
-lest they, en -- ticed by e -- vil, stum -- ble,
+lest they, en -- ticed by ev'l, stum -- ble,
 and they their hands to wrong be turn -- ing,
 God's coun -- sel spur -- ning.
 }

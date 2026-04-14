@@ -1,8 +1,8 @@
 verse = \lyricmode {
-  ט Teth
-To me, your ser -- vant, you have kind -- ness shown,
-your mer -- cy with your pro -- mise un -- der -- pin-ning.
-In -- struct me, LORD, for it is you a -- lone
-who are of all true knowledge the be -- gin -- ning.
-I went a -- stray, but as I wan -- der -- ed on,
+  How good it was for me to suf -- fer pain
+so that in all your stat -- utes you might school me.
+The per -- fect law that you, O Lord, or -- dain
+ex -- ceeds all earth -- ly rich -- es. Let it rule me!
+Your or -- di -- nan -- ces are my great -- est gain,
+for gold and sil -- ver can no long -- er fool me.
 }
