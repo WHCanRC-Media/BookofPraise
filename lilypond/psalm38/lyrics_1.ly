@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  LORD, re -- buke me not in an -- ger,
+  Lord, re -- buke me not in an -- ger,
 and no lon -- ger
 let your wrath on me de -- scend.
 You have pierced me with your ar -- rows,

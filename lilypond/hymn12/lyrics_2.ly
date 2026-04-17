@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  They did not act as chil -- dren of the LORD,
+  They did not act as chil -- dren of the Lord,
 that twist -- ed, crook -- ed gen -- er -- a -- tion.
 Is this how you es -- teem his word?
 You are a sense -- less, fool -- ish na -- tion.

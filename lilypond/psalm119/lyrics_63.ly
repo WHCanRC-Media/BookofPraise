@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  For your sal -- va -- tion, LORD, I hope and pray,
+  For your sal -- va -- tion, Lord, I hope and pray,
 and your com -- mand -- ments I ful -- fil sin -- cere -- ly.
 I fol -- low your de -- crees and will not stray,
 for all your tes -- ti -- mo -- nies I love dear -- ly.

@@ -1,6 +1,6 @@
 verse = \lyricmode {
   May a fu -- ture gen -- er -- a -- tion
-praise the LORD for such sal -- va -- tion:
+praise the Lord for such sal -- va -- tion:
 He looked down from hea -- ven high
 to re -- lease those doomed to die!\"
 So in Zi -- on, in his dwel -- ling,

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O LORD, you for the day of bat -- tle train me,
+  O Lord, you for the day of bat -- tle train me,
 and with your help you strength -- en and sus -- tain me.
 My arms can e -- ven bend the strong -- est bow;
 all who at -- tack me I will o -- ver -- throw.

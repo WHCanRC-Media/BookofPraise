@@ -6,5 +6,5 @@ he will him -- self fall in -- to it.
 The mis -- chief that he is in -- tend -- ing
 will on his own head be de -- scend -- ing.
 God's jus -- tice I will glo -- ri -- fy,
-and I will praise the LORD Most High!
+and I will praise the Lord Most High!
 }

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  I know now that the LORD's a -- noint -- ed
+  I know now that the Lord's a -- noint -- ed
 will with his help be blest.
 He hears the one he has ap -- point -- ed
 and grants him his re -- quest.

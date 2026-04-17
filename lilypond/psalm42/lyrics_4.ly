@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  I will from be -- yond the jor -- dan
+  I will from be -- yond the Jor -- dan
 think of you in my dis -- tress
 and will e -- ven from Mount Her -- mon
 not for -- get your faith -- ful -- ness.

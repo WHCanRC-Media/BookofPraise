@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Who but the LORD is God, so great in splen -- dour?
+  Who but the Lord is God, so great in splen -- dour?
 Who is a rock but God, my strong de -- fen -- der?
 He with his strength has armed and gir -- ded me;
 my way he has pre -- pared most per -- fect -- ly.

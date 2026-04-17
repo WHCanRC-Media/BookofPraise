@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  With worth -- less gods have they of -- fen -- ded me,
+  \"With worth -- less gods have they of -- fen -- ded me,
 pro -- vo -- king me to in -- dig -- na -- tion.
 Sin -- ce they have roused my jea -- lou -- sy,
 I will re -- quite their pro -- vo -- ca -- tion:

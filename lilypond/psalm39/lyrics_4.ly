@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  What is it that I now shall wait for, LORD?
+  \"What is it that I now shall wait for, Lord?
 In you I place my hope and trust.
 From all my sins de -- liv -- er -- ance af -- ford,
 and let me not by scorn be crushed.

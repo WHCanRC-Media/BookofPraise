@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  To their stub -- born way
+  \"To their stub -- born way
 Is -- rael I sur -- ren -- dered.
 Would they but o -- bey
 and re -- turn to me!

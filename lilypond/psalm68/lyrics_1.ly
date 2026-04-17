@@ -3,7 +3,7 @@ verse = \lyricmode {
 put all his en -- e -- mies to flight;
 his tri -- umph will be glor -- ious.
 When those who hate him, scat -- tered, flee
-be -- fore his pow'r and ma -- jes -- ty,
+be -- fore his power and ma -- jes -- ty,
 our God will be vic -- to -- rious.
 For just as wind blows smoke a -- way,
 he will dis -- perse the proud ar -- ray

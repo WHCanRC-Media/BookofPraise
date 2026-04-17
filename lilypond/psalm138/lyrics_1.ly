@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  With all my heart, O LORD, I praise
+  With all my heart, O Lord, I praise
 your glo -- rious ways, your ex -- al -- ta -- tion.
 Be -- fore the gods your name I bless
 in thank -- ful -- ness and ad -- o -- ra -- tion.

@@ -4,5 +4,5 @@ the shade at your right hand
 in dry and bar -- ren land.
 The moon by night, the sun by day
 will nev -- er harm or hurt you;
-the LORD will not de -- sert you.
+the Lord will not de -- sert you.
 }

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Re -- mem -- ber, LORD, how war and strife
+  Re -- mem -- ber, Lord, how war and strife
 and hard -- ships bur -- dened Da -- vid's life;
 re -- call his days with trou -- bles rife.
 To God an oath he swore a -- loud;

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O LORD, come in the mor -- ning and sup -- ply us
+  O Lord, come in the mor -- ning and sup -- ply us
 with your un -- fail -- ing love to sat -- is -- fy us,
 that we may then re -- joice and sing with glad -- ness
 as ma -- ny days as we have mourned in sad -- ness,

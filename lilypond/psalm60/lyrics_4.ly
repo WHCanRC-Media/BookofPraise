@@ -1,6 +1,6 @@
 verse = \lyricmode {
   God shamed his foes with words that sting:
-At E -- dom I my san -- dal fling;
+\"At E -- dom I my san -- dal fling;
 I Moab as my wash -- bowl claim
 and in Phi -- lis -- tia shout my name.\"
 God, who but you can be our guide

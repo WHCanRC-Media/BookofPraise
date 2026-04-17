@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  In my af -- flic -- tion, LORD, show pi -- ty.
+  In my af -- flic -- tion, Lord, show pi -- ty.
 My eyes are dimmed with grief;
 my soul yearns for re -- lief.
 My life is spent in pain and sor -- row.

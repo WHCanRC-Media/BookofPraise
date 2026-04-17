@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The LORD is King of earth's do -- main,
+  The Lord is King of earth's do -- main,
 the world and all that dwell there -- in.
 Re -- joice, O Zi -- on's sons and daugh -- ters,
 for it stands firm by his de -- crees;

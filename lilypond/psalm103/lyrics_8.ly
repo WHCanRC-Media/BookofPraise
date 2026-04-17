@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  His ho -- ly throne the LORD in heav'n has foun -- ded;
+  His ho -- ly throne the Lord in heaven has foun -- ded;
 from there he rules with sov -- reign power un -- bound -- ed,
 for all the u -- ni -- verse is his do -- main.
 Praise him, you an -- gels, great in might and splen -- dour.

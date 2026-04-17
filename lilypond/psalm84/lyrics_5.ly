@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  LORD, one day in your dwell -- ing place
+  Lord, one day in your dwell -- ing place
 is bet -- ter than a thou -- sand days
 out -- side the courts of your sal -- va -- tion.
 I would much ra -- ther stand and wait

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  But the LORD will send sal -- va -- tion
+  But the Lord will send sal -- va -- tion
 and by day his love main -- tain;
 he will grant me pres -- er -- va -- tion,
 and I will re -- joice a -- gain.

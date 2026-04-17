@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  LORD, sweep me not a -- way
+  Lord, sweep me not a -- way
 with those who kill and slay,
 those who a -- gainst you have re -- "belled –"
 men with cor -- rup -- tion taint -- ed,

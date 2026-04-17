@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Blest is the man who al -- ways
-re -- veres and serves the LORD,
+re -- veres and serves the Lord,
 who walk -- ing in his path -- ways,
 o -- beys and keeps his word.
 The fruit of all your la -- bour

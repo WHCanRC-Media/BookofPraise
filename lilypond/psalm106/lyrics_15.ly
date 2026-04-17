@@ -3,6 +3,6 @@ verse = \lyricmode {
 and there with Mo -- ses it went ill.
 The peo -- ple by their pro -- fa -- nations
 caused Mo -- ses rash -- ly to pro -- voke
-the LORD their God to in -- dig -- na -- tion,
+the Lord their God to in -- dig -- na -- tion,
 for he with un -- due an -- ger spoke.
 }

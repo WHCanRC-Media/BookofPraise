@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  I, LORD God of truth,
+  \"I, Lord God of truth,
 I from E -- gypt freed you.
 O -- pen wide your mouth;
 put your trust in me.

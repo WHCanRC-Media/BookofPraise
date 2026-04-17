@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O LORD, I will praise you for -- ev -- er;
+  O Lord, I will praise you for -- ev -- er;
 in you I hope and trust.
 It's all your do -- ing, God my Sav -- iour;
 you give me peace and rest.

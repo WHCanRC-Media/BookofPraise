@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  You will main -- tain my hap -- py lot, O LORD;
+  You will main -- tain my hap -- py lot, O Lord;
 the lines have fal -- len in most plea -- sant pla -- ces.
 The her -- i -- tage that you to me a -- ward
 is my de -- light, a gift that I hold pre -- cious.

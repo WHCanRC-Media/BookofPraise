@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  He, the LORD, pro -- tects the stran -- gers;
+  He, the Lord, pro -- tects the stran -- gers;
 or -- phans, wi -- dows he sus -- tains.
 He will make the wick -- ed stum -- ble.
 Praise him who for -- ev -- er reigns.

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Who, then, serves the LORD and fears him?
+  Who, then, serves the Lord and fears him?
 God will guide him all his days,
 teach -- ing him what path to fol -- low,
 lead -- ing him in right -- eous ways.

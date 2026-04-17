@@ -6,5 +6,5 @@ I've come in -- to the wa -- ters of the deep.
 I am en -- gulfed by floods for me too great;
 my throat is parched, I'm wea -- ry with my cry -- ing.
 My eyes grow dim as for my God I wait.
-Come to my res -- cue, LORD, and heed my sigh -- ing.
+Come to my res -- cue, Lord, and heed my sigh -- ing.
 }

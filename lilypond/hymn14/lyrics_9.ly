@@ -6,5 +6,5 @@ and bar -- ren be the field,
 though in the fold and sta -- bles
 there be no flock or herd,
 yet I will sing and wor -- ship,
-re -- joi -- cing in the LORD.
+re -- joi -- cing in the Lord.
 }

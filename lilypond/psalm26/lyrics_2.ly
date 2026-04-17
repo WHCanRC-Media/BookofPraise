@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  LORD, test my heart and mind;
+  Lord, test my heart and mind;
 ex -- am -- ine me to find
 how much I long to be up -- right.
 Let me not fall and per -- ish;

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  If I were hun -- gry, why should you be told?
+  \"If I were hun -- gry, why should you be told?
 For mine are earth and sea and all they hold.
 Shall I then drink the blood or eat the flesh
 of a -- ny goats or bulls that you pos -- sess?

@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Let e -- vil be ab -- horred
-by those who love the LORD.
+by those who love the Lord.
 The faith -- ful he will ev -- er
 from wick -- ed men de -- liv -- er.
 Light dawns for the up -- right;

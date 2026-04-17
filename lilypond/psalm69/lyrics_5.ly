@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  But though they mock, O LORD, to you I pray;
+  But though they mock, O Lord, to you I pray;
 at your own time, O God my Hel -- per, hear me.
 In your great love and faith -- ful -- ness be near me,
 and in the mire let me not sink a -- way.

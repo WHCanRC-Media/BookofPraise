@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  To ru -- in and dis -- as -- ter are they doomed,
+  \"To ru -- in and dis -- as -- ter are they doomed,
 for I will pierce them with my ar -- rows.
 By dread -- ful plagues they'll be con -- sumed,
 by fe -- ver and by fam -- ine har -- rowed,

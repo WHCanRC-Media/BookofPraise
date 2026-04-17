@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The LORD, my God and Sav -- iour,
+  The Lord, my God and Sav -- iour,
 in him I will re -- joice,
 and, in his pow -- er ex -- ul -- ting,
 I will lift up my voice.

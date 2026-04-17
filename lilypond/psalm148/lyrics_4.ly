@@ -6,5 +6,5 @@ He raised his peo -- ple's horn on high,
 made it for Is -- ra -- el, his na -- tion,
 the theme of praise and cel -- e -- bra -- tion.
 Close to his heart he keeps his own.
-O praise the LORD! Praise him a -- lone!
+O praise the Lord! Praise him a -- lone!
 }

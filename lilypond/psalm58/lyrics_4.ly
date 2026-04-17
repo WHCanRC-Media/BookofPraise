@@ -4,5 +4,5 @@ like snails that turn to slime and die;
 as to un -- time -- ly births, de -- ny
 to them the gift of sun -- light's splen -- dour.
 Let them like thorns be cleared a -- way;
-de -- stroy them, LORD, with -- out de -- lay.
+de -- stroy them, Lord, with -- out de -- lay.
 }

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  To you in heav'n, our Lord so good and great,
+  To you in heaven, our Lord so good and great,
 I lift my eyes and wait:
 As eyes of slaves will to their lord be turn -- ing
 when for a fa -- vour year -- ning,

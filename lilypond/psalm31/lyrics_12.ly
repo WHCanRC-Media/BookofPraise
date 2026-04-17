@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O LORD, your pres -- ence is their shel -- ter;
+  O Lord, your pres -- ence is their shel -- ter;
 there the in -- trigues of men
 will tar -- get them in vain.
 You in your dwell -- ing hide and shield them,

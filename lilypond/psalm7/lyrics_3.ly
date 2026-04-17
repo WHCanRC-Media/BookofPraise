@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Let all the e -- vil -- do -- ers per -- ish.
-The just, O LORD, sup -- port and cher -- ish.
+The just, O Lord, sup -- port and cher -- ish.
 Let them in you their ref -- uge \"find –\"
 in you, who search both heart and mind.
 God is my shield, my strong de -- fend -- er,

@@ -6,5 +6,5 @@ the chil -- dren God al -- lows.
 A -- round your ta -- ble sit -- ting,
 they are a rich re -- ward,
 a bles -- sing great and fit -- ting
-for him who fears the LORD.
+for him who fears the Lord.
 }

@@ -1,6 +1,6 @@
 verse = \lyricmode {
   All you who are his saints,
-re -- vere the LORD and wor -- ship him,
+re -- vere the Lord and wor -- ship him,
 for those who fear him have no want;
 he rich -- ly bless -- es them.
 Though li -- ons may grow faint

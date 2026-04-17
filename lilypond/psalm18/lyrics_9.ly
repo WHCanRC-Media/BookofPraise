@@ -1,6 +1,6 @@
 verse = \lyricmode {
   The dark a -- round me in -- to bright -- ness turn -- ing,
-you light my lamp, O LORD, and keep it burn -- ing.
+you light my lamp, O Lord, and keep it burn -- ing.
 With you I face a troop and crush them all.
 and with my God I scale the high -- est wall.
 How per -- fect is his way, how all -- ex -- cel -- ling!

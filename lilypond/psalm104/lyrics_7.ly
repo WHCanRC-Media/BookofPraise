@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  All crea -- tures, LORD, look to your o -- pen hand
+  All crea -- tures, Lord, look to your o -- pen hand
 to give them food, for they on you de -- pend.
 They gath -- er up its plen -- ty when you beck -- on;
 a -- vert your face, and they are pan -- ic -- strick -- en,

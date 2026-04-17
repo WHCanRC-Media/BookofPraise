@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  When the prop -- er time draws near,
+  \"When the prop -- er time draws near,
 I my judg -- ment will re -- veal.
 Then the earth may shake and reel
 and all peo -- ple quake with fear,

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Come, praise the LORD! His might ac -- claim!
+  Come, praise the Lord! His might ac -- claim!
 Let all his ser -- vants praise his name;
 both now and ev -- er -- more adore him.
 From where the sun be -- gins to rise

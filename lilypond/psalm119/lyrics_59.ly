@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Great is, O LORD, the mer -- cy you have shown;
+  Great is, O Lord, the mer -- cy you have shown;
 grant me the life by your de -- cree a -- ward -- ed.
 Though count -- less foes may seek to hunt me down,
 your laws I've not for -- got -- ten or dis -- card -- ed.

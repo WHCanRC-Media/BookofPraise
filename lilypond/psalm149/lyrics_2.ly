@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Sing to the LORD, his praise ad -- van -- cing
+  Sing to the Lord, his praise ad -- van -- cing
 with harp and tam -- bou -- rine and dan -- cing,
 for in his peo -- ple he takes plea -- sure;
 they are his joy and trea -- sure.

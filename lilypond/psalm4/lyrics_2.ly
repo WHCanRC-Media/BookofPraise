@@ -1,12 +1,12 @@
 verse = \lyricmode {
-  Know that the LORD in his good plea -- sure
+  Know that the Lord in his good plea -- sure
 has set the righ -- teous ones a -- part:
-he claims them as his own. His trea -- sure.
+he claims them as his own. his trea -- sure.
 In mer -- cy great be -- yond all mea -- sure,
 he takes my mi -- se -- ry to heart.
 Be not in wrath at vi -- o -- len -- ce.
 Re -- strain your an -- ger and be still;
 lie down to me -- di -- tate in si -- lence.
-Place in the LORD your sole re -- li -- ance.
+Place in the Lord your sole re -- li -- ance.
 Bring him right of -- fer -- ings, bring him
 }

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  To mark the sea -- sons you, LORD, made the moon.
+  To mark the sea -- sons you, Lord, made the moon.
 At your com -- mand the sun turns dusk to noon,
 and when the day by night is o -- ver -- ta -- ken,
 then in the for -- est all the beasts a -- wak -- en.

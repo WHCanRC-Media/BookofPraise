@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  You, LORD, when I was yet un -- born,
+  You, Lord, when I was yet un -- born,
 be -- held my un -- de -- vel -- oped form,
 and long be -- fore my life be -- gan
 you in your book de -- creed its span;

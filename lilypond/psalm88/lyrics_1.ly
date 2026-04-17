@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O LORD, the God who res -- cues me,
+  O Lord, the God who res -- cues me,
 I day and night cry out be -- fore you.
 O turn to me as I im -- plore you
 to be at -- ten -- tive to my plea.

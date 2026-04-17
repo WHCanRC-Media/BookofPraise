@@ -1,7 +1,7 @@
 verse = \lyricmode {
   My fa -- ther and my mo -- ther may for -- sake me;
-the LORD is faith -- ful and his help is sure.
-Teach me your way, O LORD and Sav -- iour, take me,
+the Lord is faith -- ful and his help is sure.
+Teach me your way, O Lord and Sav -- iour, take me,
 lead me on path -- ways lev -- el and se -- cure,
 for e -- vil -- do -- ers lie in wait for me.
 Hand me not o -- ver to their tyr -- an -- ny.

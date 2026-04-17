@@ -3,6 +3,6 @@ verse = \lyricmode {
 whose deeds in ma -- jes -- ty ex -- cel.
 Ex -- tol his ho -- ly name for -- ever;
 let nev -- er -- end -- ing praise ring out.
-Blest be the LORD who fails us nev -- er.
-Let all the peo -- ple A -- men! shout.
+Blest be the Lord who fails us nev -- er.
+Let all the peo -- ple \"A -- men!\" shout.
 }

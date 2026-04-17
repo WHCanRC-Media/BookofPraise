@@ -8,5 +8,5 @@ I've come: the book fore -- told it;
 it's writ -- ten in the scroll.
 Your will is my de -- light;
 your law is day and night
-with -- in my heart and soul.
+with -- in my heart and soul.\"
 }

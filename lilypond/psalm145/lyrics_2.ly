@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  They will, O LORD, your won -- drous works re -- late,
+  They will, O Lord, your won -- drous works re -- late,
 and I will on your splen -- dour me -- di -- tate.
 They of your glo -- rious deeds will speak at length,
 while I de -- clare your awe -- some acts of strength.

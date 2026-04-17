@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Those who trust in the LORD re -- sem -- ble
+  Those who trust in the Lord re -- sem -- ble
 Mount Zi -- on, firm and sure,
 which ev -- er will en -- dure;
 it stands un -- moved, will not trem -- ble.

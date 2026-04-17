@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  I praise you, LORD, for all your mer -- cy,
+  I praise you, Lord, for all your mer -- cy,
 the won -- ders of your love.
 From you I felt cut off
 when foes be -- sieged me in a cit -- y,

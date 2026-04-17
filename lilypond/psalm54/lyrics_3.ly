@@ -1,6 +1,6 @@
 verse = \lyricmode {
   I prais -- es your name, for it is good;
-LORD, you have saved me from my suf -- fering.
+Lord, you have saved me from my suf -- fering.
 To you I bring my free -- will of -- f'ring.
 my sac -- ri -- fice of grat -- i -- tude.
 You are the one who set me free

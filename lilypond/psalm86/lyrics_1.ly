@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Turn to me, O LORD, and heed me;
+  Turn to me, O Lord, and heed me;
 see how poor I am, how need -- y.
 I who serve you con -- stant -- ly
 trust in you to res -- cue me.

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  You showed your fa -- vour to your land, O LORD;
+  You showed your fa -- vour to your land, O Lord;
 you Ja -- cob's for -- tunes gra -- cious -- ly re -- stored.
 Your peo -- ple you then from their guilt set free,
 for you for -- gave all their in -- iq -- ui -- ty.

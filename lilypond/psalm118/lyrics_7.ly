@@ -1,7 +1,7 @@
 verse = \lyricmode {
-  Blest he who in the LORD's name en -- ters;
+  Blest he who in the Lord's name en -- ters;
 we bless you from his dwell -- ing place.
-The LORD is God; he shines up -- on us
+The Lord is God; he shines up -- on us
 the glo -- rious bright -- ness of his face.
 Come, join the ju -- bi -- lant pro -- ces -- sion;
 with boughs in hand, your voic -- es raise.

@@ -1,6 +1,6 @@
 verse = \lyricmode {
   To all those just and faith -- ful in their deal -- ings,
-you, LORD, are just, your faith -- ful -- ness re -- veal -- ing.
+you, Lord, are just, your faith -- ful -- ness re -- veal -- ing.
 Those who are pure and in -- no -- cent will see
 your in -- no -- cence and per -- fect pu -- ri -- ty.
 The shrewd and craft -- y you out -- do in cun -- ning

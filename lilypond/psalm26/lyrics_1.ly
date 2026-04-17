@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O vin -- di -- cate me, LORD!
+  O vin -- di -- cate me, Lord!
 De -- ceit I have a -- bhorred;
 I've led a life of blame -- less ways
 and nev -- er did I wa -- ver.

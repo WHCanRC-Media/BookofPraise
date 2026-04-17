@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  LORD, you have searched me, heart and soul.
+  Lord, you have searched me, heart and soul.
 My in -- most thoughts, you know them all.
 When I sit down and when I rise
 you see me with your watch -- ful eyes,

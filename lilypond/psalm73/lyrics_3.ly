@@ -6,5 +6,5 @@ their tongue de -- mands the earth's al -- le -- giance.
 So peo -- ple turn to praise these men,
 and they can find no fault with them.
 \"God does not see it,\" they de -- clare.
-The Most High does not know or care.
+\"The Most High does not know or care.\"
 }

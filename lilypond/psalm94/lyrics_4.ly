@@ -3,6 +3,6 @@ verse = \lyricmode {
 mark these my words and pay at -- ten -- tion.
 When will you sense -- less ones be wise?
 Does he who fash -- ioned ears and eyes
-not have the pow'r to see and hear?
+not have the power to see and hear?
 Is he not one whom you should fear?
 }

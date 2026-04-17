@@ -3,6 +3,6 @@ verse = \lyricmode {
 Ja -- cob's God and hopes in him;
 he made hea -- ven, earth, and o -- cean,
 sha -- ping all things found in them.
-In his faith -- ful -- ness the LORD
+In his faith -- ful -- ness the Lord
 will for -- ev -- er keep his word.
 }

@@ -3,7 +3,7 @@ verse = \lyricmode {
 Like gen -- tle rain be all my teach -- ing;
 like morn -- ing dew up -- on the grass,
 like spring -- time show -- ers be my preach -- ing.
-I will de -- clare the LORD's great name;
+I will de -- clare the Lord's great name;
 O praise our God and spread his fame.
 He is the Rock of our sal -- va -- tion;
 his ways are truth and eq -- ui -- ty.

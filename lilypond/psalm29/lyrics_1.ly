@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Might -- y ones, your hom -- age bring
-to the LORD, the awe -- some King!
+to the Lord, the awe -- some King!
 His the pow -- er and glo -- ry be;
 bow be -- fore his maj -- es -- ty.
 O -- ver wa -- ters rolls his thun -- der;

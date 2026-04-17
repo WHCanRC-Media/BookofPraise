@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  I would have blot -- ted out their name and fame
+  \"I would have blot -- ted out their name and fame
 and scat -- tered them in all di -- rec -- tions
 had I not feared their foes would claim
 that their strong hand wrought this de -- struc -- tion.

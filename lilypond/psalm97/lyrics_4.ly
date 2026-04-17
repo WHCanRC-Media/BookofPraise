@@ -3,7 +3,7 @@ verse = \lyricmode {
 all Ju -- dah's towns re -- joice.
 They heard the proc -- la -- ma -- tion
 of glo -- rious vin -- di -- ca -- tion.
-LORD, none with you com -- pare,
+Lord, none with you com -- pare,
 for God Most High you are.
 The earth is yours a -- lone;
 ex -- alt -- ed is your throne,

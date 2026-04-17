@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Ac -- cept, O LORD, my of -- fer -- ings of praise
+  Ac -- cept, O Lord, my of -- fer -- ings of praise
 and let me by your sta -- tutes be in -- struct -- ed.
 Though I have been in dan -- ger count -- less days,
 your laws I've not for -- got -- ten or re -- ject -- ed.

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Praised be the LORD! Let all a -- dore him
+  Praised be the Lord! Let all a -- dore him
 and with a new song come be -- fore him.
 Let all the faith -- ful con -- gre -- ga -- tion
 praise him with ju -- bi -- la -- tion.

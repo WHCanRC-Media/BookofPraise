@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  In you, LORD, I have tak -- en ref -- uge;
+  In you, Lord, I have tak -- en ref -- uge;
 I trust in your great name.
 Do not put me to shame,
 but in your right -- eous -- ness and mer -- cy

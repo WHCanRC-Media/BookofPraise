@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The LORD our God is King!
+  The Lord our God is King!
 Let earth re -- joice and sing.
 Let shores of dis -- tant na -- tions
 re -- sound with ju -- bi -- la -- tion.

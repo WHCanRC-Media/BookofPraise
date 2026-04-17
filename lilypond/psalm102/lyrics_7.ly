@@ -5,6 +5,6 @@ for your ci -- ty you shall build,
 to be with your glo -- ry filled.
 You will set your con -- gre -- ga -- tion
 firm on Zi -- on's strong foun -- da -- tion.
-When we pray, LORD, you will hear us;
+When we pray, Lord, you will hear us;
 when we suf -- fer, you are near us.
 }

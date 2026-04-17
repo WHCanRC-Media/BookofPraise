@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The LORD sent Mo -- ses as their sav -- iour
+  The Lord sent Mo -- ses as their sav -- iour
 with Aa -- ron, whom he chose to fa -- vour,
 and through their words he wrought for them
 great won -- ders in the land of Ham.

@@ -1,7 +1,7 @@
 verse = \lyricmode {
   O come and with his peo -- ple now re -- joice;
 shout forth your prais -- es, all you na -- tions!
-To thank the LORD lift up your voice
+To thank the Lord lift up your voice
 and sing your songs of ju -- bi -- la -- tion.
 The Lord is good, his mer -- cy great:
 his ser -- vants he will vin -- di -- cate,

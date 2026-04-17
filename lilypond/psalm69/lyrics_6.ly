@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Out of the good -- ness of your stead -- fast love,
-LORD, turn to me, with your great mer -- cy bless me.
+Lord, turn to me, with your great mer -- cy bless me.
 Do not con -- ceal your face when foes op -- press me;
 in all my trou -- bles, hear me from a -- bove.
 Make haste to an -- swer me, do not de -- lay.

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The Lord has spo -- ken: My own hand
+  The Lord has spo -- ken: \"My own hand
 will bring your foes from far- -- off lands
 from Ik -- sha -- n I will guide them.
 From the re -- mot -- est shores and seas
@@ -10,5 +10,5 @@ that you shall joy may have your feet
 to blood of con -- quer'd na -- tions
 and see your foes lap up their share
 as for my peo -- ple I pre -- pare
-my right -- eous vin -- di -- ca -- tion.
+my right -- eous vin -- di -- ca -- tion.\"
 }

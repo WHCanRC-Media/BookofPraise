@@ -1,6 +1,6 @@
 verse = \lyricmode {
-  Be pleased, O LORD, to save and res -- cue me.
-Come to my help! O LORD, make haste!
+  Be pleased, O Lord, to save and res -- cue me.
+Come to my help! O Lord, make haste!
 Let those be ut -- ter -- ly dis -- graced
 who seek my life and cause my mis -- er -- y.
 May they en -- dure frus -- tra -- tion

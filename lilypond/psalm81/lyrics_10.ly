@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  By their wil -- ful choice
+  \"By their wil -- ful choice
 they my love re -- ject -- ed;
 they ig -- nored my voice.
 Is -- ra -- el did not

@@ -5,7 +5,7 @@ to those who in false gods con -- fide,
 but clings to him, our God so great and just.
 Your plans for us to pon -- der,
 your might -- y deeds of won -- der
-you, LORD, have mul -- ti -- plied.
+you, Lord, have mul -- ti -- plied.
 None can with you com -- pare,
 nor all your works de -- clare,
 nor count them, though he tried.

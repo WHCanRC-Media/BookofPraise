@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Why do you stand far off? O LORD, a -- rise!
+  Why do you stand far off? O Lord, a -- rise!
 Why do you hide your -- self in trou -- bled days?
 Do you not hear it when the poor man cries?
 For on the poor the wick -- ed sin -- ner preys;

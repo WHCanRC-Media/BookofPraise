@@ -1,5 +1,5 @@
 verse = \lyricmode {
- Come, all who thirst! To you I will
+ \"Come, all who thirst! To you I will
  my heal -- ing wa -- ters give.
  Drink from my foun -- tain with -- out price
  and so for -- ev -- er live.

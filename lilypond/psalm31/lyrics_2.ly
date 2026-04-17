@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O LORD, come quick -- ly to my res -- cue
+  O Lord, come quick -- ly to my res -- cue
 and be my rock and tower.
 To save me, show your power
 you are my rock and migh -- ty for -- tress.

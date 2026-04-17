@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  LORD, God of ven -- geance, our De -- fend -- er,
+  Lord, God of ven -- geance, our De -- fend -- er,
 in righ -- teous -- ness your judg -- ment ren -- der!
 Rise up, O Judge of all the earth;
 re -- veal your jus -- tice and shine forth!

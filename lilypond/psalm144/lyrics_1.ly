@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Blest be the LORD, my rock, he who sus -- tains me.
+  Blest be the Lord, my rock, he who sus -- tains me.
 My hands are strong, my God for bat -- tle trains me;
 my for -- tress and my rock to whom I flee,
 he is my strong -- hold and de -- liv -- ers me.

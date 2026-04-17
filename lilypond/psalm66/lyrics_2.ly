@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  All peo -- ples, bow -- ing down be -- fore you,
+  \"All peo -- ples, bow -- ing down be -- fore you,
 sing prais -- es to your glo -- rious name;
 to you, O God, they all pay hom -- age,
 with hymns of joy de -- clare your name.

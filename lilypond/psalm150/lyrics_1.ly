@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Hal -- le -- lu -- jah! Praise the LORD
+  Hal -- le -- lu -- jah! Praise the Lord
 in his house with one ac -- cord!
 Praise him in the wide ex -- tent
 of his spa -- cious fir -- ma -- ment.

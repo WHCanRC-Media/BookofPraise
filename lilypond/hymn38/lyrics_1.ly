@@ -3,6 +3,6 @@ verse = \lyricmode {
 bears the name a -- bove all names, 
 reign -- ing Son of God, sur -- pass -- ing 
 oth -- er ti -- tles, powers, and claims;
-since to heav'n our Lord has passed,
+since to heaven our Lord has passed,
 let us hold our wit -- ness fast!
 }

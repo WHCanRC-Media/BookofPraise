@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  I will ex -- tol you, LORD, a -- mong the na -- tions
+  I will ex -- tol you, Lord, a -- mong the na -- tions
 for all your won -- drous works of vin -- di -- ca -- tion.
 Your per -- fect righ -- teous -- ness I will pro -- claim
 by sing -- ing prais -- es to your ho -- ly name.

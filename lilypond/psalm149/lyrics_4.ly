@@ -6,5 +6,5 @@ they to their doom are dri -- ven.
 So let God's peo -- ple raise their voice
 and in this tri -- umph all re -- joice.
 He grants them glo -- ry as re -- ward.
-O Zi -- on, praise the LORD!
+O Zi -- on, praise the Lord!
 }

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  These things you've done, and when I yet kept still
+  \"These things you've done, and when I yet kept still
 you thought I was like you and all was well,
 but now I shall ac -- cuse you to your face
 and so con -- front you with your vile dis -- grace.

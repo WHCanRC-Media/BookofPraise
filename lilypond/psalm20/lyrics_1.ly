@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O may the LORD in days of trou -- ble
+  O may the Lord in days of trou -- ble
 from Zi -- on hear your plea.
 With his sup -- port may you be a -- ble
 to gain the vic -- to -- ry.

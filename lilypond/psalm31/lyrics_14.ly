@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O love the LORD, all you his peo -- ple!
+  O love the Lord, all you his peo -- ple!
 The faith -- ful he will spare;
 the proud he'll give their share.
 Be strong and let your hearts take cou -- rage.

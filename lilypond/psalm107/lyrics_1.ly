@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Give thanks to God, re -- joic -- ing
-be -- cause the LORD is good.
+be -- cause the Lord is good.
 Bless him with an -- thems voic -- ing
 your love and grat -- i -- tude.
 He who our peace en -- sures
