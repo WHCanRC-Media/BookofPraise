@@ -6,5 +6,5 @@ he will still your ref -- uge be.
 I a -- gain shall see his face
 and ex -- tol him for his grace.
 He will show his help and fa -- vour,
-for he is my God and Sav -- iour.
+for he is my God and Sav -- iour. 
 }

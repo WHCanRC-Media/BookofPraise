@@ -1,7 +1,7 @@
 verse = \lyricmode {
   Fire that con -- sumes his foes
 fierce -- ly be -- fore him goes.
-His thun -- der -- bolts are fright -- ning:
+His thun -- der -- bolts are fright -- ening:
 the world's lit up with light -- ning.
 Earth trem -- bles at the sight.
 The moun -- tains, great in height,
