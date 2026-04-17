@@ -9,6 +9,7 @@ use gtk::prelude::*;
 use crate::model::{
     base_dir, read_verify_count, increment_verify, AppState, SongLibrary, SongType,
 };
+use crate::lyric_check;
 use crate::render_ly;
 use crate::rendering::{current_png_path, load_slide_texture, save_current_png, DEFAULT_RENDER_WIDTH};
 use crate::updater::{has_changes, check_for_update, collect_pr_files, create_pr_with_files, download_and_extract, generate_branch_name, should_report_hymn_usage, email_hymn_usage};
@@ -260,11 +261,14 @@ fn refresh_display(
     spinner: &gtk::Spinner,
     error_label: &gtk::Label,
     verify_btn: &gtk::Button,
+    mismatch_label: &gtk::Label,
 ) {
     let mut state = state_rc.borrow_mut();
     spinner.stop();
     spinner.set_visible(false);
     error_label.set_visible(false);
+    mismatch_label.set_visible(false);
+    mismatch_label.set_text("");
 
     // Render at the picture's actual pixel width
     let w = picture.width();
@@ -315,6 +319,21 @@ fn refresh_display(
             save_current_png(&tex);
             picture.set_paintable(Some(&tex));
             state.texture_cache.insert(cache_key, tex);
+            if let Some(svg_path) = render_ly::svg_path_for_verse(&song_dir, verse, part) {
+                let n_parts = render_ly::num_parts_for_verse(&song_dir, verse);
+                let pairs = lyric_check::mismatch_pairs_nospace(
+                    &song_dir, verse, part, &svg_path, n_parts,
+                );
+                if !pairs.is_empty() {
+                    let text = pairs
+                        .iter()
+                        .map(|(s, v)| format!("src: {s}\nsvg: {v}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    mismatch_label.set_text(&text);
+                    mismatch_label.set_visible(true);
+                }
+            }
             drop(state);
             prefetch_next(state_rc);
             return;
@@ -340,13 +359,14 @@ fn refresh_display(
             let spinner2 = spinner.clone();
             let error_label2 = error_label.clone();
             let verify_btn2 = verify_btn.clone();
+            let mismatch_label2 = mismatch_label.clone();
             glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
                 let is_done = {
                     let state = state_rc2.borrow();
                     !state.rendering.contains(&render_key)
                 };
                 if is_done {
-                    refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2);
+                    refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2, &mismatch_label2);
                     glib::ControlFlow::Break
                 } else {
                     glib::ControlFlow::Continue
@@ -473,10 +493,32 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     error_label.set_margin_start(24);
     error_label.set_margin_end(24);
 
+    // Lyric-mismatch label (red, wraps, anchored to bottom-center)
+    let mismatch_label = gtk::Label::new(None);
+    mismatch_label.set_wrap(true);
+    mismatch_label.set_selectable(true);
+    mismatch_label.set_halign(gtk::Align::Center);
+    mismatch_label.set_valign(gtk::Align::End);
+    mismatch_label.set_margin_start(24);
+    mismatch_label.set_margin_end(24);
+    mismatch_label.set_margin_bottom(8);
+    mismatch_label.set_visible(false);
+    mismatch_label.add_css_class("lyric-mismatch");
+    let mismatch_css = gtk::CssProvider::new();
+    mismatch_css.load_from_data(
+        ".lyric-mismatch { color: red; font-family: monospace; background: rgba(255,255,255,0.85); padding: 4px 8px; border-radius: 4px; }",
+    );
+    gtk::style_context_add_provider_for_display(
+        &gdk::Display::default().expect("display"),
+        &mismatch_css,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+
     let overlay = gtk::Overlay::new();
     overlay.set_child(Some(&picture));
     overlay.add_overlay(&spinner);
     overlay.add_overlay(&error_label);
+    overlay.add_overlay(&mismatch_label);
 
     let scroll = gtk::ScrolledWindow::new();
     scroll.set_child(Some(&overlay));
@@ -700,7 +742,7 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     window.set_child(Some(&vbox));
 
     // Initial display
-    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
     refresh_liturgy(&state.borrow(), &liturgy_label);
 
     // ── Helpers for signal closures ──
@@ -746,25 +788,25 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     });
 
     // Prev / Next
-    connect!(prev_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown], move |_| {
+    connect!(prev_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, mismatch_label, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown], move |_| {
         state.borrow_mut().navigate(-1);
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
         if editor_panel.is_visible() {
             load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
         }
     });
-    connect!(next_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown], move |_| {
+    connect!(next_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, mismatch_label, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown], move |_| {
         state.borrow_mut().navigate(1);
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
         if editor_panel.is_visible() {
             load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
         }
     });
 
     // Clear
-    connect!(clear_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, liturgy_label], move |_| {
+    connect!(clear_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, mismatch_label, liturgy_label], move |_| {
         { let mut s = state.borrow_mut(); s.liturgy.clear(); s.rebuild_slides(); }
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
         refresh_liturgy(&state.borrow(), &liturgy_label);
     });
 
@@ -784,6 +826,7 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
         let nav_label = nav_label.clone();
         let spinner = spinner.clone();
         let error_label = error_label.clone();
+        let mismatch_label = mismatch_label.clone();
         let verify_btn2 = verify_btn.clone();
         verify_btn.connect_clicked(move |_| {
             {
@@ -792,7 +835,7 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
                     increment_verify(&slide.song_dir, slide.current_verse);
                 }
             }
-            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn2);
+            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn2, &mismatch_label);
         });
     }
 
@@ -831,13 +874,13 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
     });
 
     // Save & Re-render
-    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn], move |_| {
+    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn, mismatch_label], move |_| {
         save_and_invalidate(&mut state.borrow_mut(), &notes_view, &lyrics_view, &split_style_dropdown);
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
     });
 
     // Revert to original files from snapshot
-    connect!(revert_btn, connect_clicked, [state, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn], move |_| {
+    connect!(revert_btn, connect_clicked, [state, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn, mismatch_label], move |_| {
         {
             let mut s = state.borrow_mut();
             if let Some(slide) = s.slides.get(s.current_slide) {
@@ -859,11 +902,11 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
             }
             load_editor_contents(&s, &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
         }
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
     });
 
     // Lyrics magnification
-    connect!(lyrics_mag_spin, connect_value_changed, [state, picture, nav_label, spinner, error_label, verify_btn], move |spin| {
+    connect!(lyrics_mag_spin, connect_value_changed, [state, picture, nav_label, spinner, error_label, verify_btn, mismatch_label], move |spin| {
         render_ly::set_lyrics_magnification(spin.value());
         render_ly::invalidate_all_combined_cache();
         {
@@ -871,11 +914,11 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
             s.texture_cache.clear();
             s.render_errors.clear();
         }
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
     });
 
     // SVG/PNG toggle
-    connect!(svg_switch, connect_active_notify, [state, picture, nav_label, spinner, error_label, verify_btn, liturgy_label, number_entry, verse_box, edit_btn, editor_panel, lyrics_mag_label, lyrics_mag_spin], move |sw| {
+    connect!(svg_switch, connect_active_notify, [state, picture, nav_label, spinner, error_label, verify_btn, mismatch_label, liturgy_label, number_entry, verse_box, edit_btn, editor_panel, lyrics_mag_label, lyrics_mag_spin], move |sw| {
         state.borrow_mut().set_use_svg(sw.is_active());
         edit_btn.set_active(false);
         edit_btn.set_visible(sw.is_active());
@@ -885,31 +928,31 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         editor_panel.set_visible(false);
         number_entry.set_text("");
         rebuild_verse_checks(&verse_box, &[]);
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
         refresh_liturgy(&state.borrow(), &liturgy_label);
     });
 
     // All button — check all and add immediately
-    connect!(all_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, verify_btn, liturgy_label], move |_| {
+    connect!(all_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, verify_btn, mismatch_label, liturgy_label], move |_| {
         check_all(&verse_box);
         if let Ok(num) = number_entry.text().parse::<u32>() {
             let verses = checked_verses(&verse_box);
             state.borrow_mut().add_song_with_verses(song_type(), num, verses);
             number_entry.set_text("");
             rebuild_verse_checks(&verse_box, &[]);
-            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
             refresh_liturgy(&state.borrow(), &liturgy_label);
         }
     });
 
     // Add button
-    connect!(add_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, verify_btn, liturgy_label], move |_| {
+    connect!(add_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, verify_btn, mismatch_label, liturgy_label], move |_| {
         if let Ok(num) = number_entry.text().parse::<u32>() {
             let verses = checked_verses(&verse_box);
             state.borrow_mut().add_song_with_verses(song_type(), num, verses);
             number_entry.set_text("");
             rebuild_verse_checks(&verse_box, &[]);
-            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
             refresh_liturgy(&state.borrow(), &liturgy_label);
         }
     });
@@ -921,6 +964,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         let nav_label = nav_label.clone();
         let spinner = spinner.clone();
         let error_label = error_label.clone();
+        let mismatch_label = mismatch_label.clone();
         let verify_btn = verify_btn.clone();
         let editor_panel = editor_panel.clone();
         let notes_view = notes_view.clone();
@@ -932,13 +976,13 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         kc.connect_key_pressed(move |_, key, _, modifiers| {
             if key == gdk::Key::s && modifiers.contains(gdk::ModifierType::CONTROL_MASK) && editor_panel.is_visible() {
                 save_and_invalidate(&mut state.borrow_mut(), &notes_view, &lyrics_view, &split_style_dropdown);
-                refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+                refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
                 return glib::Propagation::Stop;
             }
             match key {
                 gdk::Key::Left => {
                     state.borrow_mut().navigate(-1);
-                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
                     if editor_panel.is_visible() {
                         load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
                     }
@@ -946,7 +990,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                 }
                 gdk::Key::Right => {
                     state.borrow_mut().navigate(1);
-                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn);
+                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
                     if editor_panel.is_visible() {
                         load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
                     }
@@ -1029,6 +1073,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         let nav_label = nav_label.clone();
         let spinner = spinner.clone();
         let error_label = error_label.clone();
+        let mismatch_label = mismatch_label.clone();
         let verify_btn = verify_btn.clone();
         let cli_update = cli.update;
         Rc::new(move || {
@@ -1040,6 +1085,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                 let nav_label = nav_label.clone();
                 let spinner = spinner.clone();
                 let error_label = error_label.clone();
+        let mismatch_label = mismatch_label.clone();
                 let verify_btn = verify_btn.clone();
                 Rc::new(move || {
                     if !cli_update { return; }
@@ -1049,6 +1095,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                     let nav_label = nav_label.clone();
                     let spinner = spinner.clone();
                     let error_label = error_label.clone();
+        let mismatch_label = mismatch_label.clone();
                     let verify_btn = verify_btn.clone();
                     let (tx, rx) = std::sync::mpsc::channel();
                     std::thread::spawn(move || {
@@ -1070,6 +1117,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                                 let nav_label2 = nav_label.clone();
                                 let spinner2 = spinner.clone();
                                 let error_label2 = error_label.clone();
+                let mismatch_label2 = mismatch_label.clone();
                                 let verify_btn2 = verify_btn.clone();
                                 let asset_url = Rc::new(asset_url);
                                 dialog.connect_response(move |dlg, resp| {
@@ -1096,6 +1144,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                                         let nav_label3 = nav_label2.clone();
                                         let spinner3 = spinner2.clone();
                                         let error_label3 = error_label2.clone();
+                                        let mismatch_label3 = mismatch_label2.clone();
                                         let verify_btn3 = verify_btn2.clone();
                                         glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
                                             match rx2.try_recv() {
@@ -1109,7 +1158,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                                                         s.render_errors.clear();
                                                         s.rebuild_slides();
                                                     }
-                                                    refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3);
+                                                    refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3, &mismatch_label3);
                                                     glib::ControlFlow::Break
                                                 }
                                                 Ok(Err(e)) => {
@@ -1200,6 +1249,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         let nav_label2 = nav_label.clone();
         let spinner2 = spinner.clone();
         let error_label2 = error_label.clone();
+                let mismatch_label2 = mismatch_label.clone();
         let verify_btn2 = verify_btn.clone();
         dialog.connect_response(move |dlg, resp| {
             if resp == gtk::ResponseType::Yes {
@@ -1217,6 +1267,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                 let nav_label3 = nav_label2.clone();
                 let spinner3 = spinner2.clone();
                 let error_label3 = error_label2.clone();
+                                        let mismatch_label3 = mismatch_label2.clone();
                 let verify_btn3 = verify_btn2.clone();
                 let post_dialogs = run_post_lilypond_dialogs.clone();
                 glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
@@ -1224,7 +1275,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                         Ok(Ok(())) => {
                             dlg2.hide();
                             dlg2.destroy();
-                            refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3);
+                            refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3, &mismatch_label3);
                             post_dialogs();
                             glib::ControlFlow::Break
                         }

@@ -340,7 +340,7 @@ def _count_syllables(lyrics_content):
     for tok in tokens:
         if tok == "--":
             continue
-        if tok.startswith("\\"):
+        if re.match(r"\\[a-zA-Z]", tok):
             continue
         count += 1
     return count
@@ -541,7 +541,7 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None, split_style="
 
 def _render_one(args):
     """Render a single lyrics file. Returns (label, success)."""
-    lyrics_path, = args
+    lyrics_path, no_combine = args
     psalm_dir = os.path.dirname(lyrics_path)
     psalm_name = os.path.basename(psalm_dir)
 
@@ -564,6 +564,9 @@ def _render_one(args):
             meta = yaml.safe_load(f) or {}
         composer = meta.get("composer")
         split_style = meta.get("split_style", "default")
+
+    if no_combine:
+        split_style = "single slide"
 
     with open(notes_path) as f:
         raw_notes = f.read()
@@ -600,6 +603,7 @@ def main():
     parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count(), help="Parallel workers (default: nproc)")
     parser.add_argument("--psalm", help="Process only this psalm (e.g. psalm102)")
     parser.add_argument("--check", action="store_true", help="Check note/syllable counts without rendering")
+    parser.add_argument("--no-combine", action="store_true", help="Force single-slide rendering (no line-pair combining)")
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -637,7 +641,7 @@ def main():
 
     print(f"Found {len(lyrics_files)} lyrics files")
 
-    work = [(lf,) for lf in lyrics_files]
+    work = [(lf, args.no_combine) for lf in lyrics_files]
     ok = failed = skipped = 0
 
     with ThreadPool(args.jobs) as pool:

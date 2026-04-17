@@ -1022,12 +1022,14 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
     }
 
     let parts = get_combined_parts(song_dir, verse);
+    let n_parts = parts.len();
     let combined = parts.get(part as usize)
         .ok_or("Failed to build combined .ly")?;
     let svg_out = cached_svg_path(combined);
 
     // Already cached
     if svg_out.exists() {
+        crate::lyric_check::check_and_log(song_dir, verse, part, &svg_out, n_parts);
         return Ok(());
     }
 
@@ -1067,6 +1069,7 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
             if cropped.exists() {
                 let _ = fs::rename(&cropped, &svg_out);
             }
+            crate::lyric_check::check_and_log(song_dir, verse, part, &svg_out, n_parts);
             // let _ = fs::remove_file(&combined_ly);
             Ok(())
         }

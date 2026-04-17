@@ -6,12 +6,14 @@ use gtk::gdk;
 use gtk::glib;
 use gtk::prelude::*;
 
+use crate::lyric_check;
 use crate::model::Slide;
 use crate::render_ly;
 
 pub const DEFAULT_RENDER_WIDTH: u32 = 2400;
 
 pub type Pixmap = resvg::tiny_skia::Pixmap;
+
 
 static FONTDB: LazyLock<resvg::usvg::fontdb::Database> = LazyLock::new(|| {
     let mut db = resvg::usvg::fontdb::Database::new();
@@ -168,8 +170,15 @@ pub fn load_slide_texture(slide: &Slide, render_width: u32) -> Option<gdk::Textu
         .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
 
     let raw = if is_svg {
-        // Resolve the actual cached SVG path
         let cached = render_ly::svg_path_for_verse(&slide.song_dir, slide.current_verse, slide.part)?;
+        let n_parts = render_ly::num_parts_for_verse(&slide.song_dir, slide.current_verse);
+        lyric_check::check_and_log(
+            &slide.song_dir,
+            slide.current_verse,
+            slide.part,
+            &cached,
+            n_parts,
+        );
         load_svg_pixmap(&cached, render_width)?
     } else {
         load_png_pixmap(&slide.path, render_width)?
