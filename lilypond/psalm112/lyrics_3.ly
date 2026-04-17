@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  All's well with him whose gen -- 'rous lend -- ing
+  All's well with him whose gen -- erous lend -- ing
 gives joy to those on him de -- pend -- ing;
 who, his trust -- wor -- thi -- ness re -- veal -- ing,
 lets jus -- tice gov -- ern all his deal -- ings.
