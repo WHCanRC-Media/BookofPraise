@@ -5,7 +5,7 @@ melody = \relative c' {
   \omit Staff.TimeSignature
 
   % Line 1
-  r8 f2 g4 a4 f2 a2 c4 c4 bes4 a4 g2 r2 \break
+  f2 g4 a4 f2 a2 c4 c4 bes4 a4 g2 r2 \break
 
   % Line 2
   a2 f4 e4 d2 c2 f4 g4 a4 c4 bes2 a2 r2 \break
