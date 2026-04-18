@@ -1,8 +1,8 @@
 verse = \lyricmode {
-  How good it was for me to suf -- fer pain
-so that in all your stat -- utes you might school me.
-The per -- fect law that you, O Lord, or -- dain
-ex -- ceeds all earth -- ly rich -- es. Let it rule me!
-Your or -- di -- nan -- ces are my great -- est gain,
-for gold and sil -- ver can no long -- er fool me.
+  To me, your servant, you have kindness shown,
+  your mercy with your promise underpinning.
+  Instruct me, Lord, for it is you alone
+  who are of all true knowledge the beginning.
+  I went astray, but as I wandered on,
+  you humbled me, and now I keep from sinning.
 }
