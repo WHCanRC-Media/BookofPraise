@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  No suf -- f'ring lies in store for them;
+  No suf -- fer͜ing lies in store for them;
 they all are sleek and sound of limb.
 They do not share our pain and an -- guish;
 no trou -- bles ev -- er make them lan -- guish.

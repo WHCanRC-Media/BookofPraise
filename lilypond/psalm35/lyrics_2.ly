@@ -6,5 +6,5 @@ re -- treat in shame and be con -- found -- ed.
 Foiled be the mis -- chief they in -- tend;
 may they be chaff be -- fore the wind,
 and may the An -- gel of the Lord
-pur -- sue them with his glit -- t'ring sword.
+pur -- sue them with his glit -- te͜ring sword.
 }

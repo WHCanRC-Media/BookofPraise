@@ -1,7 +1,7 @@
 verse = \lyricmode {
     Al -- le -- lu -- ia! Al -- le -- lu -- ia!
 Glo -- ry to the Three in One:
-to the Fa --ther, and the Sav -- ior,
+to the Fa -- ther, and the Sav -- iour,
 who the vic -- to -- ry has won.
 Glo -- ry to the Ho -- ly Spir -- it,
 fount of love and sanc -- ti -- ty.

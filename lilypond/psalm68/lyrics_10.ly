@@ -5,10 +5,10 @@ They come with sound -- ing cym -- bals,
 the sing -- ers first, the min -- strels last,
 and in a -- mong them, fi -- ling past,
 the mai -- dens play their tim -- brels.
-In this great con -- gre -- ga -- tion's throne
+In this great con -- gre -- ga -- tion's throng
 let God be praised in joy -- ful song,
 O Ja -- cob's gen -- er -- a -- tion!
 There Ben -- ja -- min, the small -- est clan,
-leads Neph -- a -- li and Zeb -- u -- lun,
+leads Naph -- ta -- li and Zeb -- u -- lun,
 Ju -- dah and all the na -- tion!
 }

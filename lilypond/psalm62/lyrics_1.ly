@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  In God a- -- lone my soul finds rest,
+  In God a -- lone my soul finds rest,
 for in his faith -- ful -- ness I trust;
 from him a -- lone comes my sal -- va -- tion.
 He is the rock that will not quake,

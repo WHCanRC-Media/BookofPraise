@@ -8,5 +8,5 @@ Hap -- py is the na -- tion
 where the Lord is God.
 Freed from all op -- pres -- sion,
 they are his pos -- ses -- sion.
-Blessed is this na -- tion!
+Spread his praise a -- broad!
 }

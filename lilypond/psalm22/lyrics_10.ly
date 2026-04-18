@@ -1,6 +1,6 @@
 verse = \lyricmode {
   All who are rich will fear his maj -- es -- ty;
-all who go down to dust will bow the "knee -"
+all who go down to dust will bow the "knee –"
 yes, all whose own strength can -- not keep them free
 from death and ru -- in.
 Pos -- ter -- i -- ty through ev -- ery gen -- er -- a -- tion

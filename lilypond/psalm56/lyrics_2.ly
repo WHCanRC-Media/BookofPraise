@@ -5,6 +5,6 @@ They band to -- geth -- er in an e -- vil throng
 to watch my steps and hound me.
 In -- tent on my de -- struc -- tion, they sur -- round me.
 In wrath cast down the peo -- ples who con -- found me;
-repay them for their evil; defeat them soundly,
+repay them for their crime, defeat them soundly,
 O God, my Hel -- per strong.
 }

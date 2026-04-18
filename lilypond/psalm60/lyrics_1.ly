@@ -1,10 +1,10 @@
 verse = \lyricmode {
-  To the choirmaster: according to Sushan Eduth.
-A Miktam of David; for instruction; when he strove with
-Aram-naharim and with Aram-zobah, and Joab
-returned, and smote of Edom in the valley of Salt.
-Ge -- ne -- va, fif -- teen six -- ty -- two
-O God, you have re -- jec -- ted us
+  O God, you have re -- jec -- ted us
 and left your peo -- ple pow -- er -- less.
-Too long we -- 've seen your an -- ger burn.
+Too long we've seen your an -- ger burn.
+Re -- store us now! To us re -- turn!
+You've made our land con -- vulse and shake;
+we've seen it crack and split and quake.
+Now cause its breach -- es to be mend -- ed;
+no long -- er leave us un -- de -- fend -- ed.
 }

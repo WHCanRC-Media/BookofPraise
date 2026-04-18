@@ -1,7 +1,7 @@
 verse = \lyricmode {
-  That hope must sof -- ten all our sor -- row,
+  That hope must sof -- ten all our sor -- row.
 Come, fel -- low pil -- grims, heads then high;
-Prai -- se who bade sal -- va -- ti -- on's path,
+for those who bide sal -- va -- tion's mor -- row
 the hills are le -- vel, seas are dry.
 O bles -- sed -- ness a -- bove all mea -- sure,
 O joy when once all grief is banned.

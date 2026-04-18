@@ -6,5 +6,5 @@ and from all dan -- ger swerve you,
 lest ev -- er you your foot should dash
 a -- gainst a stone, or stum -- ble.
 The dead -- ly ser -- pent you will crush;
-the li -- on you will hum -- ble
+the li -- on you will hum -- ble.
 }

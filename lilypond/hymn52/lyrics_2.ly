@@ -6,5 +6,5 @@ one Lord, one faith, one birth.
 One ho -- ly name she bles -- ses,
 par -- takes one ho -- ly food,
 and to one hope she pres -- ses,
-with ev -- 'ry grace en -- dued.
+with ev -- ery grace en -- dued.
 }

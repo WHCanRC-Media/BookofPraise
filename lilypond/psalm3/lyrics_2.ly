@@ -2,8 +2,8 @@ verse = \lyricmode {
   I cry to God, and he
 from Zi -- on ans -- wers me;
 I will not be for -- sa -- ken.
-In him I put my trust;
-go to sleep and rest
+In him I put my trust:
+I go to sleep and rest
 un -- til at dawn I wa -- ken.
 By thou -- sands I'm be -- set,
 but God will not for -- get

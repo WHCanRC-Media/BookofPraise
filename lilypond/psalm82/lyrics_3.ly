@@ -6,5 +6,5 @@ for you my just de -- crees de -- fy.
 In spite of all your proud pre -- ten -- ces,
 you'll fall like an -- y oth -- er prin -- ces.\"
 O God, a -- rise! The earth now judge:
-all na -- tions are your her -- i -- tage.
+all na -- tions are your her -- i -- tage!
 }

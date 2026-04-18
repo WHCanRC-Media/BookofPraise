@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  You said, \"I've made a cov -- nant with my cho -- sen one;
+  You said, \"I've made a cov -- e͜nant with my cho -- sen one;
 to Da -- vid as my ser -- vant I my love have shown,
 for I to him have sworn, 'Your off -- spring I will fa -- vour;
 I will es -- tab -- lish your de -- scen -- dants' reign for -- ev -- er.

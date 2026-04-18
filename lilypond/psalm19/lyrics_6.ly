@@ -8,7 +8,7 @@ and whol -- ly in -- no -- cent.
 Lord, hear me as I pray:
 let what my tongue may say
 and what my heart may pon -- der
-be pleas -- ing in thy sight,
+be pleas -- ing in your sight,
 Re -- deem -- er great in might,
 my Rock and my De -- fend -- er.
 }

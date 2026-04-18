@@ -1,7 +1,7 @@
 verse = \lyricmode {
   O Lord, wake up! Why are you sleep -- ing?
 Come to our help, your pro -- mise keep -- ing.
-Why is it now you hide your face?
+Why is it that you hide your face?
 Have you for -- got -- ten our dis -- grace?
 We lie de -- feat -- ed in the dust.
 Rise up and help us! Do not slum -- ber.

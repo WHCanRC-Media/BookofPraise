@@ -1,6 +1,6 @@
 verse = \lyricmode {
   By your prom -- ise of love,
 by your gift of peace re -- stored,
-by your call to hea -- ven a -- bove,
+by your call to hea͜ven a -- bove us,
 hal -- low all our lives, O Lord.
 }

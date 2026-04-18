@@ -1,8 +1,8 @@
 verse = \lyricmode {
-  Their path be slip -- 'per-y, dark with woe,
+  Their path be slip -- per͜y, dark with woe,
 the An -- gel of the Lord their foe.
 They with -- out cause to -- geth -- er band -- ed
-to hide a net for my in -- tend -- ed.
+to hide a net for me in -- tend -- ed.
 They tried to trap me in a pit;
 may they them -- selves fall in -- to it.
 Let ru -- in seize them un -- a -- wares;

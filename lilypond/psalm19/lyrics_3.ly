@@ -8,7 +8,7 @@ will make the sim -- ple wise.
 His pre -- cepts plain -- ly show
 how right they are, and so
 the heart they cheer and bright -- en.
-The -- Lord's com -- mand -- ments pure
+The Lord's com -- mand -- ments pure
 shine forth with ra -- diance clear
 and so the eyes en -- light -- en.
 }

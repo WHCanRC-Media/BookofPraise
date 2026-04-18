@@ -8,5 +8,5 @@ all are his cre -- a -- tion,
 and their hearts he moulds.
 It's the Lord who e -- ver
 sees all their en -- deav -- our;
-he their works
+he their works be -- holds.
 }

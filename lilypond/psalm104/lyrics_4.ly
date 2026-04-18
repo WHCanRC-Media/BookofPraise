@@ -6,5 +6,5 @@ in oil of joy, sup -- plied in rich -- est mea -- sure.
 On ce -- dars that you plant -- ed rains pour down;
 well wa -- tered are the trees of Leb -- a -- non.
 There dwells the stork with birds of ev -- 'ry feath -- er;
-goats roam the rock -- y crags where com -- ers gath -- er.
+goats roam the rock -- y crags where co -- neys gath -- er.
 }

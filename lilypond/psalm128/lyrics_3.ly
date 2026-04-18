@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  From -- Zi -- on come your bless -- ing;
+  From Zi -- on come your bless -- ing;
 may you see Sa -- lem's peace
 and hap -- pi -- ness pro -- gress -- ing
 un -- til your days will cease.

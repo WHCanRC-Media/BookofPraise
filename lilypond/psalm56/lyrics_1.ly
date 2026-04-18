@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Be gra -- cious, O my God, to whom I flee,
+  Be gra -- cious, O my God, to whom I flee.
 I am op -- pressed, strong is my en -- e -- my,
 and all day long as -- sail -- ants har -- ass me;
 they fight a -- gainst me proud -- ly.

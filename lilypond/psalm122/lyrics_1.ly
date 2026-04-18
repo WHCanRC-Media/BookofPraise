@@ -8,5 +8,5 @@ for, O Je -- ru -- sa -- lem, at last
 our feet with -- in your gates are stand -- ing!
 Jer -- u -- sa -- lem! We stood in awe
 when we your strength and beau -- ty saw
-while to your cit -- a -- dels as -- cend -- ing
+while to your cit -- a -- dels as -- cend -- ing.
 }

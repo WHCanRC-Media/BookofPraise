@@ -3,6 +3,6 @@ verse = \lyricmode {
 of all your wick -- ed -- ness?
 All day you seek to harm and blight me
 while feign -- ing right -- eous -- ness.
-Your treach -- 'rous tongue is ra -- zor sharp
+Your treach -- e͜rous tongue is ra -- zor sharp
 the truth you twist and warp.
 }

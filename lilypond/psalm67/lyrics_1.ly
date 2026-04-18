@@ -1,7 +1,7 @@
 verse = \lyricmode {
   May God be mer -- ci -- ful and bless us,
 and cause his face on us to shine;
-may be to us be ev -- er gra -- cious,
+may he to us be ev -- er gra -- cious,
 il -- lu -- mine us with light di -- vine.
 May he to all na -- tions
 show his rev -- e -- la -- tion

@@ -1,7 +1,7 @@
 verse = \lyricmode {
   My trou -- bles and my woes you count and see.
 Put all my tears, O God to whom I flee,
-and in your bot -- tle and re -- mem -- ber me
+in -- to your bot -- tle and re -- mem -- ber me
 when wick -- ed men de -- ceive me.
 Are all my sor -- rows, all the ills that grieve me,
 not in your book, and will you not re -- lieve me?

@@ -5,6 +5,6 @@ may for all those who jus -- tice cher -- ish
 his righ -- teous -- ness a -- bound.
 Long may he live and rule our na -- tion
 while sun and moon en -- dure;
-may he in ev -- 'ry gen -- er -- a -- tion
+may he in ev -- er͜y gen -- er -- a -- tion
 our peace and joy en -- sure.
 }

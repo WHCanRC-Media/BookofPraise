@@ -6,5 +6,5 @@ their Mak -- er's word and will.
 How hap -- py were the men
 when he the calm pro -- vi -- ded
 and he their ship a -- gain
-to longed- -- for ha -- vens gui -- ded.
+to longed -- for ha -- vens gui -- ded.
 }

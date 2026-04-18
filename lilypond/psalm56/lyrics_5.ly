@@ -1,7 +1,7 @@
 verse = \lyricmode {
   I must per -- form to you, O God, my vow.
 Be -- fore your throne with grate -- ful gifts I bow;
-thank- -- off -- rings I will bring be -- fore you now,
+thank -- of -- ferings I will bring be -- fore you now,
 for you from death have saved me;
 yes, in the book of life you have en -- graved me.
 You have up -- held me, foes could not en -- slave me,

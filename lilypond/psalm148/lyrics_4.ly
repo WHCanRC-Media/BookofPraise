@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Let all cre -- a -- tion praise his name,
-ex -- tol his all- -- sur -- pass -- ing fame.
+ex -- tol his all -- sur -- pass -- ing fame.
 His glo -- ry cov -- ers earth and sky.
 He raised his peo -- ple's horn on high,
 made it for Is -- ra -- el, his na -- tion,

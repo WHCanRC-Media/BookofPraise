@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Sum -- mer and win -- ter and spring -- time and har -- vest,
-sun, moon, and stars in their cour -- ses a -- bove,
+sun, moon, and stars in their cour -- ses a -- bove
 join with all na -- ture in man -- i -- fold wit -- ness
 to thy great faith -- ful -- ness, mer -- cy, and love.
 Great is thy faith -- ful -- ness! Great is thy faith -- ful -- ness!

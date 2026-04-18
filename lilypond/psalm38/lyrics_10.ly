@@ -3,6 +3,6 @@ verse = \lyricmode {
 and stay near me;
 be my help and shield, I pray.
 Has -- ten to my aid, O Sav -- iour;
-show your fa -- vour
+show your fa -- vour.
 O my God, do not de -- lay.
 }

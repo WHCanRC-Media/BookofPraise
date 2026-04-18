@@ -8,7 +8,7 @@ in Zi -- on all as -- sem -- bled.
 When you, O Lord, went up a -- gain
 you led your cap -- tives in your train
 with trib -- ute in a -- bun -- dance;
-gifts, too, from those who reb -- els \"were –\"
+gifts, too, from those who reb -- els were "–"
 that you, Lord God, for ev -- er -- more,
 might dwell there in res -- plen -- dence.
 }

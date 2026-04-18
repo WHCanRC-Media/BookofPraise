@@ -1,14 +1,14 @@
 verse = \lyricmode {
-  When God hath spoke his migh -- ty word
+  When God but spoke his migh -- ty word,
 great was the host whose shouts were heard
-as they pro -- claimed their ti -- dings
-The dead are ri -- sen in the spirit
-Our room on in the plain she
-the spoil of war we did all -- age
+as they pro -- claimed their ti -- dings:
+\"The kings are flee -- ing in de -- spair!
+Our wo -- men in the plun -- der share,
+the spoils of war di -- vi -- ding!
 To those who stayed at home they bring
-do girt a sword and yield winged wings
-and bright -- ly gli -- ded teeth ere
-Be -- fore the Lord he kings all fled
-they flew a -- way as does a dove
-like drift -- ing soon on Zal -- mon spread
+as gift a dove with sil -- vered wings
+and bright -- ly gil -- ded feath -- ers.\"
+Be -- fore the Lord the kings all fled
+like drift -- ing snow on Zal -- mon spread
+by blasts of storm -- y weath -- er.
 }

@@ -6,5 +6,5 @@ my trib -- u -- la -- tion?
 I groan by day, but you are far from heed -- ing
 the mourn -- ful cries that I have been re -- peat -- ing;
 by night al -- so you do not hear my plead -- ing.
-I find no rest,
+I find no rest.
 }

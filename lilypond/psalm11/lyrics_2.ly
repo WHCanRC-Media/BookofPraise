@@ -5,5 +5,5 @@ his eyes in -- spect their vir -- tues and their ma -- lice.
 God hates those who in vi -- o -- lence de -- light;
 he sends them storms and brim -- stone fierce -- ly burn -- ing.
 The Lord is right -- eous. All who are up -- right
-shall see his glo -- rious face and die and year -- ning
+shall see his face and fill their deep -- est year -- ning.
 }

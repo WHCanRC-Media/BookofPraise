@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Your sta -- tues are the theme of all my song
+  Your stat -- utes are the theme of all my song
 wher -- ev -- er here on earth I make my dwell -- ing.
 Your name, Lord, I re -- mem -- ber all night long;
 your pre -- cepts I o -- bey, my vow ful -- fill -- ing.

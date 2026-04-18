@@ -1,7 +1,7 @@
 verse = \lyricmode {
   May a fu -- ture gen -- er -- a -- tion
 praise the Lord for such sal -- va -- tion:
-He looked down from hea -- ven high
+\"He looked down from hea -- ven on͜high
 to re -- lease those doomed to die!\"
 So in Zi -- on, in his dwel -- ling,
 all will praise his love un -- fail -- ing

@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Lord, hear me plead a right -- eous cause;
-with blame- -- less lips I come be- -- fore you
+with blame -- less lips I come be -- fore you
 and with my bit -- ter cries im -- plore you
 to res -- cue one who loves your laws.
 Lord, si -- lence ev -- ery ac -- cu -- sa -- tion

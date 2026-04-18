@@ -1,6 +1,6 @@
 verse = \lyricmode {
   The fruit of all his suf -- fer -- ing and pain
-shall be be -- held, con -- tented -- ed with his gain
+shall he be -- hold, con -- tent -- ed with his gain:
 that men through his ins -- truc -- tion may ob -- tain
 his bound -- less mer -- cy.
 Hence I, the Lord, re -- ward him for his pas -- sion

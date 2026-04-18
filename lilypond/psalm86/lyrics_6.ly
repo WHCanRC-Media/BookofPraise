@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Stren -- gth -- en me in my af -- flic -- tion;
+  Stren -- gthen me in my af -- flic -- tion;
 grant your ser -- vant your pro -- tec -- tion.
 You whom I re -- ly u -- pon,
 res -- cue me, your hand -- maid's son.

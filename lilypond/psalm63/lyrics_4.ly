@@ -5,6 +5,6 @@ The sharp -- ened sword will sore -- ly grieve them;
 they will be -- come the jack -- al's prey.
 But then the king in God will glo -- ry
 with all who swear by his great name,
-for li -- ars he will fill to shame
+for li -- ars he will put to shame
 and si -- lence ev -- ery ad -- ver -- sa -- ry.
 }

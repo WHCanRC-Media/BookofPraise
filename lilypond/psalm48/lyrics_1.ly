@@ -7,6 +7,6 @@ Joy and pride of all the earth,
 she pro -- claims her Mak -- er's worth.
 In the north the cit -- y tow -- ers;
 there the great King shows his pow -- ers.
-He her sure de -- fence will ev -- er
+He, her sure de -- fence, will ev -- er
 be her strength, for -- sake her nev -- er.
 }
