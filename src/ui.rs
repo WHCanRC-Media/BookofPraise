@@ -558,9 +558,20 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     let lyrics_help_btn = gtk::Button::with_label("?");
     lyrics_help_btn.add_css_class("help-btn");
     lyrics_help_btn.set_tooltip_text(Some("Lyrics syntax help"));
+    let add_slur_btn = gtk::Button::with_label("mel\u{035C}isma");
+    add_slur_btn.set_tooltip_text(Some("Insert combining double breve below (U+035C) at cursor"));
     let lyrics_label_row = gtk::Box::new(gtk::Orientation::Horizontal, 4);
     lyrics_label_row.append(&lyrics_label);
     lyrics_label_row.append(&lyrics_help_btn);
+
+    {
+        let lyrics_view = lyrics_view.clone();
+        add_slur_btn.connect_clicked(move |_| {
+            let buf = lyrics_view.buffer();
+            buf.insert_at_cursor("\u{035C}");
+            lyrics_view.grab_focus();
+        });
+    }
 
     let split_style_label = gtk::Label::new(Some("Split style"));
     split_style_label.set_xalign(0.0);
@@ -576,6 +587,7 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     let btn_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     btn_row.append(&save_btn);
     btn_row.append(&revert_btn);
+    btn_row.append(&add_slur_btn);
 
     let editor_panel = gtk::Box::new(gtk::Orientation::Vertical, 4);
     editor_panel.set_margin_start(4);
