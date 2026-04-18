@@ -59,7 +59,7 @@ pub fn check_for_update() -> Result<Option<(String, String)>, String> {
 }
 
 /// Download the source-code zip from a GitHub release and extract the
-/// `lilypond/` and `photos/` directories, replacing the local copies.
+/// `lilypond/`, `photos/`, and `lyrics/` directories, replacing the local copies.
 pub fn download_and_extract(zipball_url: &str, tag: &str) -> Result<(), String> {
     let resp = ureq::get(zipball_url)
         .set("Authorization", &format!("Bearer {GITHUB_PAT}"))
@@ -88,13 +88,16 @@ pub fn download_and_extract(zipball_url: &str, tag: &str) -> Result<(), String> 
             None => continue,
         };
 
-        // Only extract lilypond/ and photos/ directories
+        // Only extract lilypond/, photos/, and lyrics/ directories
         let rel = if let Some(rest) = after_prefix.strip_prefix("lilypond/") {
             if rest.is_empty() { continue; }
             PathBuf::from("lilypond").join(rest)
         } else if let Some(rest) = after_prefix.strip_prefix("photos/") {
             if rest.is_empty() { continue; }
             PathBuf::from("photos").join(rest)
+        } else if let Some(rest) = after_prefix.strip_prefix("lyrics/") {
+            if rest.is_empty() { continue; }
+            PathBuf::from("lyrics").join(rest)
         } else {
             continue;
         };
