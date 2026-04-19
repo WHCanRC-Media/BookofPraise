@@ -8,7 +8,7 @@ in joy -- ful song a -- dore him.
 Lift up your voice and sing a -- loud
 to him who rides up -- on the clouds
 high in the spa -- cious hea -- vens.
-The Lord "–" that is his glo -- rious name.
+The "Lord –" that is his glo -- rious name.
 Re -- joice in him with loud ac -- claim;
 to him be glo -- ry gi -- ven.
 }

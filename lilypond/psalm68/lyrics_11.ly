@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Lord, let your glo -- rious pow -- er be known;
+  Lord, let your glo -- rious pow͜er be known;
 show us the strength on which your own
 have in the past de -- pend -- ed.
 Be -- cause you have your tem -- ple here,

@@ -2,8 +2,8 @@ verse = \lyricmode {
   O God, when you went on a -- head
 and through the bar -- ren des -- ert led
 the flock you had as -- sem -- bled,
-you caused the earth to quake and cow -- er;
-O God of Is -- ra -- el, great in pow -- er,
+you caused the earth to quake and cower;
+O God of Is -- ra͜el, great in pow͜er,
 be -- fore you, Si -- nai trem -- bled.
 You with a -- bun -- dant rain, O Lord,
 your wea -- ry her -- i -- tage re -- stored

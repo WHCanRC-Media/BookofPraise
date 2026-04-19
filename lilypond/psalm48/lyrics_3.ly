@@ -8,5 +8,5 @@ to the peace your hand has brought,
 and your stead -- fast love we pon -- der.
 Your great name, O God of won -- der,
 and your praise, your ex -- al -- ta -- tion,
-reach the earth's re -- mote -- est na -- tion.
+reach the earth's re -- mot -- est na -- tion.
 }

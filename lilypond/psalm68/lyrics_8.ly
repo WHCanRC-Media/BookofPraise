@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Blest be the Lord, who on our way
-pro -- vi -- des for us, and day by day
+pro -- vides for us, and day by day
 up -- holds us by his pow -- er.
 God of Sal -- va -- tion is his name;
 this glo -- rious name shall we pro -- claim.

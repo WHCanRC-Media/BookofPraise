@@ -6,9 +6,9 @@ Praise him who rides the an -- cient sky,
 who thun -- ders forth his bat -- tle cry;
 let all bow down be -- fore him.
 Pro -- claim his power and spread his fame,
-for great in Is -- rael is his name;
+for great in Is -- ra͜el is his name;
 his might is in the hea -- vens.
 O awe -- some God, you from your throne
-with pow -- er and glo -- ry bless your own.
+with pow͜er and glo -- ry bless your own.
 To you all praise be giv -- en!
 }

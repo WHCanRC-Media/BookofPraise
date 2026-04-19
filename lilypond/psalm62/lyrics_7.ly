@@ -1,6 +1,6 @@
 verse = \lyricmode {
   God once has spo -- ken, I have heard
-the two- -- fold nev- -- er- -- fail- -- ing word
+the two -- fold nev -- er -- fail -- ing word
 that you, God, are my strong de -- fen -- der,
 that stead -- fast love is yours, O Lord,
 for all re -- ceive their just re -- ward

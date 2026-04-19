@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  In your de -- crees I place my stead -- fast hope,
+  In your de -- crees I place my stead -- fast hope;
 I cling to them, on your great love de -- pend -- ing.
 Lord, put me not to shame but lift me up
 and show to me your faith -- ful -- ness un -- end -- ing.

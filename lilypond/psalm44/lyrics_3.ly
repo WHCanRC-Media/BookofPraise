@@ -6,5 +6,5 @@ and put the en -- e -- my to shame.
 In God we glo -- ry all day long,
 for we are thank -- ful for your fa -- vour.
 We shall ex -- alt you in our song
-and praise your ho -- ly name for e -- ver.
+and praise your ho -- ly name for -- e -- ver.
 }

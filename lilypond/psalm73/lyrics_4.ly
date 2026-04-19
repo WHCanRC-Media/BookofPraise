@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Such are the wick -- "ed–" they're se -- cure;
+  Such are the wick -- "ed – " they're se -- cure;
 their wealth in -- creas -- es ev -- er -- more.
 Sure -- ly in vain I've been pure -- heart -- ed
 and have not from God's laws de -- part -- ed,

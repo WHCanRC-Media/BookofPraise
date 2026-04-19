@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Whom do I have in heav -- en but you?
+  Whom do I have in heav͜en but you?
 You, God of grace, my faith re -- new:
 I seek no earth -- ly wealth or splen -- dour;
 to en -- vy I will not sur -- ren -- der.
