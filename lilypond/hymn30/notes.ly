@@ -23,7 +23,7 @@ melody = \relative c' {
   g8 c4 bes4 c4 d4 bes4 a4 g4 \break
 
   % Line 7
-  g8 bes4 g4 bes4 f4 ees4 d4 c2 \break
+  g8 bes4 g4 bes4 f4 ees4( d4) c2 \break
 
   % Line 8
   g'4 f8( ees8) d2 c1 \bar "|."

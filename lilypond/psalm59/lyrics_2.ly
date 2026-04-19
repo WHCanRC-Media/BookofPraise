@@ -3,4 +3,8 @@ verse = \lyricmode {
 and do not let my foes en -- slave me.
 You are the God of Is -- ra -- el,
 our strong -- hold and our ci -- ta -- del.
+Come, rouse your -- self and judge the na -- tions
+who taunt you with their prov -- o -- ca -- tions.
+Spare none of those who treach -- er -- ous -- ly
+plot e -- vil and in -- i -- qui -- ty.
 }
