@@ -10,5 +10,5 @@ a shield to cov -- er me
 when I am faint and wea -- ry,
 for when you hear me sigh,
 you lift my head up high;
-you are my po -- wer and glo -- ry.
+you are my pow͜er and glo -- ry.
 }
