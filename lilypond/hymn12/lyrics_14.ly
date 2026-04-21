@@ -7,6 +7,6 @@ The Lord is good, his mer -- cy great:
 his ser -- vants he will vin -- di -- cate,
 wreak venge -- ance on his ad -- ver -- sa -- ries.
 His cho -- sen peo -- ple he has shown
-the cov -- e -- nant love that nev -- er va -- ries
+the cov -- enant love that nev -- er va -- ries
 and for their land will he a -- tone.
 }

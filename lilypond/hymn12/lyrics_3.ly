@@ -1,7 +1,7 @@
 verse = \lyricmode {
   When God Most High did par -- cel out the lands,
 dis -- pers -- ing all man -- kind as na -- tions,
-he fixed their boun -- da -- ries by his hand
+he fixed their boun -- da͜ries by his hand
 to give all tribes their place and sta -- tion.
 His cho -- sen peo -- ple formed his share;
 he Ja -- cob as his own de -- clared.

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Lo, as an ea -- gle, hov -- 'ring o'er its young
+  Lo, as an ea -- gle, hov -- e͜ring o'er its young
 when it has thrust them from its ey -- rie,
 will catch them, bear -- ing them a -- long
 on out -- spread wings that nev -- er wea -- ry,

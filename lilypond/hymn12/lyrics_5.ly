@@ -7,6 +7,6 @@ But Jes -- hu -- run grew fat, and "kicked –"
 how fat you've grown, how sleek and thick!
 Then he for -- sook the God who made him;
 sal -- va -- tion's con -- stant Rock he spurned.
-With for -- eign i -- dols he be -- trayed him;
+With for -- eign i -- dols he be -- trayed him:
 God's jea -- lous an -- ger fierce -- ly burned.
 }
