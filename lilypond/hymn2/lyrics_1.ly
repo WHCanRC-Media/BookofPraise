@@ -1,5 +1,5 @@
 verse = \lyricmode {
- In God, our heaven -- ly Fa -- ther, I be -- lieve 
+ In God, our heaven -- ly Fa -- ther, I be -- "lieve –"
 al -- might -- y Rul -- er, all -- vic -- to -- rious,
 Cre -- a -- tor of both heaven and earth,
 whose ho -- ly name is great and glo -- rious.

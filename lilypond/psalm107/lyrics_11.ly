@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The -- Lord, their fears al -- lay -- ing,
+  The Lord, their fears al -- lay -- ing,
 bade storm and wind be still;
 hushed were the waves, o -- bey -- ing
 their Mak -- er's word and will.

@@ -5,6 +5,6 @@ our daugh -- ters with their beau -- ty us en -- thral
 like grace -- ful col -- umns in a pal -- ace hall;
 and may our gar -- ners all be o -- ver -- flow -- ing,
 pro -- vi -- sions of all kinds on us be -- stow -- ing.
-May in our fields our sheep so mul -- ti -- ply,
+May in our fields our sheep so mul -- ti -- ply
 that their ten thou -- sands ev -- ery count de -- fy.
 }
