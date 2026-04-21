@@ -3,6 +3,6 @@ verse = \lyricmode {
 glo -- ry be to the church's King,
 glo -- ry to the King of glo -- ry!
 Heav -- en earth, your prais -- es bring.
-Ha -- le -- lu -- jah, ha -- le -- lu -- jah!
+Hal -- le -- lu -- jah, hal -- le -- lu -- jah!
 To the King of glo -- ry sing!
 }

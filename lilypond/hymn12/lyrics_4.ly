@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Lo, as an ea -- gle, hov -- 'ring o'er its young
-when it has thrust them from its eye -- rie,
+when it has thrust them from its ey -- rie,
 will catch them, bear -- ing them a -- long
 on out -- spread wings that nev -- er wea -- ry,
 so was the Lord then Ja -- cob's guide:

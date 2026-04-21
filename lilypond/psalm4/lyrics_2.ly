@@ -8,5 +8,5 @@ Do not let wrath breed sin and vi͜o -- lence.
 Re -- strain your an -- ger and be still;
 lie down to me -- di -- tate in si -- lence.
 Place in the Lord your sole re -- li -- ance.
-Bring him right of -- fer -- ings. Do his͜will.
+Bring him right of -- fer͜ings. Do his will.
 }

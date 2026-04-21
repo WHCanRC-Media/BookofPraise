@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Did we in our own strength con -- fide,
-ow -- er striv -- ing would be los -- ing,
+our striv -- ing would be los -- ing,
 were not the right Man on our side,
 the Man of God's own choo -- sing.
 Dost ask who that may be?
