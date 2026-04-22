@@ -784,11 +784,64 @@ fn sanitize_lyrics(content: &str) -> String {
     }
     let s = Regex::new(r"\\(left|right|textit|textbf|emph)\s*")
         .unwrap()
-        .replace_all(&s, "");
-    Regex::new(r"\\u[0-9a-fA-F]{4}")
+        .replace_all(&s, "")
+        .to_string();
+    let s = Regex::new(r"\\u[0-9a-fA-F]{4}")
         .unwrap()
         .replace_all(&s, "")
-        .to_string()
+        .to_string();
+    expand_multi_breve(&s)
+}
+
+/// A U+035C (combining double breve below) joins its preceding base char to
+/// the following base char. A span of K base chars connected by K-1 breves
+/// (e.g. `l͜o͜n͜e`) represents one melismatic syllable.
+///
+/// When K ≥ 3 (i.e. 2+ breves in the span), expand to ligature halves with
+/// a conjoining macron middle so the mark renders continuously:
+///   c[0] FE27  c[1] FE2D  ...  c[K-2] FE2D  c[K-1] FE28
+/// K=2 spans (single U+035C between two chars) are left unchanged.
+fn expand_multi_breve(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\u{035C}' {
+            out.push('\u{035C}');
+            i += 1;
+            continue;
+        }
+        let mut span = vec![chars[i]];
+        let mut j = i + 1;
+        while j + 1 < chars.len() && chars[j] == '\u{035C}' && chars[j + 1] != '\u{035C}' {
+            span.push(chars[j + 1]);
+            j += 2;
+        }
+        let k = span.len();
+        if k >= 3 {
+            for (idx, c) in span.iter().enumerate() {
+                out.push(*c);
+                let mark = if idx == 0 {
+                    '\u{FE27}'
+                } else if idx == k - 1 {
+                    '\u{FE28}'
+                } else {
+                    '\u{FE2D}'
+                };
+                out.push(mark);
+            }
+            i = j;
+        } else if k == 2 {
+            out.push(span[0]);
+            out.push('\u{035C}');
+            out.push(span[1]);
+            i = j;
+        } else {
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+    out
 }
 
 /// Count the maximum number of note/rest events across all lines in the raw notes content.
