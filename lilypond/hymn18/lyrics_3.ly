@@ -2,11 +2,11 @@ verse = \lyricmode {
   As God has pro -- mised, all our sins
 will be for -- giv -- en, swept a -- way.
 He from on high in ten -- der love
-bless us with the deep -- est day
+will bless us with the glo -- "ri͜ous" day
 on which be -- fore our ver -- y eyes
-will shine u -- pon us for -- ev -- er.
-For in that dark and still re -- lease
-and, when the day shall grant re -- lease
-and, when the dark -- ness light shall come,
+the ra -- "di͜ant" Mor -- ning Sun will rise
+to shine on us for -- ev -- er.
+From death's dark sha -- dow he will grant re -- lease
+and, when its ty -- ran -- ny shall cease,
 will guide our feet in -- to the path of peace.
 }

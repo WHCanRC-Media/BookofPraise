@@ -7,6 +7,6 @@ He through his proph -- ets long a -- go
 said he would save us from our foe,
 from all who scorn and hate us.
 He has not put our fa -- thers' faith to shame
-but, in his love re -- mem -- b'ring them,
+but, in his love re -- mem -- "b͜e͜ring" them,
 has kept the oath he swore to A -- bra -- ham.
 }
