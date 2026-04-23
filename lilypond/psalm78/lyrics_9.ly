@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  They slight -- ed God and said,"\"Will" he be a -- ble
+  They slight -- ed God and said, \"Will he be a -- ble
 to spread us in the wil -- der -- ness a ta -- ble?
 He struck the rock, we saw the foun -- tains gush -- ing
 and streams of wa -- ter through the des -- ert rush -- ing,

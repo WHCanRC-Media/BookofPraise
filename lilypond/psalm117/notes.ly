@@ -14,10 +14,10 @@ melody = \relative c' {
   d2 e4 fis4 g4 a4 a4 gis4 a2 r2 \break
 
   % Line 4
-  a2 b4 b4 d4 d4 cis2 b2 r4 a2 r2 \break
+  a2 b4 b4 d4 d4 cis2 b2 a2 r2 \break
 
   % Line 5
-  a2 g4 fis4 b4 a4 g2( fis2) e2 r2 \break
+  a2 g4 fis4 b4 a4 g2 fis2 e2 r2 \break
 
   % Line 6
   e2 fis4 g4 a4 b2 a2 gis4 a1 \bar "|."

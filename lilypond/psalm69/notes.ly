@@ -5,10 +5,10 @@ melody = \relative c' {
   \omit Staff.TimeSignature
 
   % Line 1
-  e2 g4 g4 a2 e2 g4 r4 g4 d2 f2 e2 r2 \break
+  e2 g4 g4 a2 e2 g4 g4 d2 f2 e2 r2 \break
 
   % Line 2
-  e2 e4 d4 c2 e2 e4 f4 g4 a4 gis2 a2 r2 r4 \break
+  e2 e4 d4 c2 e2 e4 f4 g4 a4 gis2 a2 r2 \break
 
   % Line 3
   a2 f4 f4 e2 c2 d4 e4 f4 e4 d2 c2 r2 \break
@@ -23,7 +23,7 @@ melody = \relative c' {
   a2 a4 b4 c2 a2 g4 e4 f4 g4 a2 e2 r2 \break
 
   % Line 7
-  e2 f4 d4 e2 c2 d4 e4 f2 d2 e2 \break
+  e2 f4 d4 e2 c2 d4 e4 f2 d2 e2 r2\break
 
   % Line 8
   a2 g4 g4 a2 c2 c4 b4 a4 g4 f2 e1 \bar "|."
