@@ -1,7 +1,7 @@
 verse = \lyricmode {
   Though fig trees may not blos -- som
 and vines no fruit may yield,
-though ol -- i -- ves be a fail -- ure
+though ol -- ives be a fail -- ure
 and bar -- ren be the field,
 though in the fold and sta -- bles
 there be no flock or herd,
