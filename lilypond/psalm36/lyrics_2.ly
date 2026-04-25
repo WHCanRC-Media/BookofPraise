@@ -1,6 +1,6 @@
 verse = \lyricmode {
   O Lord, your faith -- ful -- ness and love
-reach to the heights of hea -- ven a -- bove.
+reach to the heights of heav͜e͜n a -- bove.
 Your jus -- tice lasts for -- ev -- er;
 it is like moun -- tains vast and steep;
 your judg -- ments all are o -- cean -- deep.
