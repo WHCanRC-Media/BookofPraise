@@ -12,7 +12,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
 /// Lyrics font-size magnification as thousandths (1000 = 1.0×).
@@ -29,6 +29,18 @@ pub fn lyrics_magnification() -> f64 {
 pub fn set_lyrics_magnification(mag: f64) {
     let clamped = mag.clamp(0.1, 10.0);
     LYRICS_MAGNIFICATION_MILLI.store((clamped * 1000.0).round() as u32, Ordering::Relaxed);
+}
+
+/// When true, every verse is rendered on a single slide regardless of its split style.
+static FORCE_ONE_SLIDE: AtomicBool = AtomicBool::new(false);
+
+/// Enable the `--force-one-slide` override (sticky for the process).
+pub fn enable_force_one_slide() {
+    FORCE_ONE_SLIDE.store(true, Ordering::Relaxed);
+}
+
+fn force_one_slide() -> bool {
+    FORCE_ONE_SLIDE.load(Ordering::Relaxed)
 }
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -694,11 +706,39 @@ fn count_note_lines(raw_notes: &str) -> usize {
     breaks + bars
 }
 
+/// Bracket slurred groups of eighth notes with beams.
+///
+/// Finds slurs whose notes are all plain eighths (e.g. `a8( b8)`,
+/// `a8( b8 c8)`) and rewrites them to `a8[( b8])` so they render with a
+/// beam. Slurs containing any non-eighth (quarter, dotted eighth, etc.)
+/// are left unchanged.
+fn beam_slurred_eighths(notes: &str) -> String {
+    const NOTE: &str = r"[a-g](?:isis|eses|is|es)?[',]*";
+    let pattern = Regex::new(&format!(r"({NOTE}8)\(([^()]*?)({NOTE}8)\)")).unwrap();
+    let dur = Regex::new(&format!(r"{NOTE}(\d+\.?)")).unwrap();
+    pattern
+        .replace_all(notes, |caps: &regex::Captures| {
+            let first = &caps[1];
+            let middle = &caps[2];
+            let last = &caps[3];
+            for dm in dur.captures_iter(middle) {
+                if &dm[1] != "8" {
+                    return caps[0].to_string();
+                }
+            }
+            format!("{first}[({middle}{last}])")
+        })
+        .to_string()
+}
+
 /// Apply visual tweaks to note content before rendering:
+/// - Beam slurred eighth-note groups
 /// - Hide clef after the first line break
 /// - If `force_combine` or enough lines, combine pairs by removing odd `\break`s
 /// - Add invisible rests at line boundaries for alignment
 fn modify_notes(notes: &str, force_combine: bool) -> String {
+    let notes = beam_slurred_eighths(notes);
+    let notes = notes.as_str();
     let re_note = Regex::new(r"[a-g](is|es)?[0-9]").unwrap();
     let re_rest_end = Regex::new(r"r[0-9]+\.?\s*(\\break|\\bar)").unwrap();
     let re_break_bar = Regex::new(r"(\s*\\break|\s*\\bar)").unwrap();
@@ -941,6 +981,9 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_wi
 /// Determine the effective number of slide parts for a song based on its
 /// split style and the number of `\break`s in its notes.
 fn effective_n_parts(split_style: &SplitStyle, break_count: usize) -> usize {
+    if force_one_slide() {
+        return 1;
+    }
     match split_style {
         SplitStyle::Default | SplitStyle::MultiSlide => {
             let total_lines = break_count + 1;
@@ -1137,5 +1180,29 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
             eprintln!("{msg}");
             Err(msg)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::beam_slurred_eighths;
+
+    #[test]
+    fn beams_slurred_eighth_pairs_and_triplets() {
+        assert_eq!(beam_slurred_eighths("c8( a8)"), "c8[( a8])");
+        assert_eq!(beam_slurred_eighths("a8( b8 c8)"), "a8[( b8 c8])");
+        assert_eq!(beam_slurred_eighths("f8( g8) a4."), "f8[( g8]) a4.");
+    }
+
+    #[test]
+    fn leaves_non_eighth_slurs_alone() {
+        assert_eq!(beam_slurred_eighths("a8( b4)"), "a8( b4)");
+        assert_eq!(beam_slurred_eighths("a4( b4)"), "a4( b4)");
+        assert_eq!(beam_slurred_eighths("a8.( b8)"), "a8.( b8)");
+    }
+
+    #[test]
+    fn idempotent_when_already_beamed() {
+        assert_eq!(beam_slurred_eighths("a8[( b8])"), "a8[( b8])");
     }
 }

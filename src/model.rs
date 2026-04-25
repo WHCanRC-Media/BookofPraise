@@ -42,6 +42,10 @@ pub struct Cli {
     /// Check for updates on startup
     #[arg(long, default_value_t = cfg!(feature = "auto-update"))]
     pub update: bool,
+
+    /// Force rendering every verse onto a single slide, overriding per-song split style.
+    #[arg(long)]
+    pub force_one_slide: bool,
 }
 
 // ── Data model ──────────────────────────────────────────────────────

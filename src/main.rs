@@ -31,6 +31,9 @@ fn main() -> glib::ExitCode {
     if cli.update {
         model::enable_data_dir_mode();
     }
+    if cli.force_one_slide {
+        render_ly::enable_force_one_slide();
+    }
     let app = gtk::Application::builder()
         .application_id("org.bop.bookofpraise")
         .build();
