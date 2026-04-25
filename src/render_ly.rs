@@ -706,29 +706,15 @@ fn count_note_lines(raw_notes: &str) -> usize {
     breaks + bars
 }
 
-/// Bracket slurred groups of eighth notes with beams.
+/// Beam pairs of slurred eighth notes.
 ///
-/// Finds slurs whose notes are all plain eighths (e.g. `a8( b8)`,
-/// `a8( b8 c8)`) and rewrites them to `a8[( b8])` so they render with a
-/// beam. Slurs containing any non-eighth (quarter, dotted eighth, etc.)
-/// are left unchanged.
+/// Only matches slurs that contain exactly two plain eighth notes
+/// (e.g. `a8( b8)` -> `a8[( b8])`). Slurs with three or more notes are
+/// left for manual beaming.
 fn beam_slurred_eighths(notes: &str) -> String {
     const NOTE: &str = r"[a-g](?:isis|eses|is|es)?[',]*";
-    let pattern = Regex::new(&format!(r"({NOTE}8)\(([^()]*?)({NOTE}8)\)")).unwrap();
-    let dur = Regex::new(&format!(r"{NOTE}(\d+\.?)")).unwrap();
-    pattern
-        .replace_all(notes, |caps: &regex::Captures| {
-            let first = &caps[1];
-            let middle = &caps[2];
-            let last = &caps[3];
-            for dm in dur.captures_iter(middle) {
-                if &dm[1] != "8" {
-                    return caps[0].to_string();
-                }
-            }
-            format!("{first}[({middle}{last}])")
-        })
-        .to_string()
+    let pattern = Regex::new(&format!(r"({NOTE}8)\((\s*)({NOTE}8)\)")).unwrap();
+    pattern.replace_all(notes, "$1[($2$3])").to_string()
 }
 
 /// Apply visual tweaks to note content before rendering:
@@ -1188,10 +1174,20 @@ mod tests {
     use super::beam_slurred_eighths;
 
     #[test]
-    fn beams_slurred_eighth_pairs_and_triplets() {
+    fn beams_slurred_eighth_pairs() {
         assert_eq!(beam_slurred_eighths("c8( a8)"), "c8[( a8])");
-        assert_eq!(beam_slurred_eighths("a8( b8 c8)"), "a8[( b8 c8])");
         assert_eq!(beam_slurred_eighths("f8( g8) a4."), "f8[( g8]) a4.");
+        assert_eq!(beam_slurred_eighths("a8( b8) c8( d8)"), "a8[( b8]) c8[( d8])");
+    }
+
+    #[test]
+    fn skips_slurs_with_more_than_two_notes() {
+        assert_eq!(beam_slurred_eighths("a8( b8 c8)"), "a8( b8 c8)");
+        assert_eq!(
+            beam_slurred_eighths("b8( c8 d8 g,8 c4)"),
+            "b8( c8 d8 g,8 c4)"
+        );
+        assert_eq!(beam_slurred_eighths("c4( a8 b8)"), "c4( a8 b8)");
     }
 
     #[test]
@@ -1204,5 +1200,27 @@ mod tests {
     #[test]
     fn idempotent_when_already_beamed() {
         assert_eq!(beam_slurred_eighths("a8[( b8])"), "a8[( b8])");
+    }
+
+    #[test]
+    fn leaves_manual_beams_alone() {
+        // Manual beam on a 3-note slur — must not be touched or double-beamed
+        assert_eq!(beam_slurred_eighths("a8[( b8 c8])"), "a8[( b8 c8])");
+        // Manual beam on the eighth-run inside a mixed slur
+        assert_eq!(
+            beam_slurred_eighths("b8[( c8 d8 g,8] c4)"),
+            "b8[( c8 d8 g,8] c4)"
+        );
+        // Manual beam starting mid-slur
+        assert_eq!(beam_slurred_eighths("c4( a8[ b8])"), "c4( a8[ b8])");
+    }
+
+    #[test]
+    fn auto_beams_pair_alongside_manual_beam() {
+        // First slur is manually beamed (3 notes); second pair should auto-beam
+        assert_eq!(
+            beam_slurred_eighths("a8[( b8 c8]) d8( e8)"),
+            "a8[( b8 c8]) d8[( e8])"
+        );
     }
 }
