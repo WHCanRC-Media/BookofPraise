@@ -25,6 +25,30 @@ def _extract_line_contents(notes_content):
     return result
 
 
+_NOTE_RE = r"[a-g](?:isis|eses|is|es)?[',]*"
+
+
+def _beam_slurred_eighths(notes_content):
+    """Bracket slurred groups of eighth notes with beams.
+
+    Finds slurs whose notes are all plain eighths (e.g. `a8( b8)`,
+    `a8( b8 c8)`) and rewrites them to `a8[( b8])` so they render with
+    a beam. Slurs containing any non-eighth (quarter, dotted eighth,
+    etc.) are left unchanged.
+    """
+    pattern = re.compile(rf"({_NOTE_RE}8)\(([^()]*?)({_NOTE_RE}8)\)")
+    dur_re = re.compile(rf"{_NOTE_RE}(\d+\.?)")
+
+    def repl(m):
+        first, middle, last = m.group(1), m.group(2), m.group(3)
+        for dm in dur_re.finditer(middle):
+            if dm.group(1) != "8":
+                return m.group(0)
+        return f"{first}[({middle}{last}])"
+
+    return pattern.sub(repl, notes_content)
+
+
 def modify_notes(notes_content, force_combine=False):
     """Apply visual adjustments to notes content for rendering.
 
@@ -32,7 +56,10 @@ def modify_notes(notes_content, force_combine=False):
     - Inject accidentalStyle forget if no barlines
     - Hide clef after first line
     - Add hidden rests at start/end of lines for alignment
+    - Beam slurred eighth-note groups
     """
+    notes_content = _beam_slurred_eighths(notes_content)
+
     # Combine line pairs by removing odd-numbered \break markers
     if force_combine:
         parts = notes_content.split("\\break")
