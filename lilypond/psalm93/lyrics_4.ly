@@ -1,0 +1,6 @@
+verse = \lyricmode {
+  Your word stands firm, in your de -- crees we trust;
+your stat -- utes are de -- pend -- a -- ble and just,
+and ho -- li -- ness, O Lord whom we a -- dore,
+be -- fits your house, now and for ev -- er -- more.
+}

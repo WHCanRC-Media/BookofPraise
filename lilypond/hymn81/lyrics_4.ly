@@ -1,0 +1,6 @@
+verse = \lyricmode {
+  He breaks the power of reign -- ing sin,
+he sets the pris -- oner free;
+his blood can make the foul -- est clean;
+his blood a -- vails for me.
+}

@@ -1,0 +1,6 @@
+verse = \lyricmode {
+  We shall for -- ev -- er joy -- ful prais -- es ren -- der
+to you, O Lord, our Shep -- herd and De -- fend -- er.
+We as your flock, your cho -- sen con -- gre -- ga -- tion,
+shall give you thanks through ev -- er͜y gen -- er -- a -- tion.
+}

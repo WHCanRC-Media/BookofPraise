@@ -1,0 +1,137 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version string baked into the Windows installer'
+        type: string
+        required: false
+        default: ''
+  workflow_dispatch:
+  push:
+    branches-ignore:
+      - 'bop-edit/**'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK4 dev libraries
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Diag BOP_PAT
+        run: echo "BOP_PAT_LEN=${#BOP_PAT}"
+        env:
+          BOP_PAT: ${{ secrets.BOP_PAT }}
+
+      - name: Build
+        run: cargo build --release --features auto-update
+        env:
+          BOP_PAT: ${{ secrets.BOP_PAT }}
+
+      - name: Assemble distribution
+        run: |
+          mkdir -p dist
+          cp target/release/bop dist/
+
+      - name: Zip
+        run: cd dist && zip -r ../bop-linux.zip .
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'push'
+        with:
+          name: bop-linux
+          path: bop-linux.zip
+
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-rust
+            mingw-w64-ucrt-x86_64-pkg-config
+            unzip
+            zip
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Diag BOP_PAT
+        run: echo "BOP_PAT_LEN=${#BOP_PAT}"
+        env:
+          BOP_PAT: ${{ secrets.BOP_PAT }}
+
+      - name: Build
+        run: cargo build --release --features auto-update
+        env:
+          BOP_PAT: ${{ secrets.BOP_PAT }}
+
+      - name: Assemble distribution
+        run: |
+          mkdir -p dist
+          cp target/release/bop.exe dist/
+          cp target/release/*.dll dist/
+
+          # Bundle GDK pixbuf loaders and GTK schemas
+          cp -r /$MSYSTEM/lib/gdk-pixbuf-2.0 dist/lib/gdk-pixbuf-2.0 2>/dev/null || true
+          mkdir -p dist/share/glib-2.0
+          cp -r /$MSYSTEM/share/glib-2.0/schemas dist/share/glib-2.0/ 2>/dev/null || true
+
+      - name: Zip
+        run: cd dist && zip -r ../bop-windows.zip .
+
+      - name: Build Windows installer
+        env:
+          MSYS2_ARG_CONV_EXCL: '*'
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="0.0.0-dev-${GITHUB_SHA::7}"
+          fi
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
+            /DAppVersion="$VERSION" \
+            installer/installer.iss
+          cp installer/output/BookOfPraise-Setup.exe BookOfPraise-Setup.exe
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'push'
+        with:
+          name: bop-windows
+          path: bop-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'push'
+        with:
+          name: bop-windows-installer
+          path: BookOfPraise-Setup.exe
+
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install asciidoctor-pdf
+        run: sudo gem install asciidoctor-pdf --no-document
+
+      - name: Build user guide PDF
+        run: asciidoctor-pdf doc/userguide.adoc -o BookOfPraise-UserGuide.pdf
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'push'
+        with:
+          name: userguide
+          path: BookOfPraise-UserGuide.pdf

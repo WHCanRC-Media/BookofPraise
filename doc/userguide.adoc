@@ -1,0 +1,230 @@
+= Book of Praise User Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:imagesdir: images
+:sectnums:
+
+== Introduction
+
+Book of Praise is an application for displaying psalms and hymns as projected slides during a worship service.
+It shows sheet music one verse at a time, framed in a 16:9 slide format suitable for a projector or large screen.
+
+The music is generated from LilyPond source files, and you can edit the notes and lyrics directly in the app.
+
+== Installation
+
+=== Windows
+
+The easiest option is the installer:
+
+. Download `BookOfPraise-Setup.exe` from the releases page.
+. Run it and follow the prompts.
+. Launch *Book of Praise* from the Start menu.
+
+Alternatively, the portable zip is available:
+
+. Download the latest `bop-windows.zip` from the releases page.
+. Extract the zip to a folder of your choice.
+. Run `bop.exe` from the extracted folder.
+
+Either way, everything needed to run the application is included.
+
+=== Linux
+
+. Download the latest `bop-linux.zip` from the releases page.
+. Extract the zip.
+. Make sure GTK4 is installed on your system.
+. Run the `bop` program from the extracted folder.
+
+== Starting the Application
+
+Double-click `bop.exe` (Windows) or run `./bop` (Linux) to start.
+
+You can also start it from the command line with options to pre-load specific songs:
+
+[cols="1,3"]
+|===
+| Option | What it does
+
+| `--psalm 42`
+| Opens with Psalm 42 loaded. Can be used more than once for multiple psalms.
+
+| `--hymn 1`
+| Opens with Hymn 1 loaded. Can be used more than once for multiple hymns.
+
+| `--update false`
+| Skip the automatic update check on startup.
+|===
+
+.Example: start with Psalm 42 and Hymn 1
+----
+bop --psalm 42 --hymn 1
+----
+
+If you don't specify any songs, the application opens with Psalm 1.
+
+== Main Window Overview
+
+image::main-window-annotated.png[Main window,800]
+
+*Slide display* (centre)::
+The main area showing the current verse as sheet music. The title bar at the top of the slide shows the song name and verse numbers. The current verse number is shown in black; the other verses in grey.
+
+*Liturgy summary* (bottom left)::
+Shows the list of songs you have added for the service (e.g., "Liturgy: Psalm 42 (1,2,3) | Hymn 1 (1,2)").
+
+*Navigation and toolbar* (bottom centre)::
+*Prev*/*Next* buttons with a slide counter (e.g., "3/12"), *Clear liturgy* to remove all songs, *Edit* to open the music editor, *Verify* to mark a verse as checked, and a *Lyrics ×* control to adjust the lyric font-size magnification.
+
+*Song input* (bottom right)::
+Choose *Psalm* or *Hymn*, type a number, tick the verses you want, then click *Add*. Click *All* to select every verse and add it straight away.
+
+== Navigation
+
+Use the *Prev* and *Next* buttons (bottom centre) to move between slides.
+The counter between them shows which slide you are on (e.g., "3/12").
+
+You can also use the keyboard:
+
+[cols="1,2"]
+|===
+| Key | Action
+
+| Left arrow
+| Previous slide
+
+| Right arrow
+| Next slide
+
+| Ctrl+S
+| Save and re-render (when the editor is open)
+|===
+
+== Building a Liturgy
+
+The liturgy is the list of songs and verses for a service. It is shown in the summary bar (bottom left).
+
+=== Adding a Song
+
+. Choose *Psalm* or *Hymn* and type the song number (bottom right).
+. The available verses appear as tick boxes.
+. Tick the verses you want.
+. Click *Add*.
+
+=== Adding All Verses
+
+Click *All* (bottom right) to tick every verse and add the song in one step.
+
+=== Clearing the Liturgy
+
+Click *Clear liturgy* (bottom centre) to remove all songs and start over.
+
+== Collaborative Proofreading
+
+The music was converted from scanned sheet music and may contain errors. The application includes a built-in workflow for multiple people to proofread and correct the songs together:
+
+. *Edit* -- When you spot a mistake in the notes or lyrics, open the editor and fix it right away.
+. *Submit* -- When you close the application after making changes, it offers to submit your corrections to the maintainer for review.
+. *Update* -- The maintainer reviews and accepts the corrections into a new release. The next time anyone starts the application, it downloads the updated songs automatically.
+. *Verify* -- After checking that a verse is correct, mark it as verified. Once a verse has been verified twice (by any combination of people and sessions), it is considered proofread.
+
+This cycle means that every congregation using the application benefits from corrections made anywhere. The sections below explain each step in detail.
+
+== Editing Music and Lyrics
+
+You can correct the music notation and lyrics directly in the app.
+Click *Edit* (bottom centre) to open the editor panel alongside the slide.
+
+image::editor-annotated.png[Editor panel,800]
+
+*Notes editor* (top right)::
+The musical notation (notes, time signature, key) shared by all verses of the song. Click the *(?)* button next to the label for syntax help.
+
+*Lyrics editor* (middle right)::
+The words for the current verse. The label above (e.g., `lyrics_2.ly`) shows which verse you are editing. Click the *(?)* button next to the label for syntax help.
+
+*Copyright* (below the lyrics editor)::
+The composer or arranger name. This is displayed on the rendered slide and saved in the song's `song.yaml` file.
+
+*Split style* (below the copyright field)::
+Controls how the music is split across slides. Options:
++
+--
+- *Default* -- automatically decides based on the number of lines.
+- *Single slide* -- forces everything onto one slide.
+- *Multi slide* -- forces the music across multiple slides.
+- *Combine lines* -- pairs lines together to fit more on each slide.
+--
+
+*Save & Re-render* (bottom right)::
+Saves your changes and regenerates the slide. You can also press *Ctrl+S*.
+
+*Slide preview* (left)::
+Shows the result after rendering. A spinner appears while the slide is being generated. If something goes wrong, an error message appears here.
+
+=== Sending Your Edits
+
+When you close the application after making changes, you will be asked whether to submit your corrections to the maintainer for review.
+If you choose *Yes*, the changes are uploaded automatically. No further action is needed on your part -- the maintainer will review the corrections and include them in a future update.
+
+== Verifying Verses
+
+Click *Verify* (bottom centre) to mark the current verse as checked and correct.
+
+- You can verify each verse once per session.
+- After a verse has been verified twice (across any number of sessions), it shows *Verified* and no further action is needed.
+
+This helps keep track of which verses have been proofread.
+
+== OBS Integration
+
+Each time a slide is displayed, the application saves it as `Current.png` in the cache directory. The file path is shown at the bottom of the main window. This allows streaming tools such as OBS to use the file as an image source that updates in real time.
+
+The file is written atomically (via a temporary file and rename), so OBS will never read a partially written image.
+
+== LilyPond Download
+
+The application requires LilyPond to render music notation. It looks for LilyPond in three places:
+
+. Bundled next to the application executable.
+. Cached in `~/.cache/bop/lilypond-bin/` (Linux) or the local app-data cache (Windows).
+. On the system PATH.
+
+If LilyPond is not found, a dialog offers to download and install it automatically into the cache directory. No manual installation is needed.
+
+== Hymn Usage Tracking
+
+Some hymns are used under licence and their usage must be reported. The application automatically tracks when these hymns are added to a liturgy, recording one entry per hymn per day to a usage log file.
+
+The log is stored at:
+
+- Linux: `~/.local/share/bop/HymnUsage.txt`
+- Windows: `%APPDATA%\bop\HymnUsage.txt`
+
+On the first launch of a new year, if the log contains entries from the previous year, the application shows a dialog offering to email the report. Enter the recipient's email address and click *Send*. The report is sent as an attachment. The application remembers that the report has been sent and will not prompt again until the following year.
+
+== Automatic Updates
+
+The application checks for updates when it starts.
+
+If a new version is available:
+
+. A dialog asks whether to download and install the update.
+. If you choose *Yes*, the new song files are downloaded and installed automatically.
+. The song list refreshes with the updated content.
+
+== Troubleshooting
+
+Blank slide with no error::
+The music file for that verse may be missing. Make sure the song folder contains the source files for that verse.
+
+Error message on the slide::
+The music source could not be processed. Click *Edit* to review and correct the files, then click *Save & Re-render*.
+
+Application does not start::
+On Windows, if you used the portable zip, make sure all files from the zip are in the same folder as `bop.exe`. If you used the installer, try reinstalling. +
+On Linux, make sure GTK4 is installed.
+
+No songs appear::
+Make sure the `lilypond/` song data folder is in the same location as the application.

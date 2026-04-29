@@ -1,0 +1,186 @@
+use std::path::Path;
+use std::sync::LazyLock;
+
+use gtk4 as gtk;
+use gtk::gdk;
+use gtk::glib;
+use gtk::prelude::*;
+
+use crate::lyric_check;
+use crate::model::Slide;
+use crate::render_ly;
+
+pub const DEFAULT_RENDER_WIDTH: u32 = 2400;
+
+pub type Pixmap = resvg::tiny_skia::Pixmap;
+
+
+static FONTDB: LazyLock<resvg::usvg::fontdb::Database> = LazyLock::new(|| {
+    let mut db = resvg::usvg::fontdb::Database::new();
+    db.load_system_fonts();
+    db
+});
+
+/// Parse and rasterize an SVG file into a pixmap, scaling to `render_width` pixels
+/// while preserving aspect ratio. Replaces `currentColor` with black for compatibility.
+pub fn load_svg_pixmap(path: &Path, render_width: u32) -> Option<Pixmap> {
+    let data = std::fs::read(path).ok()?;
+    let data = String::from_utf8_lossy(&data)
+        .replace("currentColor", "black")
+        .into_bytes();
+    let mut opt = resvg::usvg::Options::default();
+    *opt.fontdb_mut() = FONTDB.clone();
+    let tree = resvg::usvg::Tree::from_data(&data, &opt).ok()?;
+    let size = tree.size();
+    if size.width() == 0.0 || size.height() == 0.0 {
+        return None;
+    }
+    let scale = render_width as f32 / size.width();
+    let w = (size.width() * scale) as u32;
+    let h = (size.height() * scale) as u32;
+    let mut pm = Pixmap::new(w, h)?;
+    pm.fill(resvg::tiny_skia::Color::WHITE);
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(scale, scale),
+        &mut pm.as_mut(),
+    );
+    Some(pm)
+}
+
+/// Crop white edges, center in 16:9 frame with title padding.
+pub fn crop_and_frame(src: &Pixmap, render_width: u32) -> Option<Pixmap> {
+    let output_w = render_width;
+    let output_h = render_width * 9 / 16;
+    let title_pad = render_width / 30;
+
+    let (w, h) = (src.width() as usize, src.height() as usize);
+    let px = src.pixels();
+    let white =
+        |p: resvg::tiny_skia::PremultipliedColorU8| p.red() > 250 && p.green() > 250 && p.blue() > 250;
+
+    // Find content bounds
+    let top = (0..h).find(|&y| (0..w).any(|x| !white(px[y * w + x]))).unwrap_or(0);
+    let bot = (0..h).rfind(|&y| (0..w).any(|x| !white(px[y * w + x]))).unwrap_or(h - 1);
+    let left = (0..w).find(|&x| (top..=bot).any(|y| !white(px[y * w + x]))).unwrap_or(0);
+    let right = (0..w).rfind(|&x| (top..=bot).any(|y| !white(px[y * w + x]))).unwrap_or(w - 1);
+
+    let margin = 4;
+    let top = top.saturating_sub(margin);
+    let left = left.saturating_sub(margin);
+    let bot = (bot + margin).min(h - 1);
+    let right = (right + margin).min(w - 1);
+    let (cw, ch) = (right - left + 1, bot - top + 1);
+
+    // Scale content to fit frame with a small margin on the sides
+    let frame_margin = 2_usize;
+    let avail_w = output_w as usize - frame_margin * 2;
+    let avail_h = (output_h - title_pad) as usize - frame_margin * 2;
+    let scale = (avail_w as f32 / cw as f32)
+        .min(avail_h as f32 / ch as f32);
+    let (sw, sh) = ((cw as f32 * scale) as usize, (ch as f32 * scale) as usize);
+    let x_off = frame_margin + (avail_w - sw) / 2;
+    let y_off = title_pad as usize + frame_margin + (avail_h - sh) / 2;
+
+    let mut out = Pixmap::new(output_w, output_h)?;
+    out.fill(resvg::tiny_skia::Color::WHITE);
+    for dy in 0..sh {
+        for dx in 0..sw {
+            let sx = ((dx as f32 / scale) as usize).min(cw - 1);
+            let sy = ((dy as f32 / scale) as usize).min(ch - 1);
+            out.pixels_mut()[(y_off + dy) * output_w as usize + x_off + dx] =
+                px[(top + sy) * w + left + sx];
+        }
+    }
+    Some(out)
+}
+
+/// Render a song title and verse indicator into the top region of the pixmap
+/// using an inline SVG overlay. The current verse is shown in black, others in grey.
+fn render_title(pixmap: &mut Pixmap, slide: &Slide, render_width: u32) {
+    let font_size = render_width as f32 / 40.0;
+
+    let verses: String = slide
+        .all_verses
+        .iter()
+        .map(|&v| {
+            let color = if v == slide.current_verse { "black" } else { "grey" };
+            format!(r#"<tspan fill="{color}">{v} </tspan>"#)
+        })
+        .collect();
+
+    let title = slide
+        .title
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
+
+    let w = pixmap.width();
+    let svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}">
+          <text x="{cx}" y="{y}" font-family="serif" font-size="{fs}"
+                text-anchor="middle" fill="black">
+            <tspan>{title}: </tspan>{verses}
+          </text>
+        </svg>"#,
+        h = (font_size * 2.0) as u32,
+        cx = w / 2,
+        y = font_size * 1.3,
+        fs = font_size,
+    );
+
+    let mut opt = resvg::usvg::Options::default();
+    *opt.fontdb_mut() = FONTDB.clone();
+    if let Ok(tree) = resvg::usvg::Tree::from_data(svg.as_bytes(), &opt) {
+        resvg::render(
+            &tree,
+            resvg::tiny_skia::Transform::default(),
+            &mut pixmap.as_mut(),
+        );
+    }
+}
+
+/// Load a slide's SVG, crop whitespace, frame it in 16:9 with a
+/// title overlay, and return a GDK texture ready for display.
+pub fn load_slide_texture(slide: &Slide, render_width: u32) -> Option<gdk::Texture> {
+    let cached = render_ly::svg_path_for_verse(&slide.song_dir, slide.current_verse, slide.part)?;
+    let n_parts = render_ly::num_parts_for_verse(&slide.song_dir, slide.current_verse);
+    lyric_check::check(
+        &slide.song_dir,
+        slide.current_verse,
+        slide.part,
+        &cached,
+        n_parts,
+    );
+    let raw = load_svg_pixmap(&cached, render_width)?;
+
+    let mut framed = crop_and_frame(&raw, render_width)?;
+    render_title(&mut framed, slide, render_width);
+
+    let (w, h) = (framed.width(), framed.height());
+    let bytes = glib::Bytes::from(framed.data());
+    Some(
+        gdk::MemoryTexture::new(w as i32, h as i32, gdk::MemoryFormat::R8g8b8a8, &bytes, (w * 4) as usize)
+            .upcast(),
+    )
+}
+
+/// Return the path to the Current.png file in the cache directory.
+pub fn current_png_path() -> std::path::PathBuf {
+    render_ly::cache_dir().join("Current.png")
+}
+
+/// Save a GDK texture as Current.png in the cache directory.
+/// Writes to a temp file first, then renames for atomic update (for OBS).
+pub fn save_current_png(texture: &gdk::Texture) {
+    let current_png = current_png_path();
+    if let Some(parent) = current_png.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let tmp = current_png.with_extension("png.tmp");
+    if texture.save_to_png(&tmp).is_ok() {
+        #[cfg(windows)]
+        let _ = std::fs::remove_file(&current_png);
+        let _ = std::fs::rename(&tmp, &current_png);
+    }
+}

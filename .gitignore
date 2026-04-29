@@ -1,0 +1,11 @@
+pat.txt
+__pycache__
+venv/
+# Added by cargo
+/target
+
+lilypond/*/*.svg
+lilypond/*/*.png
+_combined*.ly
+
+installer/output/

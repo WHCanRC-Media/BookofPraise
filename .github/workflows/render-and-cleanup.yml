@@ -1,0 +1,96 @@
+name: Render and Cleanup
+
+on:
+  pull_request:
+    types: [opened, synchronize, closed]
+    paths:
+      - 'lilypond/**'
+
+jobs:
+  render:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install LilyPond, rsvg-convert, and PyYAML
+        run: |
+          sudo apt-get update && sudo apt-get install -y lilypond librsvg2-bin
+          pip install pyyaml pillow numpy
+
+      - name: Determine changed song dirs
+        id: changed
+        run: |
+          DIRS=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...HEAD -- lilypond/ \
+            | sed 's|/[^/]*$||' | sort -u)
+          echo "dirs<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$DIRS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Render PNGs and create diffs
+        id: render
+        run: |
+          DIRS=$(echo "${{ steps.changed.outputs.dirs }}" | tr '\n' ' ')
+          PNGS=$(python3 .github/ci_render.py render --base-sha ${{ github.event.pull_request.base.sha }} $DIRS)
+          echo "pngs<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$PNGS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create render branch and commit images
+        run: |
+          RENDER_BRANCH="render/${{ github.head_ref }}"
+          git checkout -b "$RENDER_BRANCH"
+          while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
+            git add -f "$dir"/*.svg "$dir"/*.png 2>/dev/null || true
+          done <<< "${{ steps.changed.outputs.dirs }}"
+          if git diff --cached --quiet; then
+            echo "No rendered files to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Render song previews for PR #${{ github.event.pull_request.number }}"
+          git push origin "$RENDER_BRANCH" --force
+
+      - name: Post PR comment with previews
+        if: steps.render.outputs.pngs != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO="${{ github.repository }}"
+          BRANCH="render/${{ github.head_ref }}"
+          PR=${{ github.event.pull_request.number }}
+          BODY=$(echo "${{ steps.render.outputs.pngs }}" | python3 .github/ci_render.py comment --repo "$REPO" --branch "$BRANCH")
+
+          EXISTING=$(gh api "repos/$REPO/issues/$PR/comments" --jq '.[] | select(.user.type == "Bot" and (.body | contains("## Rendered Previews"))) | .id' | head -1)
+          if [ -n "$EXISTING" ]; then
+            gh api "repos/$REPO/issues/comments/$EXISTING" -X PATCH -f body="$BODY"
+          else
+            gh pr comment "$PR" --body "$BODY"
+          fi
+
+  cleanup:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete PR head branch
+        uses: dawidd6/action-delete-branch@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branches: ${{ github.head_ref }}
+
+      - name: Delete render branch
+        uses: dawidd6/action-delete-branch@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branches: render/${{ github.head_ref }}
