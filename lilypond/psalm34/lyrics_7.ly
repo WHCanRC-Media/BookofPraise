@@ -6,5 +6,5 @@ from all their mi -- se -- ries.
 The Lord is al -- ways near;
 the bro -- ken -- heart -- ed he will heal.
 Those crushed in spir -- it he will save,
-to them his love reveal.
+to them his love re -- veal.
 }
