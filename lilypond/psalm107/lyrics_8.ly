@@ -1,6 +1,6 @@
 verse = \lyricmode {
   To them his word re -- veal -- ing,
-he came with pow -- er to save,
+he came with power to save,
 stretched out his hand of heal -- ing
 and snatched them from the grave.
 Let them all thank the Lord,

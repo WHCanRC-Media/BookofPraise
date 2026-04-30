@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Though they have mouths, they cannot make a sound.
+  Though they have mouths, they can -- not make a sound.
 Their eyes are blind: they can -- not look a -- round
 at an -- y sac -- ri -- fic -- es.
 They may have ears, but they can nev -- er hear;
