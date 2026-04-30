@@ -1,6 +1,6 @@
 verse = \lyricmode {
   And though this world, with de -- vils filled,
-should threaten to undo us,
+should threat -- en to un -- do us,
 we will not fear, for God has willed
 his truth to tri -- umph through us.
 The prince of dark -- ness grim,

@@ -5,6 +5,6 @@ O God, from guilt of blood -- shed me de -- liv -- er;
 then shall my tongue your sav -- ing jus -- tice praise.
 I will a -- loud your righ -- teous -- ness pro -- claim;
 you are, O God, the God of my sal -- va -- tion.
-Lord, open then my lips to praise your name
+Lord, o -- pen then my lips to praise your name
 and let me sing my songs of ju -- bi -- la -- tion.
 }

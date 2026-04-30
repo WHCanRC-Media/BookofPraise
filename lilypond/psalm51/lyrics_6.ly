@@ -5,6 +5,6 @@ How could I ev -- er with my gifts ap -- pease you?
 Burnt of -- ferings find no fa -- vour in your sight.
 One gift a -- lone is pleas -- ing in God's eyes:
 the con -- trite heart of one who has re -- pent -- ed.
-A broken spirit you will not despise
+A bro -- ken spir -- it you will not de -- spise
 when humb -- ly as a sac -- ri -- fice pre -- sent -- ed.
 }

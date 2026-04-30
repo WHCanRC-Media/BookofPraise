@@ -1,7 +1,7 @@
 verse = \lyricmode {
-  That word a -- bove all earth -- ly pow -- "ers –"
+  That word a -- bove all earth -- ly "powers–"
 no thanks to "them –" a -- bi -- deth;
-the Spirit and the gifts are ours
+the Spi -- rit and the gifts are ours
 through him who with us si -- deth.
 Let goods and kin -- dred go,
 this mor -- tal life al -- so;

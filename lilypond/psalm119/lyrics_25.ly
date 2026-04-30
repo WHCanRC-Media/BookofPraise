@@ -1,8 +1,8 @@
 verse = \lyricmode {
-  To me, your servant, you have kindness shown,
-  your mercy with your promise underpinning.
-  Instruct me, Lord, for it is you alone
-  who are of all true knowledge the beginning.
-  I went astray, but as I wandered on,
-  you humbled me, and now I keep from sinning.
+  To me, your serv -- ant, you have kind -- ness shown,
+  your mer -- cy with your prom -- ise un -- der -- pin -- ning.
+  In -- struct me, Lord, for it is you a -- lone
+  who are of all true know -- ledge the be -- gin -- ning.
+  I went a -- stray, but as I wan -- dered on,
+  you hum -- bled me, and now I keep from sin -- ning.
 }

@@ -3,8 +3,8 @@ verse = \lyricmode {
 and o -- ver -- whelmed by sins,
 you blot them out in your com -- pas -- sion
 and give us peace a -- gain.
-How blest are those whom you have chosen,
-whom you in love embrace;
-within your courts, in you reposing,
-they have a dwelling place.
+How blest are those whom you have cho -- sen,
+whom you in love em -- brace;
+with -- in your courts, in you re -- pos -- ing,
+they have a dwel -- ling place.
 }
