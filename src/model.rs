@@ -137,19 +137,18 @@ fn scan_verses(dir: &Path) -> Vec<u32> {
     verses.into_iter().collect()
 }
 
-/// Read the verification count for a specific verse from `song.yaml`.
-pub fn read_verify_count(song_dir: &Path, verse: u32) -> u32 {
-    let meta = crate::render_ly::read_song_meta(song_dir);
-    meta.verified.get(&verse).copied().unwrap_or(0)
+/// Whether the music for this song has been visually verified.
+pub fn read_music_verified(song_dir: &Path) -> bool {
+    crate::render_ly::read_song_meta(song_dir).verified
 }
 
-/// Increment and persist the verification count for a verse, returning the new count.
-pub fn increment_verify(song_dir: &Path, verse: u32) -> u32 {
+/// Mark the music for this song as verified and persist `song.yaml`.
+pub fn mark_music_verified(song_dir: &Path) {
     let mut meta = crate::render_ly::read_song_meta(song_dir);
-    let count = meta.verified.get(&verse).copied().unwrap_or(0) + 1;
-    meta.verified.insert(verse, count);
-    crate::render_ly::write_song_meta(song_dir, &meta);
-    count
+    if !meta.verified {
+        meta.verified = true;
+        crate::render_ly::write_song_meta(song_dir, &meta);
+    }
 }
 
 /// Hymns that require usage tracking (e.g. for copyright/licensing reporting).

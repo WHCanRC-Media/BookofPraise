@@ -7,7 +7,7 @@ use gtk::glib;
 use gtk::prelude::*;
 
 use crate::model::{
-    base_dir, read_verify_count, increment_verify, AppState, SongLibrary, SongType,
+    base_dir, read_music_verified, mark_music_verified, AppState, SongLibrary, SongType,
 };
 use crate::lyric_check;
 use crate::render_ly;
@@ -293,9 +293,8 @@ fn refresh_display(
     if let Some((cache_key, render_key, song_dir, verse, part, idx, total)) = slide_info {
         nav_label.set_text(&format!("{}/{}", idx + 1, total));
 
-        // Update verify button state
-        let verify_count = read_verify_count(&song_dir, verse);
-        if verify_count >= 1 {
+        // Update verify button state (song-wide music verification)
+        if read_music_verified(&song_dir) {
             verify_btn.set_label("Verified");
             verify_btn.set_sensitive(false);
         } else {
@@ -832,7 +831,7 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
             {
                 let s = state.borrow();
                 if let Some(slide) = s.slides.get(s.current_slide) {
-                    increment_verify(&slide.song_dir, slide.current_verse);
+                    mark_music_verified(&slide.song_dir);
                 }
             }
             refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn2, &mismatch_label);
