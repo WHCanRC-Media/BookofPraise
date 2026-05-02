@@ -5,8 +5,26 @@ import argparse
 import glob
 import os
 import re
+import shutil
 import subprocess
+import sys
 from multiprocessing.pool import ThreadPool
+
+
+def _lilypond_bin():
+    """Resolve the lilypond binary, preferring the bundled one in the bop cache."""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or "C:\\Temp"
+        bin_name = "lilypond.exe"
+    else:
+        base = os.environ.get("XDG_CACHE_HOME") or os.path.join(
+            os.environ.get("HOME", "/tmp"), ".cache"
+        )
+        bin_name = "lilypond"
+    bundled = os.path.join(base, "bop", "lilypond-bin", "bin", bin_name)
+    if os.path.exists(bundled):
+        return bundled
+    return shutil.which(bin_name) or bin_name
 
 
 def _extract_line_contents(notes_content):
@@ -426,7 +444,7 @@ def render_svg_from_content(notes_content, lyrics_content, output_svg, composer=
         f.write(combined)
 
     result = subprocess.run(
-        ["lilypond", "-dbackend=svg", "-dcrop", "-o",
+        [_lilypond_bin(), "-dbackend=svg", "-dcrop", "-o",
          os.path.splitext(os.path.abspath(output_svg))[0],
          combined_ly],
         capture_output=True,
@@ -537,7 +555,7 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None, split_style="
 
     # Render
     result = subprocess.run(
-        ["lilypond", "-dbackend=svg", "-dcrop", "-o",
+        [_lilypond_bin(), "-dbackend=svg", "-dcrop", "-o",
          os.path.splitext(os.path.abspath(output_svg))[0],
          combined_ly],
         capture_output=True,

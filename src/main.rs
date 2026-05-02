@@ -2,6 +2,7 @@
 
 mod lyric_check;
 mod model;
+mod preferences;
 mod render_ly;
 mod rendering;
 mod ui;

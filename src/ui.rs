@@ -460,6 +460,10 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
 
     let state = Rc::new(RefCell::new(AppState::new(cli)));
 
+    // Apply saved preferences before any UI widget reads them.
+    let startup_prefs = crate::preferences::load();
+    render_ly::set_lyrics_magnification(startup_prefs.lyrics_magnification);
+
     let window = gtk::ApplicationWindow::builder()
         .application(app)
         .title("Book of Praise")
@@ -907,6 +911,11 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
     // Lyrics magnification
     connect!(lyrics_mag_spin, connect_value_changed, [state, picture, nav_label, spinner, error_label, verify_btn, mismatch_label], move |spin| {
         render_ly::set_lyrics_magnification(spin.value());
+        let mut p = crate::preferences::load();
+        p.lyrics_magnification = spin.value();
+        if let Err(e) = crate::preferences::save(&p) {
+            eprintln!("Failed to save preferences: {e}");
+        }
         render_ly::invalidate_all_combined_cache();
         {
             let mut s = state.borrow_mut();
@@ -1217,68 +1226,124 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
     };
 
     // ── Ensure LilyPond is available ──
-    if !render_ly::lilypond_available() {
+    let proceed_after_copyright: Rc<dyn Fn()> = {
+        let window = window.clone();
+        let state = state.clone();
+        let picture = picture.clone();
+        let nav_label = nav_label.clone();
+        let spinner = spinner.clone();
+        let error_label = error_label.clone();
+        let mismatch_label = mismatch_label.clone();
+        let verify_btn = verify_btn.clone();
+        let run_post_lilypond_dialogs = run_post_lilypond_dialogs.clone();
+        Rc::new(move || {
+            if !render_ly::lilypond_available() {
+                let dialog = gtk::MessageDialog::new(
+                    Some(&window),
+                    gtk::DialogFlags::MODAL,
+                    gtk::MessageType::Question,
+                    gtk::ButtonsType::None,
+                    "Download GNU LilyPond from the internet? (required)",
+                );
+                dialog.add_button("Exit", gtk::ResponseType::Close);
+                dialog.add_button("Yes", gtk::ResponseType::Yes);
+                let window2 = window.clone();
+                let state2 = state.clone();
+                let picture2 = picture.clone();
+                let nav_label2 = nav_label.clone();
+                let spinner2 = spinner.clone();
+                let error_label2 = error_label.clone();
+                let mismatch_label2 = mismatch_label.clone();
+                let verify_btn2 = verify_btn.clone();
+                let run_post_lilypond_dialogs = run_post_lilypond_dialogs.clone();
+                dialog.connect_response(move |dlg, resp| {
+                    if resp == gtk::ResponseType::Yes {
+                        dlg.set_text(Some("Downloading LilyPond..."));
+                        dlg.set_response_sensitive(gtk::ResponseType::Yes, false);
+                        dlg.set_response_sensitive(gtk::ResponseType::Close, false);
+                        let (tx, rx) = std::sync::mpsc::channel();
+                        std::thread::spawn(move || {
+                            let _ = tx.send(render_ly::download_lilypond());
+                        });
+                        let dlg2 = dlg.clone();
+                        let window3 = window2.clone();
+                        let state3 = state2.clone();
+                        let picture3 = picture2.clone();
+                        let nav_label3 = nav_label2.clone();
+                        let spinner3 = spinner2.clone();
+                        let error_label3 = error_label2.clone();
+                        let mismatch_label3 = mismatch_label2.clone();
+                        let verify_btn3 = verify_btn2.clone();
+                        let post_dialogs = run_post_lilypond_dialogs.clone();
+                        glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
+                            match rx.try_recv() {
+                                Ok(Ok(())) => {
+                                    dlg2.hide();
+                                    dlg2.destroy();
+                                    refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3, &mismatch_label3);
+                                    post_dialogs();
+                                    glib::ControlFlow::Break
+                                }
+                                Ok(Err(e)) => {
+                                    dlg2.close();
+                                    eprintln!("LilyPond download failed: {e}");
+                                    window3.destroy();
+                                    glib::ControlFlow::Break
+                                }
+                                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                                Err(_) => { dlg2.close(); window3.destroy(); glib::ControlFlow::Break }
+                            }
+                        });
+                    } else {
+                        window2.destroy();
+                    }
+                });
+                dialog.show();
+            } else {
+                run_post_lilypond_dialogs();
+            }
+        })
+    };
+
+    // ── Copyright acceptance ──
+    let prefs = crate::preferences::load();
+    if prefs.copyright_accepted {
+        proceed_after_copyright();
+    } else {
         let dialog = gtk::MessageDialog::new(
             Some(&window),
             gtk::DialogFlags::MODAL,
-            gtk::MessageType::Question,
+            gtk::MessageType::Info,
             gtk::ButtonsType::None,
-            "Download GNU LilyPond from the internet? (required)",
+            "These songs are under copyright by the standing committee for the Book of Praise. \
+             If you do not have a corporate license to use these songs, this program is not for you.",
         );
+        dialog.set_title(Some("Copyright Notice"));
         dialog.add_button("Exit", gtk::ResponseType::Close);
-        dialog.add_button("Yes", gtk::ResponseType::Yes);
-        let window2 = window.clone();
-        let state2 = state.clone();
-        let picture2 = picture.clone();
-        let nav_label2 = nav_label.clone();
-        let spinner2 = spinner.clone();
-        let error_label2 = error_label.clone();
-                let mismatch_label2 = mismatch_label.clone();
-        let verify_btn2 = verify_btn.clone();
+        dialog.add_button("Accept", gtk::ResponseType::Accept);
+
+        let dont_show = gtk::CheckButton::with_label("Do not show again");
+        dont_show.set_margin_top(8);
+        dialog.content_area().append(&dont_show);
+
+        let window_for_exit = window.clone();
+        let proceed = proceed_after_copyright.clone();
         dialog.connect_response(move |dlg, resp| {
-            if resp == gtk::ResponseType::Yes {
-                dlg.set_text(Some("Downloading LilyPond..."));
-                dlg.set_response_sensitive(gtk::ResponseType::Yes, false);
-                dlg.set_response_sensitive(gtk::ResponseType::Close, false);
-                let (tx, rx) = std::sync::mpsc::channel();
-                std::thread::spawn(move || {
-                    let _ = tx.send(render_ly::download_lilypond());
-                });
-                let dlg2 = dlg.clone();
-                let window3 = window2.clone();
-                let state3 = state2.clone();
-                let picture3 = picture2.clone();
-                let nav_label3 = nav_label2.clone();
-                let spinner3 = spinner2.clone();
-                let error_label3 = error_label2.clone();
-                                        let mismatch_label3 = mismatch_label2.clone();
-                let verify_btn3 = verify_btn2.clone();
-                let post_dialogs = run_post_lilypond_dialogs.clone();
-                glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
-                    match rx.try_recv() {
-                        Ok(Ok(())) => {
-                            dlg2.hide();
-                            dlg2.destroy();
-                            refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3, &mismatch_label3);
-                            post_dialogs();
-                            glib::ControlFlow::Break
-                        }
-                        Ok(Err(e)) => {
-                            dlg2.close();
-                            eprintln!("LilyPond download failed: {e}");
-                            window3.destroy();
-                            glib::ControlFlow::Break
-                        }
-                        Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                        Err(_) => { dlg2.close(); window3.destroy(); glib::ControlFlow::Break }
+            if resp == gtk::ResponseType::Accept {
+                if dont_show.is_active() {
+                    let mut p = crate::preferences::load();
+                    p.copyright_accepted = true;
+                    if let Err(e) = crate::preferences::save(&p) {
+                        eprintln!("Failed to save preferences: {e}");
                     }
-                });
+                }
+                dlg.destroy();
+                proceed();
             } else {
-                window2.destroy();
+                dlg.destroy();
+                window_for_exit.destroy();
             }
         });
         dialog.show();
-    } else {
-        run_post_lilypond_dialogs();
     }
 }
