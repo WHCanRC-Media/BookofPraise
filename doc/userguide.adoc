@@ -53,8 +53,8 @@ You can also start it from the command line with options to pre-load specific so
 | `--hymn 1`
 | Opens with Hymn 1 loaded. Can be used more than once for multiple hymns.
 
-| `--update false`
-| Skip the automatic update check on startup.
+| `--no-update`
+| Skip the automatic update check on startup. (Use `--update` to force a check.)
 |===
 
 .Example: start with Psalm 42 and Hymn 1
@@ -127,7 +127,7 @@ The music was converted from scanned sheet music and may contain errors. The app
 . *Edit* -- When you spot a mistake in the notes or lyrics, open the editor and fix it right away.
 . *Submit* -- When you close the application after making changes, it offers to submit your corrections to the maintainer for review.
 . *Update* -- The maintainer reviews and accepts the corrections into a new release. The next time anyone starts the application, it downloads the updated songs automatically.
-. *Verify* -- After checking that a verse is correct, mark it as verified. Once a verse has been verified twice (by any combination of people and sessions), it is considered proofread.
+. *Verify* -- After checking that the music for a song is correct, mark it as verified so others know it has been proofread.
 
 This cycle means that every congregation using the application benefits from corrections made anywhere. The sections below explain each step in detail.
 
@@ -138,27 +138,32 @@ Click *Edit* (bottom centre) to open the editor panel alongside the slide.
 
 image::editor-annotated.png[Editor panel,800]
 
-*Notes editor* (top right)::
-The musical notation (notes, time signature, key) shared by all verses of the song. Click the *(?)* button next to the label for syntax help.
+The editor panel is laid out top-to-bottom on the right.
 
-*Lyrics editor* (middle right)::
-The words for the current verse. The label above (e.g., `lyrics_2.ly`) shows which verse you are editing. Click the *(?)* button next to the label for syntax help.
-
-*Copyright* (below the lyrics editor)::
-The composer or arranger name. This is displayed on the rendered slide and saved in the song's `song.yaml` file.
-
-*Split style* (below the copyright field)::
+*Split style* (top)::
 Controls how the music is split across slides. Options:
 +
 --
-- *Default* -- automatically decides based on the number of lines.
-- *Single slide* -- forces everything onto one slide.
-- *Multi slide* -- forces the music across multiple slides.
-- *Combine lines* -- pairs lines together to fit more on each slide.
+- *default* -- automatically decides based on the number of lines.
+- *single slide* -- forces everything onto one slide.
+- *multi slide* -- forces the music across multiple slides.
+- *combine lines* -- pairs lines together to fit more on each slide.
 --
 
-*Save & Re-render* (bottom right)::
+*Notes editor*::
+The musical notation (notes, time signature, key) shared by all verses of the song. The label shows the source file name (`notes.ly`). Click the *(?)* button next to the label for syntax help.
+
+*Lyrics editor*::
+The words for the current verse. The label above (e.g., `lyrics_2.ly`) shows which verse you are editing. Click the *(?)* button next to the label for syntax help.
+
+*Save & Re-render* (bottom)::
 Saves your changes and regenerates the slide. You can also press *Ctrl+S*.
+
+*Revert*::
+Discards your unsaved edits to the notes and lyrics for the current song and reloads the saved files.
+
+*mel͜isma*::
+Inserts a combining double-breve-below character (U+035C) at the cursor in the lyrics editor. Use it to mark a slur — two notes sung on a single syllable.
 
 *Slide preview* (left)::
 Shows the result after rendering. A spinner appears while the slide is being generated. If something goes wrong, an error message appears here.
@@ -168,14 +173,13 @@ Shows the result after rendering. A spinner appears while the slide is being gen
 When you close the application after making changes, you will be asked whether to submit your corrections to the maintainer for review.
 If you choose *Yes*, the changes are uploaded automatically. No further action is needed on your part -- the maintainer will review the corrections and include them in a future update.
 
-== Verifying Verses
+== Verifying Songs
 
-Click *Verify* (bottom centre) to mark the current verse as checked and correct.
+Click *Verify* (bottom centre) to mark the current song's music as checked and correct.
+Verification is per song (not per verse): once you verify any verse of a song, the whole song is marked.
+The button changes to *Verified* once the mark has been recorded, and the status is saved in the song's `song.yaml` file.
 
-- You can verify each verse once per session.
-- After a verse has been verified twice (across any number of sessions), it shows *Verified* and no further action is needed.
-
-This helps keep track of which verses have been proofread.
+This helps keep track of which songs have been proofread.
 
 == OBS Integration
 
@@ -206,13 +210,14 @@ On the first launch of a new year, if the log contains entries from the previous
 
 == Automatic Updates
 
-The application checks for updates when it starts.
+The application checks for song-data updates when it starts. Updates contain corrections to the songs themselves (the `lilypond/` and `lyrics/` folders), not a new application binary -- to upgrade the application, download a fresh release.
 
 If a new version is available:
 
 . A dialog asks whether to download and install the update.
-. If you choose *Yes*, the new song files are downloaded and installed automatically.
-. The song list refreshes with the updated content.
+. If you choose *Yes*, the new song files are downloaded into your platform data directory (see the `lilypond/` paths under _No songs appear_ in <<_troubleshooting>>) and the song list refreshes immediately.
+
+Pass `--no-update` on the command line to skip the check.
 
 == Troubleshooting
 
@@ -227,4 +232,4 @@ On Windows, if you used the portable zip, make sure all files from the zip are i
 On Linux, make sure GTK4 is installed.
 
 No songs appear::
-Make sure the `lilypond/` song data folder is in the same location as the application.
+The application looks for the `lilypond/` song data folder in two places: the platform data directory (`~/.local/share/bop/lilypond/` on Linux, `%APPDATA%\bop\lilypond` on Windows) -- which is where automatic updates install songs -- and then the same folder as the application itself. Make sure one of those locations contains the song data.
