@@ -457,9 +457,13 @@ def _build_score_ly(modified_notes, lyrics_content, lyrics_mag=1.0):
         lyrics_score = '    \\new Lyrics \\lyricsto "melody" { \\verse }'
     lyrics_font = ""
     if abs(lyrics_mag - 1.0) > 1e-6:
+        y_lift = 0.5 * (lyrics_mag - 1.0)
         lyrics_font = (
             f"      \\override LyricText.font-size = "
             f"#(magnification->font-size {lyrics_mag})\n"
+            f"      \\override LyricHyphen.thickness = #{1.3 * lyrics_mag}\n"
+            f"      \\override LyricHyphen.length = #{0.66 * lyrics_mag}\n"
+            f"      \\override LyricHyphen.extra-offset = #'(0 . {y_lift})\n"
         )
     return f"""\\version "2.24.0"
 
@@ -492,6 +496,7 @@ def _build_score_ly(modified_notes, lyrics_content, lyrics_mag=1.0):
     \\context {{
       \\Lyrics
       \\override LyricText.self-alignment-X = #CENTER
+      \\override LyricHyphen.minimum-distance = #1.0
 {lyrics_font}    }}
   }}
 }}

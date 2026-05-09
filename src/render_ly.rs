@@ -1006,8 +1006,14 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, lyrics_m
     let lyrics_font_override = if (lyrics_mag - 1.0).abs() < 1e-6 {
         String::new()
     } else {
+        let thickness = 1.3 * lyrics_mag;
+        let length = 0.66 * lyrics_mag;
+        let y_lift = 0.5 * (lyrics_mag - 1.0);
         format!(
-            "      \\override LyricText.font-size = #(magnification->font-size {lyrics_mag})\n"
+            "      \\override LyricText.font-size = #(magnification->font-size {lyrics_mag})\n      \
+             \\override LyricHyphen.thickness = #{thickness}\n      \
+             \\override LyricHyphen.length = #{length}\n      \
+             \\override LyricHyphen.extra-offset = #'(0 . {y_lift})\n"
         )
     };
 
@@ -1053,6 +1059,7 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, lyrics_m
     \context {{
       \Lyrics
       \override LyricText.self-alignment-X = #CENTER
+      \override LyricHyphen.minimum-distance = #1.0
 {lyrics_font_override}    }}
   }}
 }}
