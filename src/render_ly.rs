@@ -888,32 +888,111 @@ fn expand_multi_breve(s: &str) -> String {
     out
 }
 
-/// Count the maximum number of note/rest events across all lines in the raw notes content.
-/// Lines are delimited by `\break` or `\bar`. Returns 8 as a fallback minimum.
-fn max_notes_per_line(raw_notes: &str) -> usize {
-    let re = Regex::new(r"[a-gr](is|es)?[',]*\d").unwrap();
-    raw_notes
-        .split("\\break")
-        .flat_map(|s| s.split("\\bar"))
-        .map(|segment| {
-            let content: String = segment
-                .lines()
-                .filter(|l| {
-                    let t = l.trim();
-                    !t.is_empty() && !t.starts_with('%') && !t.starts_with("\\omit")
-                })
-                .collect::<Vec<_>>()
-                .join(" ");
-            re.find_iter(&content).count()
-        })
-        .max()
-        .unwrap_or(8)
-        .max(8)
+/// Per-token widths in SVG units used by the uniform-staves padding pass.
+/// r4 is the coarse pad (linear and cross-line clean for any count, but only
+/// when every padded line uses the same rest duration). s16 is the fine-tune
+/// pad: ~0.512 per skip alone, ~0.725 per skip when trailing r4 padding,
+/// linear up to ~7 per line before saturating.
+const R4_WIDTH: f64 = 2.898;
+const S16_WIDTH_ALONE: f64 = 0.5123;
+const S16_WIDTH_AFTER_R4: f64 = 0.725;
+const S16_MAX_PER_LINE: usize = 7;
+
+/// Parse a LilyPond-rendered SVG and return one staff length (in SVG units)
+/// per system. Each system has 5 horizontal `stroke-width="0.1000"` lines;
+/// we sample the first of each group of 5.
+fn measure_staff_lengths(svg_path: &Path) -> Vec<f64> {
+    let svg = match fs::read_to_string(svg_path) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let re = Regex::new(
+        r#"<line[^/]*stroke-width="0\.1000"[^/]*x1="([^"]+)"\s+y1="([^"]+)"\s+x2="([^"]+)"\s+y2="([^"]+)""#
+    ).unwrap();
+    let mut horiz = Vec::new();
+    for cap in re.captures_iter(&svg) {
+        let x1: f64 = cap[1].parse().unwrap_or(0.0);
+        let y1: f64 = cap[2].parse().unwrap_or(0.0);
+        let x2: f64 = cap[3].parse().unwrap_or(0.0);
+        let y2: f64 = cap[4].parse().unwrap_or(0.0);
+        if (y1 - y2).abs() < 1e-6 {
+            horiz.push(x2 - x1);
+        }
+    }
+    horiz.chunks(5).filter_map(|c| c.first().copied()).collect()
+}
+
+fn r4_padding(deficit: f64) -> usize {
+    if deficit <= 0.0 { 0 } else { (deficit / R4_WIDTH).round().max(0.0) as usize }
+}
+
+fn s16_padding(deficit: f64, has_r4: bool) -> usize {
+    if deficit <= 0.0 { return 0; }
+    let per_unit = if has_r4 { S16_WIDTH_AFTER_R4 } else { S16_WIDTH_ALONE };
+    let n = (deficit / per_unit).round().max(0.0) as usize;
+    n.min(S16_MAX_PER_LINE)
+}
+
+/// Insert padding tokens before each `\break` or `\bar "..."` in the combined
+/// `.ly` text. Rest tokens (r4, etc.) are wrapped with `\once \hide Rest`;
+/// skip tokens (s16, etc.) pass through. If the line normally ends in a
+/// visible rest, padding is inserted before that rest so the rest stays at the
+/// end of the music; otherwise padding is appended just before the terminator.
+fn inject_padding(combined: &str, paddings: &[Vec<&'static str>]) -> String {
+    let term_re = Regex::new(r#"\\break|\\bar\s+"[^"]*""#).unwrap();
+    let trailing_rest_re = Regex::new(r"\br\d+\.?\s*$").unwrap();
+    let mut result = String::with_capacity(combined.len() + 256);
+    let mut last_end = 0;
+    let mut line_idx = 0;
+    for m in term_re.find_iter(combined) {
+        let prev_text = &combined[last_end..m.start()];
+        let term = m.as_str();
+        if line_idx < paddings.len() && !paddings[line_idx].is_empty() {
+            let wrapped: Vec<String> = paddings[line_idx].iter().map(|t| {
+                if t.starts_with('r') {
+                    format!("\\once \\hide Rest {t}")
+                } else {
+                    (*t).to_string()
+                }
+            }).collect();
+            let pad_str = wrapped.join(" ");
+
+            // Detect a visible trailing rest at the end of prev_text (a plain
+            // `r<dur>` not preceded by `\once \hide Rest`).
+            if let Some(rm) = trailing_rest_re.find(prev_text) {
+                let rest_start = rm.start();
+                let preceding = &prev_text[..rest_start];
+                let is_hidden = preceding.trim_end().ends_with("Rest");
+                if !is_hidden {
+                    result.push_str(&prev_text[..rest_start]);
+                    result.push_str(&pad_str);
+                    result.push(' ');
+                    result.push_str(&prev_text[rest_start..]);
+                    result.push_str(term);
+                    line_idx += 1;
+                    last_end = m.end();
+                    continue;
+                }
+            }
+            result.push_str(prev_text.trim_end());
+            result.push(' ');
+            result.push_str(&pad_str);
+            result.push(' ');
+            result.push_str(term);
+        } else {
+            result.push_str(prev_text);
+            result.push_str(term);
+        }
+        line_idx += 1;
+        last_end = m.end();
+    }
+    result.push_str(&combined[last_end..]);
+    result
 }
 
 /// Assemble a complete LilyPond `.ly` file from notes, lyrics, and an optional
 /// composer credit, ready for rendering.
-fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_width_mm: usize, lyrics_mag: f64) -> String {
+fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, lyrics_mag: f64) -> String {
     let _ = composer;
     let header_items: Vec<String> = vec!["  tagline = ##f".into()];
     let header = format!("\\header {{\n{}\n}}", header_items.join("\n"));
@@ -948,10 +1027,9 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, paper_wi
         r#"\version "2.24.0"
 
 \paper {{
-  paper-width = {paper_width_mm}\mm
-  line-width = {paper_width_mm}\mm
-  left-margin = 0\cm
-  right-margin = 0\cm
+  paper-width = 1000\mm
+  line-width = 1000\mm
+  ragged-right = ##t
 }}
 
 {header}
@@ -1074,17 +1152,15 @@ fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
 
         note_parts.iter().zip(lyric_parts.iter()).map(|(notes, lyrics)| {
             let modified = modify_notes(notes, false);
-            let paper_width_mm = max_notes_per_line(&modified) * 9 + 20;
             // Only show composer on the first part
             let comp = if notes == &note_parts[0] { meta.composer.as_deref() } else { None };
-            build_combined_ly(&modified, lyrics, comp, paper_width_mm, lyrics_mag)
+            build_combined_ly(&modified, lyrics, comp, lyrics_mag)
         }).collect()
     } else {
         // Single part: apply modify_notes (combining / hidden rests)
         let force_combine = meta.split_style == SplitStyle::CombineLines;
         let notes_content = modify_notes(&raw_notes, force_combine);
-        let paper_width_mm = max_notes_per_line(&notes_content) * 9 + 20;
-        vec![build_combined_ly(&notes_content, &raw_lyrics, meta.composer.as_deref(), paper_width_mm, lyrics_mag)]
+        vec![build_combined_ly(&notes_content, &raw_lyrics, meta.composer.as_deref(), lyrics_mag)]
     }
 }
 
@@ -1145,46 +1221,85 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
 
     let hash = content_hash(combined);
     let combined_ly = cache_dir.join(format!("_combined_{hash}.ly"));
-    eprintln!("Writing combined .ly to {}", combined_ly.display());
-    fs::write(&combined_ly, combined)
-        .map_err(|e| format!("Failed to write combined .ly: {e}"))?;
-
     let stem = svg_out.with_extension("");
-    #[allow(unused_mut)]
-    let mut cmd = Command::new(lilypond_bin());
-    cmd.args(["-dbackend=svg", "-dcrop", "-o"])
-        .arg(&stem)
-        .arg(&combined_ly)
-        .current_dir(&cache_dir)
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped());
-    #[cfg(windows)]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    let result = cmd.output();
 
-    match result {
-        Ok(out) if out.status.success() => {
-            // LilyPond with -dcrop produces a .cropped.svg alongside the main SVG
-            let cropped = stem.with_extension("cropped.svg");
-            if cropped.exists() {
-                let _ = fs::rename(&cropped, &svg_out);
+    let run_pass = |content: &str| -> Result<(), String> {
+        fs::write(&combined_ly, content)
+            .map_err(|e| format!("Failed to write combined .ly: {e}"))?;
+        #[allow(unused_mut)]
+        let mut cmd = Command::new(lilypond_bin());
+        cmd.args(["-dbackend=svg", "-dcrop", "-o"])
+            .arg(&stem)
+            .arg(&combined_ly)
+            .current_dir(&cache_dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        match cmd.output() {
+            Ok(out) if out.status.success() => {
+                let cropped = stem.with_extension("cropped.svg");
+                if cropped.exists() {
+                    let _ = fs::rename(&cropped, &svg_out);
+                }
+                Ok(())
             }
-            crate::lyric_check::check(song_dir, verse, part, &svg_out, n_parts);
-            // let _ = fs::remove_file(&combined_ly);
-            Ok(())
+            Ok(out) => {
+                let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                eprintln!("lilypond failed for {dir_name}/{verse} part {part}: {stderr}");
+                Err(stderr)
+            }
+            Err(e) => {
+                let msg = format!("Failed to run lilypond: {e}");
+                eprintln!("{msg}");
+                Err(msg)
+            }
         }
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-            eprintln!("lilypond failed for {dir_name}/{verse} part {part}: {stderr}");
-            // let _ = fs::remove_file(&combined_ly);
-            Err(stderr)
-        }
-        Err(e) => {
-            let msg = format!("Failed to run lilypond: {e}");
-            eprintln!("{msg}");
-            Err(msg)
+    };
+
+    eprintln!("Writing combined .ly to {}", combined_ly.display());
+    run_pass(combined)?;
+
+    // Uniform-staves padding: render → measure → r4 coarse pad → render →
+    // measure → s16 fine-tune → render. Padded SVG overwrites the cached path.
+    let lengths = measure_staff_lengths(&svg_out);
+    if lengths.len() > 1 {
+        let max_len = lengths.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let min_len = lengths.iter().cloned().fold(f64::INFINITY, f64::min);
+        if max_len - min_len > 0.01 {
+            let r4_counts: Vec<usize> =
+                lengths.iter().map(|&l| r4_padding(max_len - l)).collect();
+            if r4_counts.iter().any(|&n| n > 0) {
+                let paddings: Vec<Vec<&'static str>> =
+                    r4_counts.iter().map(|&n| vec!["r4"; n]).collect();
+                let padded = inject_padding(combined, &paddings);
+                run_pass(&padded)?;
+
+                let lengths2 = measure_staff_lengths(&svg_out);
+                if lengths2.len() == r4_counts.len() {
+                    let max2 = lengths2.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                    let min2 = lengths2.iter().cloned().fold(f64::INFINITY, f64::min);
+                    if max2 - min2 > 0.01 {
+                        let s16_counts: Vec<usize> = lengths2.iter().enumerate().map(|(i, &l)| {
+                            s16_padding(max2 - l, r4_counts[i] > 0)
+                        }).collect();
+                        if s16_counts.iter().any(|&n| n > 0) {
+                            let paddings2: Vec<Vec<&'static str>> = (0..r4_counts.len()).map(|i| {
+                                let mut v = vec!["r4"; r4_counts[i]];
+                                v.extend(vec!["s16"; s16_counts[i]]);
+                                v
+                            }).collect();
+                            let padded2 = inject_padding(combined, &paddings2);
+                            run_pass(&padded2)?;
+                        }
+                    }
+                }
+            }
         }
     }
+
+    crate::lyric_check::check(song_dir, verse, part, &svg_out, n_parts);
+    Ok(())
 }
 
 #[cfg(test)]

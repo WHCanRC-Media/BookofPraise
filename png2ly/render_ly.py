@@ -381,38 +381,99 @@ def _count_syllables(lyrics_content):
     return count
 
 
-def render_svg_from_content(notes_content, lyrics_content, output_svg, composer=None):
-    """Render pre-split notes and lyrics content to SVG.
+# Per-token widths in SVG units. r4 (hidden rest) is the coarse pad: linear
+# and cross-line clean for any count, but only when every line uses the same
+# rest duration. s16 (silent skip) is the fine-tune pad: linear up to ~7 per
+# line, ~0.512 alone or ~0.725 per skip when trailing r4 padding.
+_R4_WIDTH = 2.898
+_S16_WIDTH_ALONE = 0.5123
+_S16_WIDTH_AFTER_R4 = 0.725
+_S16_MAX_PER_LINE = 7
 
-    Used for multi-part rendering where notes/lyrics have already been split.
-    """
-    header_items = []
-    header_items.append("  tagline = ##f")
-    header_block = "\\header {\n" + "\n".join(header_items) + "\n}"
 
-    modified = modify_notes(notes_content, force_combine=False)
-    paper_width_mm = max(
-        len(re.findall(r"[a-gr](is|es)?[',]*\d", line))
-        for line in _extract_line_contents(notes_content)
-    ) * 9 + 20 if _extract_line_contents(notes_content) else 8 * 9 + 20
+def _measure_staff_lengths(svg_path):
+    """Return one staff length per system from a LilyPond-rendered SVG."""
+    with open(svg_path) as f:
+        svg = f.read()
+    pat = re.compile(
+        r'<line[^/]*stroke-width="0\.1000"[^/]*x1="([^"]+)"\s+y1="([^"]+)"'
+        r'\s+x2="([^"]+)"\s+y2="([^"]+)"', re.S)
+    horiz = []
+    for m in pat.finditer(svg):
+        x1, y1, x2, y2 = map(float, m.groups())
+        if abs(y1 - y2) < 1e-6:
+            horiz.append(x2 - x1)
+    return [horiz[i * 5] for i in range(len(horiz) // 5)]
 
-    lyrics_content = lyrics_content.replace('\\"', '\u201c')
+
+def _r4_padding(deficit):
+    """Number of hidden r4 rests whose total width best matches deficit."""
+    if deficit <= 0:
+        return 0
+    return round(deficit / _R4_WIDTH)
+
+
+def _s16_padding(deficit, has_r4):
+    """Number of trailing s16 skips for fine-tune (capped by linear range)."""
+    if deficit <= 0:
+        return 0
+    per_unit = _S16_WIDTH_AFTER_R4 if has_r4 else _S16_WIDTH_ALONE
+    n = round(deficit / per_unit)
+    return min(max(n, 0), _S16_MAX_PER_LINE)
+
+
+def _inject_padding(modified_notes, paddings):
+    """Insert padding before each \\break / \\bar terminator.
+    Rest tokens (r4, etc.) are wrapped with `\\once \\hide Rest`; skip tokens
+    (s16, etc.) pass through unchanged. If the line normally ends in a visible
+    rest, padding is inserted before that rest so the rest stays at the end of
+    the music; otherwise padding is appended just before the terminator."""
+    parts = re.split(r'(\\break|\\bar\s+"[^"]*")', modified_notes)
+    line_idx = 0
+    for i in range(1, len(parts), 2):
+        if line_idx >= len(paddings) or not paddings[line_idx]:
+            line_idx += 1
+            continue
+        wrapped = [f"\\once \\hide Rest {t}" if t.startswith("r") else t
+                   for t in paddings[line_idx]]
+        pad = " ".join(wrapped)
+        prev = parts[i-1]
+        # Visible trailing rest: r<dur> at end, not preceded by `Rest ` (from
+        # an immediately preceding `\\once \\hide Rest`).
+        m = re.search(r'(?<!Rest )(\br\d+\.?\s*)$', prev)
+        if m:
+            pos = m.start(1)
+            parts[i-1] = prev[:pos] + pad + " " + prev[pos:]
+        else:
+            parts[i-1] = prev.rstrip() + " " + pad + " "
+        line_idx += 1
+    return "".join(parts)
+
+
+def _build_score_ly(modified_notes, lyrics_content, lyrics_mag=1.0):
+    """Compose the full LilyPond document for a render pass."""
     lyrics_score = ""
     if lyrics_content.strip():
         lyrics_score = '    \\new Lyrics \\lyricsto "melody" { \\verse }'
-
-    combined = f"""\\version "2.24.0"
+    lyrics_font = ""
+    if abs(lyrics_mag - 1.0) > 1e-6:
+        lyrics_font = (
+            f"      \\override LyricText.font-size = "
+            f"#(magnification->font-size {lyrics_mag})\n"
+        )
+    return f"""\\version "2.24.0"
 
 \\paper {{
-  paper-width = {paper_width_mm}\\mm
-  line-width = {paper_width_mm}\\mm
-  left-margin = 0\\cm
-  right-margin = 0\\cm
+  paper-width = 1000\\mm
+  line-width = 1000\\mm
+  ragged-right = ##t
 }}
 
-{header_block}
+\\header {{
+  tagline = ##f
+}}
 
-{modified}
+{modified_notes}
 
 {lyrics_content}
 
@@ -431,40 +492,78 @@ def render_svg_from_content(notes_content, lyrics_content, output_svg, composer=
     \\context {{
       \\Lyrics
       \\override LyricText.self-alignment-X = #CENTER
-    }}
+{lyrics_font}    }}
   }}
 }}
 """
+
+
+def render_svg_from_content(notes_content, lyrics_content, output_svg, composer=None, force_combine=False, uniform_staves=True, lyrics_mag=1.0):
+    """Render notes and lyrics content to SVG.
+
+    With uniform_staves=True, renders twice: the first pass measures staff
+    lengths, the second pass adds hidden-rest padding so all staves match
+    the longest one.
+    """
+    modified = modify_notes(notes_content, force_combine=force_combine)
+    lyrics_content = lyrics_content.replace('\\"', '\u201c')
 
     out_dir = os.path.dirname(os.path.abspath(output_svg))
     os.makedirs(out_dir, exist_ok=True)
     svg_base = os.path.splitext(os.path.basename(output_svg))[0]
     combined_ly = os.path.join(out_dir, f"_combined_{svg_base}.ly")
-    with open(combined_ly, "w") as f:
-        f.write(combined)
+    abs_svg = os.path.abspath(output_svg)
+    cropped_svg = os.path.splitext(abs_svg)[0] + ".cropped.svg"
 
-    result = subprocess.run(
-        [_lilypond_bin(), "-dbackend=svg", "-dcrop", "-o",
-         os.path.splitext(os.path.abspath(output_svg))[0],
-         combined_ly],
-        capture_output=True,
-        text=True,
-        cwd=out_dir,
-    )
-
-    if result.returncode == 0:
-        abs_svg = os.path.abspath(output_svg)
-        cropped_svg = os.path.splitext(abs_svg)[0] + ".cropped.svg"
-        if os.path.exists(cropped_svg):
+    def _do_render(content):
+        with open(combined_ly, "w") as f:
+            f.write(_build_score_ly(content, lyrics_content, lyrics_mag=lyrics_mag))
+        result = subprocess.run(
+            [_lilypond_bin(), "-dbackend=svg", "-dcrop", "-o",
+             os.path.splitext(abs_svg)[0], combined_ly],
+            capture_output=True, text=True, cwd=out_dir,
+        )
+        if result.returncode == 0 and os.path.exists(cropped_svg):
             os.replace(cropped_svg, abs_svg)
-        if os.path.exists(combined_ly):
-            os.remove(combined_ly)
+        return result.returncode == 0
 
-    return result.returncode == 0
+    if not _do_render(modified):
+        return False
+
+    if not uniform_staves:
+        return True
+
+    lengths = _measure_staff_lengths(abs_svg)
+    if not lengths or max(lengths) - min(lengths) <= 0.01:
+        return True
+
+    # Pass 2: r4 coarse padding (≤ 2.9 unit residual)
+    max_len = max(lengths)
+    r4_counts = [_r4_padding(max_len - l) for l in lengths]
+    paddings = [["r4"] * n for n in r4_counts]
+    if not any(paddings):
+        return True
+    padded = _inject_padding(modified, paddings)
+    if not _do_render(padded):
+        return False
+
+    # Pass 3: s16 fine-tune trailing the r4 padding (≤ 0.4 unit residual)
+    lengths = _measure_staff_lengths(abs_svg)
+    if not lengths:
+        return True
+    max_len = max(lengths)
+    if max_len - min(lengths) <= 0.01:
+        return True
+    s16_counts = [_s16_padding(max_len - l, r4_counts[i] > 0) for i, l in enumerate(lengths)]
+    if not any(s16_counts):
+        return True
+    paddings = [["r4"] * r4 + ["s16"] * s16 for r4, s16 in zip(r4_counts, s16_counts)]
+    padded = _inject_padding(modified, paddings)
+    return _do_render(padded)
 
 
-def render_svg(notes_path, lyrics_path, output_svg, composer=None, split_style="default"):
-    """Combine notes and lyrics files with header/footer and render to SVG.
+def render_svg(notes_path, lyrics_path, output_svg, composer=None, split_style="default", lyrics_mag=1.0):
+    """Render notes and lyrics files to SVG.
 
     Args:
         notes_path: Path to .ly file containing melody definition
@@ -472,33 +571,16 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None, split_style="
         output_svg: Path for output SVG file
         composer: Optional composer attribution string
         split_style: One of "default", "single slide", "multi slide", "combine lines"
+        lyrics_mag: Magnification factor for lyric text (1.0 = unchanged)
     """
-    header_items = []
-    header_items.append("  tagline = ##f")
-    header_block = "\\header {\n" + "\n".join(header_items) + "\n}"
-
     with open(notes_path) as f:
         notes_content = f.read()
 
-    force_combine = split_style == "combine lines"
-    notes_content = modify_notes(notes_content, force_combine=force_combine)
-
-    # Calculate width from max notes per line (after modify_notes, matching Rust)
-    line_contents = _extract_line_contents(notes_content)
-    max_notes = max(
-        len(re.findall(r"[a-gr](is|es)?[',]*\d", line))
-        for line in line_contents
-    ) if line_contents else 8
-    paper_width_mm = max_notes * 9 + 20
-
-    # Read lyrics if provided, sanitize for LilyPond
     lyrics_content = ""
     if lyrics_path and os.path.exists(lyrics_path):
         with open(lyrics_path) as f:
             lyrics_content = f.read()
-        lyrics_content = lyrics_content.replace('\\"', '\u201c')
 
-    lyrics_score = ""
     if lyrics_content.strip():
         note_count = _count_pitched_notes(notes_content)
         syllable_count = _count_syllables(lyrics_content)
@@ -508,75 +590,18 @@ def render_svg(notes_path, lyrics_path, output_svg, composer=None, split_style="
                 f"{notes_path}: note/syllable mismatch: "
                 f"{note_count} notes vs {syllable_count} syllables"
             )
-        lyrics_score = '    \\new Lyrics \\lyricsto "melody" { \\verse }'
 
-    combined = f"""\\version "2.24.0"
-
-\\paper {{
-  paper-width = {paper_width_mm}\\mm
-  line-width = {paper_width_mm}\\mm
-  left-margin = 0\\cm
-  right-margin = 0\\cm
-}}
-
-{header_block}
-
-{notes_content}
-
-{lyrics_content}
-
-\\score {{
-  <<
-    \\new Voice = "melody" {{ \\melody }}
-{lyrics_score}
-  >>
-  \\layout {{
-    indent = 0
-    \\context {{
-      \\Score
-      \\override SpacingSpanner.uniform-stretching = ##t
-      \\override SpacingSpanner.strict-note-spacing = ##t
-    }}
-    \\context {{
-      \\Lyrics
-      \\override LyricText.self-alignment-X = #CENTER
-    }}
-  }}
-}}
-"""
-
-    # Write combined .ly to a temp file next to the output
-    out_dir = os.path.dirname(os.path.abspath(output_svg))
-    os.makedirs(out_dir, exist_ok=True)
-    svg_base = os.path.splitext(os.path.basename(output_svg))[0]
-    combined_ly = os.path.join(out_dir, f"_combined_{svg_base}.ly")
-    with open(combined_ly, "w") as f:
-        f.write(combined)
-
-    # Render
-    result = subprocess.run(
-        [_lilypond_bin(), "-dbackend=svg", "-dcrop", "-o",
-         os.path.splitext(os.path.abspath(output_svg))[0],
-         combined_ly],
-        capture_output=True,
-        text=True,
-        cwd=out_dir,
+    return render_svg_from_content(
+        notes_content, lyrics_content, output_svg,
+        composer=composer,
+        force_combine=split_style == "combine lines",
+        lyrics_mag=lyrics_mag,
     )
-
-    if result.returncode == 0:
-        abs_svg = os.path.abspath(output_svg)
-        cropped_svg = os.path.splitext(abs_svg)[0] + ".cropped.svg"
-        if os.path.exists(cropped_svg):
-            os.replace(cropped_svg, abs_svg)
-        if os.path.exists(combined_ly):
-            os.remove(combined_ly)
-
-    return result.returncode == 0
 
 
 def _render_one(args):
     """Render a single lyrics file. Returns (label, success)."""
-    lyrics_path, no_combine = args
+    lyrics_path, no_combine, lyrics_mag = args
     psalm_dir = os.path.dirname(lyrics_path)
     psalm_name = os.path.basename(psalm_dir)
 
@@ -621,14 +646,14 @@ def _render_one(args):
         for part_idx, (notes_part, lyrics_part) in enumerate(zip(note_parts, lyric_parts)):
             svg_path = os.path.join(psalm_dir, f"{verse_num}_p{part_idx}.svg")
             comp = composer if part_idx == 0 else None
-            ok = render_svg_from_content(notes_part, lyrics_part, svg_path, composer=comp)
+            ok = render_svg_from_content(notes_part, lyrics_part, svg_path, composer=comp, lyrics_mag=lyrics_mag)
             if not ok:
                 all_ok = False
         label = f"{psalm_name} v{verse_num} ({len(note_parts)} parts)"
         return (label, "OK" if all_ok else "FAILED")
     else:
         svg_path = os.path.join(psalm_dir, f"{verse_num}.svg")
-        ok = render_svg(notes_path, lyrics_path, svg_path, composer=composer, split_style=split_style)
+        ok = render_svg(notes_path, lyrics_path, svg_path, composer=composer, split_style=split_style, lyrics_mag=lyrics_mag)
         return (f"{psalm_name} v{verse_num}", "OK" if ok else "FAILED")
 
 
@@ -639,6 +664,7 @@ def main():
     parser.add_argument("--psalm", help="Process only this psalm (e.g. psalm102)")
     parser.add_argument("--check", action="store_true", help="Check note/syllable counts without rendering")
     parser.add_argument("--no-combine", action="store_true", help="Force single-slide rendering (no line-pair combining)")
+    parser.add_argument("--lyrics-mag", type=float, default=1.0, help="Lyrics font magnification (1.0 = unchanged)")
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -676,7 +702,7 @@ def main():
 
     print(f"Found {len(lyrics_files)} lyrics files")
 
-    work = [(lf, args.no_combine) for lf in lyrics_files]
+    work = [(lf, args.no_combine, args.lyrics_mag) for lf in lyrics_files]
     ok = failed = skipped = 0
 
     with ThreadPool(args.jobs) as pool:
