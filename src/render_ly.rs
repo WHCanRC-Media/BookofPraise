@@ -1033,6 +1033,7 @@ fn build_combined_ly(notes: &str, lyrics: &str, composer: Option<&str>, lyrics_m
         r#"\version "2.24.0"
 
 \paper {{
+  #(define fonts (set-global-fonts #:roman "FreeSerif"))
   paper-width = 1000\mm
   line-width = 1000\mm
   ragged-right = ##t
@@ -1228,7 +1229,11 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
 
     let hash = content_hash(combined);
     let combined_ly = cache_dir.join(format!("_combined_{hash}.ly"));
-    let stem = svg_out.with_extension("");
+    // Render passes write to a temp path so other threads checking
+    // `cached_svg_path(...).exists()` don't see partially-padded intermediate
+    // output between passes. Only the final pass renames into `svg_out`.
+    let tmp_stem = cache_dir.join(format!("_tmp_{hash}"));
+    let tmp_svg = tmp_stem.with_extension("svg");
 
     let run_pass = |content: &str| -> Result<(), String> {
         fs::write(&combined_ly, content)
@@ -1236,7 +1241,7 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
         #[allow(unused_mut)]
         let mut cmd = Command::new(lilypond_bin());
         cmd.args(["-dbackend=svg", "-dcrop", "-o"])
-            .arg(&stem)
+            .arg(&tmp_stem)
             .arg(&combined_ly)
             .current_dir(&cache_dir)
             .stdout(Stdio::null())
@@ -1245,9 +1250,9 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         match cmd.output() {
             Ok(out) if out.status.success() => {
-                let cropped = stem.with_extension("cropped.svg");
+                let cropped = tmp_stem.with_extension("cropped.svg");
                 if cropped.exists() {
-                    let _ = fs::rename(&cropped, &svg_out);
+                    let _ = fs::rename(&cropped, &tmp_svg);
                 }
                 Ok(())
             }
@@ -1264,12 +1269,22 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
         }
     };
 
+    let cleanup = || {
+        let _ = fs::remove_file(&tmp_svg);
+        let _ = fs::remove_file(tmp_stem.with_extension("svg"));
+        let _ = fs::remove_file(tmp_stem.with_extension("cropped.svg"));
+    };
+
     eprintln!("Writing combined .ly to {}", combined_ly.display());
-    run_pass(combined)?;
+    if let Err(e) = run_pass(combined) {
+        cleanup();
+        return Err(e);
+    }
 
     // Uniform-staves padding: render → measure → r4 coarse pad → render →
-    // measure → s16 fine-tune → render. Padded SVG overwrites the cached path.
-    let lengths = measure_staff_lengths(&svg_out);
+    // measure → s16 fine-tune → render. All passes write to `tmp_svg`; the
+    // final result is moved atomically into `svg_out` below.
+    let lengths = measure_staff_lengths(&tmp_svg);
     if lengths.len() > 1 {
         let max_len = lengths.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let min_len = lengths.iter().cloned().fold(f64::INFINITY, f64::min);
@@ -1280,9 +1295,12 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
                 let paddings: Vec<Vec<&'static str>> =
                     r4_counts.iter().map(|&n| vec!["r4"; n]).collect();
                 let padded = inject_padding(combined, &paddings);
-                run_pass(&padded)?;
+                if let Err(e) = run_pass(&padded) {
+                    cleanup();
+                    return Err(e);
+                }
 
-                let lengths2 = measure_staff_lengths(&svg_out);
+                let lengths2 = measure_staff_lengths(&tmp_svg);
                 if lengths2.len() == r4_counts.len() {
                     let max2 = lengths2.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
                     let min2 = lengths2.iter().cloned().fold(f64::INFINITY, f64::min);
@@ -1297,12 +1315,21 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
                                 v
                             }).collect();
                             let padded2 = inject_padding(combined, &paddings2);
-                            run_pass(&padded2)?;
+                            if let Err(e) = run_pass(&padded2) {
+                                cleanup();
+                                return Err(e);
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    // Promote the fully-rendered tmp SVG into the cached path atomically.
+    if let Err(e) = fs::rename(&tmp_svg, &svg_out) {
+        cleanup();
+        return Err(format!("Failed to publish SVG: {e}"));
     }
 
     crate::lyric_check::check(song_dir, verse, part, &svg_out, n_parts);

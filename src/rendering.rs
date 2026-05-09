@@ -18,14 +18,6 @@ pub type Pixmap = resvg::tiny_skia::Pixmap;
 static FONTDB: LazyLock<resvg::usvg::fontdb::Database> = LazyLock::new(|| {
     let mut db = resvg::usvg::fontdb::Database::new();
     db.load_system_fonts();
-    // fontdb's hardcoded `serif` alias is "Times New Roman", which is installed
-    // on every Windows machine but lacks the Combining Half Marks block
-    // (FE27/FE28/FE2D) that expand_multi_breve emits for K>=3 melisma spans.
-    // The Windows installer drops GNU FreeSerif into the system font dir; if
-    // it's present, point the alias there so melisma underlines render.
-    if db.faces().any(|f| f.families.iter().any(|(n, _)| n == "FreeSerif")) {
-        db.set_serif_family("FreeSerif");
-    }
     db
 });
 

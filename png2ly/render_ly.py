@@ -468,6 +468,7 @@ def _build_score_ly(modified_notes, lyrics_content, lyrics_mag=1.0):
     return f"""\\version "2.24.0"
 
 \\paper {{
+  #(define fonts (set-global-fonts #:roman "FreeSerif"))
   paper-width = 1000\\mm
   line-width = 1000\\mm
   ragged-right = ##t
