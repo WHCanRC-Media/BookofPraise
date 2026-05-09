@@ -42,6 +42,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "..\dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Install GNU FreeSerif system-wide so resvg/fontdb finds it via load_system_fonts().
+; Required for melisma underlines (Combining Half Marks U+FE27/FE28/FE2D), which
+; Times New Roman lacks. Source file is staged by the GitHub build workflow.
+Source: "fonts\FreeSerif.ttf"; DestDir: "{autofonts}"; FontInstall: "FreeSerif"; \
+    Flags: onlyifdoesntexist uninsneveruninstall
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"

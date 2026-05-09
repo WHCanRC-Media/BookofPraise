@@ -91,6 +91,20 @@ jobs:
           mkdir -p dist/share/glib-2.0
           cp -r /$MSYSTEM/share/glib-2.0/schemas dist/share/glib-2.0/ 2>/dev/null || true
 
+      - name: Bundle GNU FreeSerif for installer
+        # FreeSerif covers Combining Half Marks (FE27/FE28/FE2D) which TNR lacks;
+        # installer.iss copies it into the user's font directory so melismas render.
+        # COPYING (GPL-3) ships in the install dir to satisfy GPL distribution terms.
+        run: |
+          set -e
+          mkdir -p installer/fonts
+          curl -fsSL -o /tmp/freefont.zip https://ftp.gnu.org/gnu/freefont/freefont-ttf-20120503.zip
+          echo "7c85baf1bf82a1a1845d1322112bc6ca982221b484e3b3925022e25b5cae89af  /tmp/freefont.zip" | sha256sum -c -
+          unzip -j -o /tmp/freefont.zip "freefont-20120503/FreeSerif.ttf" -d installer/fonts/
+          unzip -p /tmp/freefont.zip "freefont-20120503/COPYING" > dist/FreeSerif-LICENSE.txt
+          test -s installer/fonts/FreeSerif.ttf
+          test -s dist/FreeSerif-LICENSE.txt
+
       - name: Zip
         run: cd dist && zip -r ../bop-windows.zip .
 
