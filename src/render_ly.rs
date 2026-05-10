@@ -632,13 +632,12 @@ fn split_notes(raw_notes: &str, n_parts: usize) -> Vec<String> {
             // For non-last lines in the part, keep \break
             // For the last line, replace \break with \bar "|." if it's the last part,
             // or add \bar "|." if not already there
-            if i == end - start - 1 {
-                // Last line of this part
-                let mut l = line.clone();
-                if part_idx < n_parts - 1 {
-                    // Not the final part: just remove the \break, no barline
-                    l = l.replace("\\break", "");
-                }
+            if i == end - start - 1 && part_idx < n_parts - 1 {
+                // Last line of a non-final part: replace \break with an
+                // invisible barline so modify_notes and inject_padding still
+                // recognize it as a line terminator (otherwise this line
+                // gets no trailing padding and ends up shorter than the others).
+                let l = line.replace("\\break", "\\bar \"\"");
                 part_body.push_str(&l);
             } else {
                 part_body.push_str(line);
