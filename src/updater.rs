@@ -22,7 +22,7 @@ fn update_root() -> PathBuf {
 }
 
 /// Read the locally stored version tag from `lilypond_version.txt`.
-fn current_local_version() -> Option<String> {
+pub fn current_local_version() -> Option<String> {
     let path = update_root().join(VERSION_FILE);
     std::fs::read_to_string(path).ok().map(|s| s.trim().to_string())
 }

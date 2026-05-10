@@ -159,7 +159,24 @@ pub fn write_song_meta(song_dir: &Path, meta: &SongMeta) {
     }
 }
 
-static SVG_CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| cache_dir().join("svg"));
+fn init_svg_cache_dir(cache_root: &Path, version: &str) -> PathBuf {
+    let current = cache_root.join(format!("svg-{version}"));
+    if let Ok(entries) = fs::read_dir(cache_root) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if (name_str == "svg" || name_str.starts_with("svg-")) && entry.path() != current {
+                let _ = fs::remove_dir_all(entry.path());
+            }
+        }
+    }
+    current
+}
+
+static SVG_CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    let version = crate::updater::current_local_version().unwrap_or_else(|| "unknown".to_string());
+    init_svg_cache_dir(&cache_dir(), &version)
+});
 static DATA_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let base = if cfg!(windows) {
         std::env::var("APPDATA")
@@ -1337,7 +1354,32 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
 
 #[cfg(test)]
 mod tests {
-    use super::beam_slurred_eighths;
+    use super::{beam_slurred_eighths, init_svg_cache_dir};
+    use std::fs;
+
+    #[test]
+    fn sweeps_old_svg_cache_dirs() {
+        let tmp = std::env::temp_dir().join(format!("bop-svg-cache-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let legacy = tmp.join("svg");
+        let stale = tmp.join("svg-20240101");
+        let unrelated = tmp.join("lilypond-bin");
+        for d in [&legacy, &stale, &unrelated] {
+            fs::create_dir_all(d).unwrap();
+            fs::write(d.join("ghost"), "x").unwrap();
+        }
+
+        let dir = init_svg_cache_dir(&tmp, "20260429");
+
+        assert_eq!(dir, tmp.join("svg-20260429"));
+        assert!(!legacy.exists(), "legacy svg/ should have been removed");
+        assert!(!stale.exists(), "stale svg-20240101/ should have been removed");
+        assert!(unrelated.exists(), "unrelated dir must not be touched");
+
+        fs::remove_dir_all(&tmp).ok();
+    }
 
     #[test]
     fn beams_slurred_eighth_pairs() {
