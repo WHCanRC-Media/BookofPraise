@@ -269,7 +269,10 @@ fn pump_prefetch(state_rc: &Rc<RefCell<AppState>>) {
                 break 'tiers;
             }
         }
-        let Some(key) = found else { return; };
+        let Some(key) = found else {
+            render_ly::purge_old_cache_dirs();
+            return;
+        };
         state.prefetch_in_flight = Some(key.clone());
         key
     };

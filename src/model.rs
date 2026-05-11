@@ -253,7 +253,7 @@ pub struct AppState {
     ///   2: not liturgy AND current mag
     ///   3: not liturgy AND other mag
     /// Within each tier the order is FIFO (push_back, pop_front).
-    pub prefetch_tiers: [VecDeque<RenderKey>; 4],
+    pub prefetch_tiers: [VecDeque<RenderKey>; 6],
     /// At most one background prefetch render runs at a time.
     pub prefetch_in_flight: Option<RenderKey>,
     /// Song dirs that had edits saved this session (for email-patch-on-close).
@@ -328,11 +328,17 @@ impl AppState {
                     let in_liturgy = liturgy_set.contains(&(song_dir.clone(), v, part));
                     for &mag in crate::render_ly::MAGNIFICATIONS_MILLI {
                         let is_current_mag = mag == current_mag;
-                        let tier = match (in_liturgy, is_current_mag) {
-                            (true, true) => 0,
-                            (true, false) => 1,
-                            (false, true) => 2,
-                            (false, false) => 3,
+                        // 1.0×–2.0× covers the magnifications people actually
+                        // use day-to-day — render those before the long-tail
+                        // 0.5× and 2.1×+ values within each liturgy bucket.
+                        let common_mag = (1000..=2000).contains(&mag);
+                        let tier = match (in_liturgy, is_current_mag, common_mag) {
+                            (true,  true,  _)     => 0,
+                            (true,  false, true)  => 1,
+                            (true,  false, false) => 2,
+                            (false, true,  _)     => 3,
+                            (false, false, true)  => 4,
+                            (false, false, false) => 5,
                         };
                         self.prefetch_tiers[tier].push_back((
                             song_dir.clone(),

@@ -8,6 +8,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -171,18 +172,79 @@ pub fn write_song_meta(song_dir: &Path, meta: &SongMeta) {
     }
 }
 
+/// Filename -> full path index of `.svgz` files in old (non-current) `svg*`
+/// sibling dirs. Populated by `init_svg_cache_dir`; drained by
+/// `try_resurrect_from_old_cache` as the new render pipeline asks for files
+/// whose content hash is unchanged from the previous version. Anything still
+/// here when the prefetch queue drains is stale and gets removed.
+static OLD_CACHE_INDEX: LazyLock<Mutex<HashMap<OsString, PathBuf>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+static OLD_CACHE_DIRS: LazyLock<Mutex<Vec<PathBuf>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
 fn init_svg_cache_dir(cache_root: &Path, version: &str) -> PathBuf {
     let current = cache_root.join(format!("svg-{version}"));
+    let mut old_dirs: Vec<PathBuf> = Vec::new();
+    let mut old_index: HashMap<OsString, PathBuf> = HashMap::new();
     if let Ok(entries) = fs::read_dir(cache_root) {
         for entry in entries.flatten() {
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
-            if (name_str == "svg" || name_str.starts_with("svg-")) && entry.path() != current {
-                let _ = fs::remove_dir_all(entry.path());
+            if name_str.starts_with("svg") && entry.path() != current {
+                let path = entry.path();
+                if let Ok(files) = fs::read_dir(&path) {
+                    for f in files.flatten() {
+                        let fname = f.file_name();
+                        if fname.to_string_lossy().ends_with(".svgz") {
+                            old_index.insert(fname, f.path());
+                        }
+                    }
+                }
+                old_dirs.push(path);
             }
         }
     }
+    if let Ok(mut guard) = OLD_CACHE_INDEX.lock() {
+        *guard = old_index;
+    }
+    if let Ok(mut guard) = OLD_CACHE_DIRS.lock() {
+        *guard = old_dirs;
+    }
     current
+}
+
+/// If `target.file_name()` is indexed in an old cache dir, move the file there
+/// into `target` and return true. Each filename is tried at most once — the
+/// entry is consumed regardless of rename outcome.
+pub fn try_resurrect_from_old_cache(target: &Path) -> bool {
+    let Some(fname) = target.file_name().map(|n| n.to_os_string()) else { return false; };
+    let old_path = {
+        let Ok(mut idx) = OLD_CACHE_INDEX.lock() else { return false; };
+        match idx.remove(&fname) {
+            Some(p) => p,
+            None => return false,
+        }
+    };
+    if let Some(parent) = target.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    fs::rename(&old_path, target).is_ok()
+}
+
+/// Remove old (non-current) `svg*` cache dirs and clear the resurrection index.
+/// Safe to call from the prefetch-drained path: every expected hash has been
+/// asked for at that point, so anything remaining is stale by definition.
+pub fn purge_old_cache_dirs() {
+    let dirs: Vec<PathBuf> = match OLD_CACHE_DIRS.lock() {
+        Ok(mut g) => std::mem::take(&mut *g),
+        Err(_) => return,
+    };
+    for dir in &dirs {
+        let _ = fs::remove_dir_all(dir);
+    }
+    if let Ok(mut idx) = OLD_CACHE_INDEX.lock() {
+        idx.clear();
+    }
 }
 
 static SVG_CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -1244,7 +1306,8 @@ pub fn is_svg_current(song_dir: &Path, verse: u32, part: u32) -> bool {
 pub fn is_svg_current_at_mag(song_dir: &Path, verse: u32, part: u32, mag_milli: u32) -> bool {
     let parts = get_combined_parts_at_mag(song_dir, verse, mag_milli);
     if let Some(combined) = parts.get(part as usize) {
-        cached_svg_path(combined).exists()
+        let target = cached_svg_path(combined);
+        target.exists() || try_resurrect_from_old_cache(&target)
     } else {
         false
     }
@@ -1255,7 +1318,11 @@ pub fn svg_path_for_verse(song_dir: &Path, verse: u32, part: u32) -> Option<Path
     let parts = get_combined_parts(song_dir, verse);
     let combined = parts.get(part as usize)?;
     let path = cached_svg_path(combined);
-    if path.exists() { Some(path) } else { None }
+    if path.exists() || try_resurrect_from_old_cache(&path) {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 /// Render the SVG for a given verse part at an explicit magnification.
@@ -1278,8 +1345,8 @@ pub fn render_svg_at_mag(
         .ok_or("Failed to build combined .ly")?;
     let svg_out = cached_svg_path(combined);
 
-    // Already cached
-    if svg_out.exists() {
+    // Already cached (or resurrected from a previous version's cache).
+    if svg_out.exists() || try_resurrect_from_old_cache(&svg_out) {
         crate::lyric_check::check(song_dir, verse, part, &svg_out, n_parts);
         return Ok(());
     }
@@ -1496,11 +1563,13 @@ pub fn render_svg_at_mag(
 
 #[cfg(test)]
 mod tests {
-    use super::{beam_slurred_eighths, init_svg_cache_dir};
+    use super::{
+        beam_slurred_eighths, init_svg_cache_dir, purge_old_cache_dirs, try_resurrect_from_old_cache,
+    };
     use std::fs;
 
     #[test]
-    fn sweeps_old_svg_cache_dirs() {
+    fn resurrects_matching_svgz_and_purges_rest() {
         let tmp = std::env::temp_dir().join(format!("bop-svg-cache-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
@@ -1510,14 +1579,32 @@ mod tests {
         let unrelated = tmp.join("lilypond-bin");
         for d in [&legacy, &stale, &unrelated] {
             fs::create_dir_all(d).unwrap();
-            fs::write(d.join("ghost"), "x").unwrap();
         }
+        // A hash that the new version still wants, sitting in a stale dir.
+        fs::write(stale.join("deadbeef.svgz"), b"old-payload").unwrap();
+        // A hash the new version no longer produces — should be purged.
+        fs::write(legacy.join("orphan.svgz"), b"orphan").unwrap();
+        fs::write(unrelated.join("keep"), b"x").unwrap();
 
         let dir = init_svg_cache_dir(&tmp, "20260429");
 
         assert_eq!(dir, tmp.join("svg-20260429"));
-        assert!(!legacy.exists(), "legacy svg/ should have been removed");
-        assert!(!stale.exists(), "stale svg-20240101/ should have been removed");
+        // Old dirs are not deleted on init — they stay until purge.
+        assert!(legacy.exists(), "old dir must remain until purge");
+        assert!(stale.exists(), "old dir must remain until purge");
+        assert!(unrelated.exists(), "unrelated dir must not be touched");
+
+        // Pretend the new pipeline asks for the still-valid hash.
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("deadbeef.svgz");
+        assert!(try_resurrect_from_old_cache(&target));
+        assert!(target.exists(), "file moved into new dir");
+        assert!(!stale.join("deadbeef.svgz").exists(), "old copy removed");
+
+        // Once the prefetch queue has drained, stale dirs (with leftover orphan) go.
+        purge_old_cache_dirs();
+        assert!(!legacy.exists(), "legacy svg/ purged");
+        assert!(!stale.exists(), "stale svg-20240101/ purged");
         assert!(unrelated.exists(), "unrelated dir must not be touched");
 
         fs::remove_dir_all(&tmp).ok();
