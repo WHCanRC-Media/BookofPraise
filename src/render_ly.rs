@@ -905,15 +905,18 @@ fn expand_multi_breve(s: &str) -> String {
     out
 }
 
-/// Per-token widths in SVG units used by the uniform-staves padding pass.
-/// r4 is the coarse pad (linear and cross-line clean for any count, but only
-/// when every padded line uses the same rest duration). s16 is the fine-tune
-/// pad: ~0.512 per skip alone, ~0.725 per skip when trailing r4 padding,
-/// linear up to ~7 per line before saturating.
+/// Per-token widths in SVG units, used as initial estimates. Real widths
+/// vary per-document due to LilyPond's spring system — the algorithm probes
+/// with these defaults then calibrates a per-document scale factor.
+/// r4 (hidden rest) is the coarse pad; s16 (silent skip) is the fine-tune
+/// pad and saturates past ~7 per line.
 const R4_WIDTH: f64 = 2.898;
 const S16_WIDTH_ALONE: f64 = 0.5123;
 const S16_WIDTH_AFTER_R4: f64 = 0.725;
 const S16_MAX_PER_LINE: usize = 7;
+/// 1 mm of spread is below print resolution (~0.57 SVG units at default
+/// staff size). Used as the gate for the pass-5 iteration.
+const TOLERANCE_1MM: f64 = 0.57;
 
 /// Parse a LilyPond-rendered SVG and return one staff length (in SVG units)
 /// per system. Each system has 5 horizontal `stroke-width="0.1000"` lines;
@@ -939,15 +942,23 @@ fn measure_staff_lengths(svg_path: &Path) -> Vec<f64> {
     horiz.chunks(5).filter_map(|c| c.first().copied()).collect()
 }
 
-fn r4_padding(deficit: f64) -> usize {
-    if deficit <= 0.0 { 0 } else { (deficit / R4_WIDTH).round().max(0.0) as usize }
+fn r4_padding(deficit: f64, width: f64) -> usize {
+    if deficit <= 0.0 { 0 } else { (deficit / width).round().max(0.0) as usize }
 }
 
-fn s16_padding(deficit: f64, has_r4: bool) -> usize {
+/// `scale` adjusts the s16 width by the same factor we calibrated for r4 —
+/// both track the same document-level spring stretch.
+fn s16_padding(deficit: f64, has_r4: bool, scale: f64) -> usize {
     if deficit <= 0.0 { return 0; }
-    let per_unit = if has_r4 { S16_WIDTH_AFTER_R4 } else { S16_WIDTH_ALONE };
-    let n = (deficit / per_unit).round().max(0.0) as usize;
+    let base = if has_r4 { S16_WIDTH_AFTER_R4 } else { S16_WIDTH_ALONE };
+    let n = (deficit / (base * scale)).round().max(0.0) as usize;
     n.min(S16_MAX_PER_LINE)
+}
+
+fn spread(v: &[f64]) -> f64 {
+    let max = v.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min = v.iter().cloned().fold(f64::INFINITY, f64::min);
+    max - min
 }
 
 /// Insert padding tokens before each `\break` or `\bar "..."` in the combined
@@ -1298,49 +1309,112 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
         return Err(e);
     }
 
-    // Uniform-staves padding: render → measure → r4 coarse pad → render →
-    // measure → s16 fine-tune → render. All passes write to `tmp_svg`; the
-    // final result is moved atomically into `svg_out` below.
-    let lengths = measure_staff_lengths(&tmp_svg);
-    if lengths.len() > 1 {
-        let max_len = lengths.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let min_len = lengths.iter().cloned().fold(f64::INFINITY, f64::min);
-        if max_len - min_len > 0.01 {
-            let r4_counts: Vec<usize> =
-                lengths.iter().map(|&l| r4_padding(max_len - l)).collect();
-            if r4_counts.iter().any(|&n| n > 0) {
-                let paddings: Vec<Vec<&'static str>> =
-                    r4_counts.iter().map(|&n| vec!["r4"; n]).collect();
-                let padded = inject_padding(combined, &paddings);
-                if let Err(e) = run_pass(&padded) {
-                    cleanup();
-                    return Err(e);
-                }
+    // Uniform-staves padding: up to five LilyPond passes to align all staves
+    // to the longest natural staff:
+    //   1. Render unpadded; measure natural lengths.
+    //   2. Probe: pad with rough r4 counts using default R4_WIDTH; measure
+    //      to calibrate the actual per-r4 width for THIS document.
+    //   3. If calibrated counts differ from the probe, re-render with them.
+    //   4. s16 fine-tune, scaling s16 widths by the same calibrated factor.
+    //   5. If spread is still over ~1 mm, iterate s16 using per-line observed
+    //      widths from pass 4.
+    // Each pass is skipped when its preconditions don't apply. All passes
+    // write to `tmp_svg`; the final result is moved into `svg_out` below.
+    'pad: {
+        let l0 = measure_staff_lengths(&tmp_svg);
+        if l0.len() < 2 || spread(&l0) <= 0.01 { break 'pad; }
 
-                let lengths2 = measure_staff_lengths(&tmp_svg);
-                if lengths2.len() == r4_counts.len() {
-                    let max2 = lengths2.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-                    let min2 = lengths2.iter().cloned().fold(f64::INFINITY, f64::min);
-                    if max2 - min2 > 0.01 {
-                        let s16_counts: Vec<usize> = lengths2.iter().enumerate().map(|(i, &l)| {
-                            s16_padding(max2 - l, r4_counts[i] > 0)
-                        }).collect();
-                        if s16_counts.iter().any(|&n| n > 0) {
-                            let paddings2: Vec<Vec<&'static str>> = (0..r4_counts.len()).map(|i| {
-                                let mut v = vec!["r4"; r4_counts[i]];
-                                v.extend(vec!["s16"; s16_counts[i]]);
-                                v
-                            }).collect();
-                            let padded2 = inject_padding(combined, &paddings2);
-                            if let Err(e) = run_pass(&padded2) {
-                                cleanup();
-                                return Err(e);
-                            }
-                        }
-                    }
-                }
+        let target = l0.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let mut r4_counts: Vec<usize> =
+            l0.iter().map(|&l| r4_padding(target - l, R4_WIDTH)).collect();
+        let mut scale = 1.0_f64;
+        let mut l1 = l0.clone();
+
+        if r4_counts.iter().any(|&n| n > 0) {
+            // Pass 2: probe with the default R4_WIDTH so we can observe the
+            // real per-r4 width of THIS document (it varies 2.9..5.7 across
+            // docs due to LilyPond's spring system; a fixed constant is
+            // unreliable).
+            let paddings: Vec<Vec<&'static str>> =
+                r4_counts.iter().map(|&n| vec!["r4"; n]).collect();
+            let padded = inject_padding(combined, &paddings);
+            if let Err(e) = run_pass(&padded) { cleanup(); return Err(e); }
+            l1 = measure_staff_lengths(&tmp_svg);
+            if l1.len() != l0.len() { break 'pad; }
+
+            // Calibrate per-r4 width from observed lengthening.
+            let samples: Vec<f64> = (0..l0.len())
+                .filter(|&i| r4_counts[i] > 0)
+                .map(|i| (l1[i] - l0[i]) / r4_counts[i] as f64)
+                .collect();
+            let w_r4 = if samples.is_empty() {
+                R4_WIDTH
+            } else {
+                samples.iter().sum::<f64>() / samples.len() as f64
+            };
+            scale = w_r4 / R4_WIDTH;
+
+            // Pass 3: re-pad with calibrated width. Target the natural max
+            // so per-line overshoot in pass 2 doesn't inflate the target.
+            let new_r4: Vec<usize> =
+                l0.iter().map(|&l| r4_padding(target - l, w_r4)).collect();
+            if new_r4 != r4_counts {
+                let p: Vec<Vec<&'static str>> =
+                    new_r4.iter().map(|&n| vec!["r4"; n]).collect();
+                let padded = inject_padding(combined, &p);
+                if let Err(e) = run_pass(&padded) { cleanup(); return Err(e); }
+                l1 = measure_staff_lengths(&tmp_svg);
+                if l1.len() != l0.len() { break 'pad; }
+                r4_counts = new_r4;
             }
         }
+
+        if spread(&l1) <= 0.01 { break 'pad; }
+
+        // Pass 4: s16 fine-tune, using the r4-calibrated scale.
+        let target1 = l1.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let s16_counts: Vec<usize> = l1.iter().enumerate()
+            .map(|(i, &l)| s16_padding(target1 - l, r4_counts[i] > 0, scale))
+            .collect();
+        if s16_counts.iter().all(|&n| n == 0) { break 'pad; }
+        let p4: Vec<Vec<&'static str>> = (0..r4_counts.len()).map(|i| {
+            let mut v = vec!["r4"; r4_counts[i]];
+            v.extend(vec!["s16"; s16_counts[i]]);
+            v
+        }).collect();
+        let padded4 = inject_padding(combined, &p4);
+        if let Err(e) = run_pass(&padded4) { cleanup(); return Err(e); }
+
+        // Pass 5: if spread is still over 1 mm, iterate s16 using per-line
+        // observed widths. s16 width is nonlinear per-line, so the
+        // r4-calibrated scale doesn't always nail it on the first try.
+        let l2 = measure_staff_lengths(&tmp_svg);
+        if l2.len() != l1.len() || spread(&l2) <= TOLERANCE_1MM { break 'pad; }
+        let target2 = l2.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let additional: Vec<usize> = (0..l2.len()).map(|i| {
+            let deficit = target2 - l2[i];
+            if deficit <= 0.0 { return 0; }
+            // Prefer observed s16 width if we have a sample for this line.
+            let w_s16 = if s16_counts[i] > 0 && l2[i] > l1[i] {
+                (l2[i] - l1[i]) / s16_counts[i] as f64
+            } else {
+                let base = if r4_counts[i] > 0 { S16_WIDTH_AFTER_R4 } else { S16_WIDTH_ALONE };
+                base * scale
+            };
+            let n = if w_s16 > 0.0 { (deficit / w_s16).round().max(0.0) as usize } else { 0 };
+            n.min(S16_MAX_PER_LINE.saturating_sub(s16_counts[i]))
+        }).collect();
+        if additional.iter().all(|&n| n == 0) { break 'pad; }
+        let new_s16: Vec<usize> = (0..s16_counts.len())
+            .map(|i| s16_counts[i] + additional[i])
+            .collect();
+        let p5: Vec<Vec<&'static str>> = (0..r4_counts.len()).map(|i| {
+            let mut v = vec!["r4"; r4_counts[i]];
+            v.extend(vec!["s16"; new_s16[i]]);
+            v
+        }).collect();
+        let padded5 = inject_padding(combined, &p5);
+        if let Err(e) = run_pass(&padded5) { cleanup(); return Err(e); }
     }
 
     // Gzip-compress the rendered SVG into the cached path. usvg auto-detects
