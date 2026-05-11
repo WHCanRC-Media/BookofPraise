@@ -289,9 +289,11 @@ def _split_notes(raw_notes, n_parts):
         for i, line_idx in enumerate(range(start, end)):
             line = note_lines[line_idx]
             if i == end - start - 1:
-                # Last line of this part
+                # Last line of this part: replace \break with an invisible
+                # barline so inject_padding still sees a terminator (otherwise
+                # this line gets no trailing padding and ends up shorter).
                 if part_idx < n_parts - 1:
-                    line = line.replace("\\break", "")
+                    line = line.replace("\\break", "\\bar \"\"")
             part_body += line + "\n"
             current_pitch = _track_pitch(line, current_pitch)
 
@@ -381,14 +383,18 @@ def _count_syllables(lyrics_content):
     return count
 
 
-# Per-token widths in SVG units. r4 (hidden rest) is the coarse pad: linear
-# and cross-line clean for any count, but only when every line uses the same
-# rest duration. s16 (silent skip) is the fine-tune pad: linear up to ~7 per
-# line, ~0.512 alone or ~0.725 per skip when trailing r4 padding.
+# Per-token widths in SVG units, used as initial estimates. Real widths
+# vary per-document due to LilyPond's spring system — the algorithm probes
+# with these defaults then calibrates a per-document scale factor.
+# r4 (hidden rest) is the coarse pad; s16 (silent skip) is the fine-tune
+# pad and saturates past ~7 per line.
 _R4_WIDTH = 2.898
 _S16_WIDTH_ALONE = 0.5123
 _S16_WIDTH_AFTER_R4 = 0.725
 _S16_MAX_PER_LINE = 7
+# 1 mm of spread is below print resolution (~0.57 SVG units at default
+# staff size). Used as the gate for the pass-5 iteration.
+_TOLERANCE_1MM = 0.57
 
 
 def _measure_staff_lengths(svg_path):
@@ -406,19 +412,21 @@ def _measure_staff_lengths(svg_path):
     return [horiz[i * 5] for i in range(len(horiz) // 5)]
 
 
-def _r4_padding(deficit):
-    """Number of hidden r4 rests whose total width best matches deficit."""
+def _r4_padding(deficit, width=_R4_WIDTH):
+    """Number of hidden r4 rests to add for the given deficit."""
     if deficit <= 0:
         return 0
-    return round(deficit / _R4_WIDTH)
+    return max(0, round(deficit / width))
 
 
-def _s16_padding(deficit, has_r4):
-    """Number of trailing s16 skips for fine-tune (capped by linear range)."""
+def _s16_padding(deficit, has_r4, scale=1.0):
+    """Number of trailing s16 skips for fine-tune. `scale` adjusts the s16
+    width by the same factor we calibrated for r4 — both track the same
+    document-level spring stretch."""
     if deficit <= 0:
         return 0
-    per_unit = _S16_WIDTH_AFTER_R4 if has_r4 else _S16_WIDTH_ALONE
-    n = round(deficit / per_unit)
+    base = _S16_WIDTH_AFTER_R4 if has_r4 else _S16_WIDTH_ALONE
+    n = round(deficit / (base * scale))
     return min(max(n, 0), _S16_MAX_PER_LINE)
 
 
@@ -507,9 +515,18 @@ def _build_score_ly(modified_notes, lyrics_content, lyrics_mag=1.0):
 def render_svg_from_content(notes_content, lyrics_content, output_svg, composer=None, force_combine=False, uniform_staves=True, lyrics_mag=1.0):
     """Render notes and lyrics content to SVG.
 
-    With uniform_staves=True, renders twice: the first pass measures staff
-    lengths, the second pass adds hidden-rest padding so all staves match
-    the longest one.
+    With uniform_staves=True, runs up to five LilyPond passes to align all
+    staves to the longest natural staff:
+      1. Render unpadded; measure natural lengths.
+      2. Probe: pad with rough r4 counts using the default _R4_WIDTH; measure
+         to calibrate the actual per-r4 width for THIS document.
+      3. If the calibrated counts differ from the probe, re-render with them.
+      4. s16 fine-tune, scaling s16 widths by the same calibrated factor.
+      5. If spread is still over ~1 mm, iterate s16 using per-line observed
+         widths from pass 4.
+
+    Each pass is skipped when its preconditions don't apply (spread already
+    within tolerance, no padding needed, etc.).
     """
     modified = modify_notes(notes_content, force_combine=force_combine)
     lyrics_content = lyrics_content.replace('\\"', '\u201c')
@@ -533,37 +550,97 @@ def render_svg_from_content(notes_content, lyrics_content, output_svg, composer=
             os.replace(cropped_svg, abs_svg)
         return result.returncode == 0
 
+    # Pass 1: render unpadded, measure natural lengths.
     if not _do_render(modified):
         return False
-
     if not uniform_staves:
         return True
 
-    lengths = _measure_staff_lengths(abs_svg)
-    if not lengths or max(lengths) - min(lengths) <= 0.01:
+    L0 = _measure_staff_lengths(abs_svg)
+    if not L0 or max(L0) - min(L0) <= 0.01:
         return True
 
-    # Pass 2: r4 coarse padding (≤ 2.9 unit residual)
-    max_len = max(lengths)
-    r4_counts = [_r4_padding(max_len - l) for l in lengths]
-    paddings = [["r4"] * n for n in r4_counts]
-    if not any(paddings):
+    # Pass 2: probe — pad with the default _R4_WIDTH guess so we can observe
+    # the real per-r4 width of THIS document (it varies 2.9..5.7 across docs
+    # due to LilyPond's spring system; a fixed constant is unreliable).
+    target = max(L0)
+    r4_counts = [_r4_padding(target - l) for l in L0]
+    scale = 1.0
+    if any(r4_counts):
+        paddings = [["r4"] * n for n in r4_counts]
+        padded = _inject_padding(modified, paddings)
+        if not _do_render(padded):
+            return False
+        L1 = _measure_staff_lengths(abs_svg)
+        if not L1:
+            return True
+
+        # Calibrate per-r4 width from observed lengthening.
+        samples = [(L1[i] - L0[i]) / r4_counts[i]
+                   for i in range(len(L0)) if r4_counts[i] > 0]
+        w_r4 = sum(samples) / len(samples) if samples else _R4_WIDTH
+        scale = w_r4 / _R4_WIDTH
+
+        # Pass 3: re-pad using calibrated width. Target the natural max so
+        # per-line overshoot in pass 2 doesn't inflate the target.
+        new_r4 = [_r4_padding(target - L0[i], w_r4) for i in range(len(L0))]
+        if new_r4 != r4_counts:
+            paddings = [["r4"] * n for n in new_r4]
+            padded = _inject_padding(modified, paddings)
+            if not _do_render(padded):
+                return False
+            L1 = _measure_staff_lengths(abs_svg)
+            if not L1:
+                return True
+            r4_counts = new_r4
+    else:
+        # All deficits are sub-r4 — skip r4 padding, let s16 finish.
+        L1 = L0
+
+    if max(L1) - min(L1) <= 0.01:
         return True
+
+    # Pass 4: s16 fine-tune, using the r4-calibrated scale for s16 widths.
+    target = max(L1)
+    s16_counts = [_s16_padding(target - l, r4_counts[i] > 0, scale)
+                  for i, l in enumerate(L1)]
+    if not any(s16_counts):
+        return True
+    paddings = [["r4"] * r4 + ["s16"] * s16
+                for r4, s16 in zip(r4_counts, s16_counts)]
     padded = _inject_padding(modified, paddings)
     if not _do_render(padded):
         return False
 
-    # Pass 3: s16 fine-tune trailing the r4 padding (≤ 0.4 unit residual)
-    lengths = _measure_staff_lengths(abs_svg)
-    if not lengths:
+    # Pass 5: if spread is still over 1 mm, iterate s16 using per-line
+    # observed widths. s16 width is nonlinear per-line, so the r4-calibrated
+    # scale doesn't always nail it on the first try.
+    L2 = _measure_staff_lengths(abs_svg)
+    if not L2 or max(L2) - min(L2) <= _TOLERANCE_1MM:
         return True
-    max_len = max(lengths)
-    if max_len - min(lengths) <= 0.01:
+
+    target = max(L2)
+    additional = []
+    for i, l in enumerate(L2):
+        deficit = target - l
+        if deficit <= 0:
+            additional.append(0)
+            continue
+        # Prefer observed s16 width if we have a sample for this line.
+        if s16_counts[i] > 0 and L2[i] > L1[i]:
+            w_s16 = (L2[i] - L1[i]) / s16_counts[i]
+        else:
+            base = _S16_WIDTH_AFTER_R4 if r4_counts[i] > 0 else _S16_WIDTH_ALONE
+            w_s16 = base * scale
+        n = round(deficit / w_s16) if w_s16 > 0 else 0
+        # Stay within the s16 per-line cap (it really does saturate past ~7).
+        n = min(max(n, 0), _S16_MAX_PER_LINE - s16_counts[i])
+        additional.append(n)
+    if not any(additional):
         return True
-    s16_counts = [_s16_padding(max_len - l, r4_counts[i] > 0) for i, l in enumerate(lengths)]
-    if not any(s16_counts):
-        return True
-    paddings = [["r4"] * r4 + ["s16"] * s16 for r4, s16 in zip(r4_counts, s16_counts)]
+    new_s16 = [s16_counts[i] + additional[i] for i in range(len(s16_counts))]
+    paddings = [["r4"] * r4 + ["s16"] * s16
+                for r4, s16 in zip(r4_counts, new_s16)]
     padded = _inject_padding(modified, paddings)
     return _do_render(padded)
 
