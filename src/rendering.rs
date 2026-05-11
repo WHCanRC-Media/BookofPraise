@@ -25,8 +25,13 @@ static FONTDB: LazyLock<resvg::usvg::fontdb::Database> = LazyLock::new(|| {
 /// Parse and rasterize an SVG file into a pixmap, scaling to `render_width` pixels
 /// while preserving aspect ratio. Replaces `currentColor` with black for compatibility.
 pub fn load_svg_pixmap(path: &Path, render_width: u32) -> Option<Pixmap> {
-    let data = std::fs::read(path).ok()?;
-    let data = String::from_utf8_lossy(&data)
+    let raw = std::fs::read(path).ok()?;
+    let plain = if raw.starts_with(&[0x1f, 0x8b]) {
+        resvg::usvg::decompress_svgz(&raw).ok()?
+    } else {
+        raw
+    };
+    let data = String::from_utf8_lossy(&plain)
         .replace("currentColor", "black")
         .into_bytes();
     let mut opt = resvg::usvg::Options::default();

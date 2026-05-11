@@ -115,9 +115,18 @@ fn join_syllables(line: &[(f64, String)]) -> String {
 
 /// Extract displayed lyric lines from a rendered SVG in melody order.
 pub fn extract_svg_lyrics(svg_path: &Path) -> Vec<String> {
-    let Ok(content) = fs::read_to_string(svg_path) else {
+    let Ok(raw) = fs::read(svg_path) else {
         return Vec::new();
     };
+    let bytes = if raw.starts_with(&[0x1f, 0x8b]) {
+        match resvg::usvg::decompress_svgz(&raw) {
+            Ok(b) => b,
+            Err(_) => return Vec::new(),
+        }
+    } else {
+        raw
+    };
+    let content = String::from_utf8_lossy(&bytes);
     let items = parse_svg_text(&content);
     let lines = group_into_lines(items);
     lines

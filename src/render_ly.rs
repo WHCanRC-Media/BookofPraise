@@ -231,9 +231,10 @@ fn content_hash(data: &str) -> String {
 }
 
 /// Return the cached SVG path for the given combined .ly content.
+/// Stored as `.svgz` (gzip-wrapped SVG) — about a 90% size reduction vs raw SVG.
 pub fn cached_svg_path(combined_ly_content: &str) -> PathBuf {
     let hash = content_hash(combined_ly_content);
-    svg_cache_dir().join(format!("{hash}.svg"))
+    svg_cache_dir().join(format!("{hash}.svgz"))
 }
 
 const LILYPOND_VERSION: &str = "2.24.4";
@@ -1342,11 +1343,39 @@ pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> 
         }
     }
 
-    // Promote the fully-rendered tmp SVG into the cached path atomically.
-    if let Err(e) = fs::rename(&tmp_svg, &svg_out) {
+    // Gzip-compress the rendered SVG into the cached path. usvg auto-detects
+    // the gzip magic bytes when reading, so .svgz works without any other
+    // changes on the read side. Write to a temp file and rename for atomicity.
+    let svg_bytes = match fs::read(&tmp_svg) {
+        Ok(b) => b,
+        Err(e) => {
+            cleanup();
+            return Err(format!("Failed to read rendered SVG: {e}"));
+        }
+    };
+    let svgz_tmp = svg_out.with_extension("svgz.tmp");
+    {
+        use std::io::Write;
+        let file = match fs::File::create(&svgz_tmp) {
+            Ok(f) => f,
+            Err(e) => {
+                cleanup();
+                return Err(format!("Failed to create svgz tmp: {e}"));
+            }
+        };
+        let mut enc = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+        if let Err(e) = enc.write_all(&svg_bytes).and_then(|_| enc.finish().map(|_| ())) {
+            let _ = fs::remove_file(&svgz_tmp);
+            cleanup();
+            return Err(format!("Failed to gzip SVG: {e}"));
+        }
+    }
+    if let Err(e) = fs::rename(&svgz_tmp, &svg_out) {
+        let _ = fs::remove_file(&svgz_tmp);
         cleanup();
         return Err(format!("Failed to publish SVG: {e}"));
     }
+    let _ = fs::remove_file(&tmp_svg);
 
     crate::lyric_check::check(song_dir, verse, part, &svg_out, n_parts);
     Ok(())
