@@ -162,6 +162,25 @@ fn invalidate_song(state: &mut AppState, song_dir: &std::path::Path) {
         state.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
         state.render_errors.remove(&(path, verse, part));
     }
+    // Re-prioritize every verse/part of the edited song so the background
+    // prefetch picks it up promptly. The combined-content hash has changed,
+    // so the new SVG path won't be cached.
+    let mut prefetch_keys: Vec<(std::path::PathBuf, u32, u32)> = Vec::new();
+    for (prefix, num, verses) in state.library.entries() {
+        let dir = state.songs_dir.join(format!("{prefix}{num}"));
+        if dir != song_dir {
+            continue;
+        }
+        for &v in verses {
+            let n_parts = render_ly::num_parts_for_verse(&dir, v);
+            for p in 0..n_parts {
+                prefetch_keys.push((dir.clone(), v, p as u32));
+            }
+        }
+    }
+    for key in prefetch_keys.into_iter().rev() {
+        state.prefetch_push_front(key);
+    }
 }
 
 /// Return `true` if the slide is an SVG that has no up-to-date cached render.
@@ -210,11 +229,14 @@ fn start_render(
                 {
                     let mut state = state_rc2.borrow_mut();
                     state.rendering.remove(&render_key);
+                    if state.prefetch_in_flight.as_ref() == Some(&render_key) {
+                        state.prefetch_in_flight = None;
+                    }
                     if let Err(err) = result {
                         state.render_errors.insert(render_key.clone(), err);
                     }
                 }
-                prefetch_next(&state_rc2);
+                pump_prefetch(&state_rc2);
                 glib::ControlFlow::Break
             }
             Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
@@ -223,32 +245,34 @@ fn start_render(
     });
 }
 
-/// Find the next slide that needs rendering and start it. Searches forward
-/// from the current slide, wrapping around, so all slides are eventually rendered.
-fn prefetch_next(state_rc: &Rc<RefCell<AppState>>) {
-    let state = state_rc.borrow();
-    let n = state.slides.len();
-    if n == 0 {
+/// Drive the background prefetch queue: pop items from the front, skipping
+/// any that are already cached / in flight / errored, and start the first
+/// real candidate. Caps at one background render in flight. Re-pumped from
+/// the completion handler in `start_render`.
+fn pump_prefetch(state_rc: &Rc<RefCell<AppState>>) {
+    if !render_ly::lilypond_available() {
         return;
     }
-    let start = state.current_slide;
-    for offset in 1..n {
-        let i = (start + offset) % n;
-        let slide = &state.slides[i];
-        if !needs_render(slide) {
-            continue;
+    let next_key = {
+        let mut state = state_rc.borrow_mut();
+        if state.prefetch_in_flight.is_some() {
+            return;
         }
-        let key = (slide.song_dir.clone(), slide.current_verse, slide.part);
-        if state.rendering.contains(&key) || state.render_errors.contains_key(&key) {
-            continue;
+        loop {
+            let Some(key) = state.prefetch_queue.pop_front() else {
+                return;
+            };
+            if state.rendering.contains(&key) || state.render_errors.contains_key(&key) {
+                continue;
+            }
+            if render_ly::is_svg_current(&key.0, key.1, key.2) {
+                continue;
+            }
+            state.prefetch_in_flight = Some(key.clone());
+            break key;
         }
-        let song_dir = slide.song_dir.clone();
-        let verse = slide.current_verse;
-        let part = slide.part;
-        drop(state);
-        start_render(state_rc, song_dir, verse, part);
-        return;
-    }
+    };
+    start_render(state_rc, next_key.0, next_key.1, next_key.2);
 }
 
 /// Update the main image display for the current slide. Loads a cached texture
@@ -334,7 +358,7 @@ fn refresh_display(
                 }
             }
             drop(state);
-            prefetch_next(state_rc);
+            pump_prefetch(state_rc);
             return;
         }
 
@@ -747,6 +771,10 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     // Initial display
     refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
     refresh_liturgy(&state.borrow(), &liturgy_label);
+    // Kick off the background library prerender. No-op if lilypond isn't
+    // available yet; the post-download path will be exercised by the next
+    // navigation's pump.
+    pump_prefetch(&state);
 
     // ── Helpers for signal closures ──
 
@@ -1281,6 +1309,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                                     dlg2.hide();
                                     dlg2.destroy();
                                     refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3, &mismatch_label3);
+                                    pump_prefetch(&state3);
                                     post_dialogs();
                                     glib::ControlFlow::Break
                                 }

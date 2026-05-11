@@ -1,5 +1,5 @@
 use clap::Parser;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -108,6 +108,13 @@ impl SongLibrary {
             SongType::Psalm => self.psalms.get(&num),
             SongType::Hymn => self.hymns.get(&num),
         }
+    }
+
+    /// Iterate every song in the library: psalms first, then hymns, each in
+    /// numeric order. Yields `(prefix, num, verses)`.
+    pub fn entries(&self) -> impl Iterator<Item = (&'static str, u32, &Vec<u32>)> {
+        self.psalms.iter().map(|(n, v)| ("psalm", *n, v))
+            .chain(self.hymns.iter().map(|(n, v)| ("hymn", *n, v)))
     }
 }
 
@@ -236,6 +243,12 @@ pub struct AppState {
     pub texture_cache: HashMap<CacheKey, gdk::Texture>,
     pub rendering: HashSet<(PathBuf, u32, u32)>,
     pub render_errors: HashMap<(PathBuf, u32, u32), String>,
+    /// Single FIFO queue of items to prerender in the background.
+    /// Liturgy items get pushed to the front (priority); the rest of the
+    /// library is pushed to the back at startup.
+    pub prefetch_queue: VecDeque<(PathBuf, u32, u32)>,
+    /// At most one background prefetch render runs at a time.
+    pub prefetch_in_flight: Option<(PathBuf, u32, u32)>,
     /// Song dirs that had edits saved this session (for email-patch-on-close).
     pub edited_song_dirs: HashSet<PathBuf>,
     /// Temp directory holding original file snapshots (created on first edit).
@@ -260,6 +273,8 @@ impl AppState {
             texture_cache: HashMap::new(),
             rendering: HashSet::new(),
             render_errors: HashMap::new(),
+            prefetch_queue: VecDeque::new(),
+            prefetch_in_flight: None,
             edited_song_dirs: HashSet::new(),
             originals_dir: None,
         };
@@ -272,7 +287,48 @@ impl AppState {
             state.add_song(SongType::Hymn, n);
         }
         state.rebuild_slides();
+
+        // Seed the prefetch queue with every library song (push_back); liturgy
+        // items have already been moved to the front by rebuild_slides.
+        state.seed_library_queue();
         state
+    }
+
+    /// Push `key` to the front of the prefetch queue, removing any existing
+    /// entry first so the item ends up uniquely at the front.
+    pub fn prefetch_push_front(&mut self, key: (PathBuf, u32, u32)) {
+        self.prefetch_queue.retain(|k| k != &key);
+        self.prefetch_queue.push_front(key);
+    }
+
+    /// Push `key` to the back of the prefetch queue if not already present.
+    pub fn prefetch_push_back_unique(&mut self, key: (PathBuf, u32, u32)) {
+        if !self.prefetch_queue.iter().any(|k| k == &key) {
+            self.prefetch_queue.push_back(key);
+        }
+    }
+
+    /// Walk the song library and append every (song_dir, verse, part) tuple
+    /// not already in the queue. Cheap to call repeatedly — duplicates are
+    /// skipped and the worker also re-checks `is_svg_current` at pop time.
+    fn seed_library_queue(&mut self) {
+        let entries: Vec<(PathBuf, u32, u32)> = self.library
+            .entries()
+            .flat_map(|(prefix, num, verses)| {
+                let song_dir = self.songs_dir.join(format!("{prefix}{num}"));
+                let mut items = Vec::new();
+                for &v in verses {
+                    let n_parts = crate::render_ly::num_parts_for_verse(&song_dir, v);
+                    for part in 0..n_parts {
+                        items.push((song_dir.clone(), v, part as u32));
+                    }
+                }
+                items
+            })
+            .collect();
+        for key in entries {
+            self.prefetch_push_back_unique(key);
+        }
     }
 
     /// Add all verses of a song to the liturgy. Returns `true` if the song was found.
@@ -351,6 +407,18 @@ impl AppState {
             {
                 self.current_slide = idx;
             }
+        }
+
+        // Move every current liturgy slide to the front of the prefetch queue,
+        // in reverse order so the first slide ends up at queue head.
+        let keys: Vec<(PathBuf, u32, u32)> = self
+            .slides
+            .iter()
+            .rev()
+            .map(|s| (s.song_dir.clone(), s.current_verse, s.part))
+            .collect();
+        for key in keys {
+            self.prefetch_push_front(key);
         }
     }
 
