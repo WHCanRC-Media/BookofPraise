@@ -1,5 +1,6 @@
 use std::path::Path;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex, OnceLock};
+use std::sync::mpsc::{self, Sender};
 
 use gtk4 as gtk;
 use gtk::gdk;
@@ -170,9 +171,12 @@ pub fn current_png_path() -> std::path::PathBuf {
     render_ly::cache_dir().join("Current.png")
 }
 
-/// Save a GDK texture as Current.png in the cache directory.
-/// Writes to a temp file first, then renames for atomic update (for OBS).
-pub fn save_current_png(texture: &gdk::Texture) {
+/// Channel to a single background worker that writes Current.png.
+/// We send the latest texture and the worker drains the queue so that under
+/// rapid navigation only the most-recent frame is actually encoded.
+static PNG_TX: OnceLock<Mutex<Sender<gdk::Texture>>> = OnceLock::new();
+
+fn write_current_png(texture: &gdk::Texture) {
     let current_png = current_png_path();
     if let Some(parent) = current_png.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -182,5 +186,27 @@ pub fn save_current_png(texture: &gdk::Texture) {
         #[cfg(windows)]
         let _ = std::fs::remove_file(&current_png);
         let _ = std::fs::rename(&tmp, &current_png);
+    }
+}
+
+/// Queue a texture to be saved as Current.png on a background thread.
+/// PNG encoding of a 2400×1350 frame is slow; doing it on the UI thread
+/// stalled slide navigation. The worker drops stale frames so rapid
+/// Prev/Next only encodes the last one.
+pub fn save_current_png(texture: &gdk::Texture) {
+    let tx = PNG_TX.get_or_init(|| {
+        let (tx, rx) = mpsc::channel::<gdk::Texture>();
+        std::thread::spawn(move || {
+            while let Ok(mut tex) = rx.recv() {
+                while let Ok(newer) = rx.try_recv() {
+                    tex = newer;
+                }
+                write_current_png(&tex);
+            }
+        });
+        Mutex::new(tx)
+    });
+    if let Ok(tx) = tx.lock() {
+        let _ = tx.send(texture.clone());
     }
 }

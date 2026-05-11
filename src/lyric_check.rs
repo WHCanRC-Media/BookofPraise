@@ -12,9 +12,15 @@ use regex::Regex;
 use std::collections::{HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{LazyLock};
+use std::sync::{LazyLock, Mutex};
 
 use crate::render_ly::{read_song_meta, SplitStyle};
+
+/// Cache of mismatch-pair results keyed by SVG path. The SVG filename is a
+/// content hash of the combined .ly source, so any change to notes/lyrics/yaml
+/// produces a different key and the old entry is harmless.
+static MISMATCH_CACHE: LazyLock<Mutex<HashMap<PathBuf, Vec<(String, String)>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 static RE_G: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?s)<g transform="translate\(([-0-9.]+),\s*([-0-9.]+)\)"\s*>(.*?)</g>"#).unwrap()
@@ -237,6 +243,11 @@ pub fn mismatch_pairs_nospace(
     svg_path: &Path,
     n_parts: usize,
 ) -> Vec<(String, String)> {
+    if let Ok(cache) = MISMATCH_CACHE.lock() {
+        if let Some(cached) = cache.get(svg_path) {
+            return cached.clone();
+        }
+    }
     let Some(src_path) = source_lyrics_path(song_dir) else {
         return Vec::new();
     };
@@ -261,6 +272,9 @@ pub fn mismatch_pairs_nospace(
         if normalize(&src) != normalize(&svg) {
             out.push((strip(&src), strip(&svg)));
         }
+    }
+    if let Ok(mut cache) = MISMATCH_CACHE.lock() {
+        cache.insert(svg_path.to_path_buf(), out.clone());
     }
     out
 }
