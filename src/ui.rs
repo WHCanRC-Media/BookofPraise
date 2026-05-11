@@ -147,40 +147,38 @@ fn save_and_invalidate(
         let part = slide.part;
         render_ly::invalidate_combined_cache(&song_dir);
         state.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
-        state.render_errors.remove(&(path.clone(), verse, part));
+        // render_errors is keyed by (song_dir, verse, part, mag) — drop
+        // every mag's entry for the affected (verse, part).
+        state
+            .render_errors
+            .retain(|k, _| k.0 != song_dir || k.1 != verse || k.2 != part);
         let _ = std::fs::remove_file(&path);
+        // The new content hash means previously-popped items for this verse/part
+        // need to come back into the prefetch queue.
+        state.rebuild_prefetch_tiers();
     }
 }
 
 fn invalidate_song(state: &mut AppState, song_dir: &std::path::Path) {
     render_ly::invalidate_combined_cache(song_dir);
-    let keys: Vec<_> = state.slides.iter()
+    let slide_paths: Vec<_> = state
+        .slides
+        .iter()
         .filter(|sl| sl.song_dir == song_dir)
         .map(|sl| (sl.path.clone(), sl.current_verse, sl.part))
         .collect();
-    for (path, verse, part) in keys {
-        state.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
-        state.render_errors.remove(&(path, verse, part));
+    for (path, verse, part) in slide_paths {
+        state
+            .texture_cache
+            .retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
     }
-    // Re-prioritize every verse/part of the edited song so the background
-    // prefetch picks it up promptly. The combined-content hash has changed,
-    // so the new SVG path won't be cached.
-    let mut prefetch_keys: Vec<(std::path::PathBuf, u32, u32)> = Vec::new();
-    for (prefix, num, verses) in state.library.entries() {
-        let dir = state.songs_dir.join(format!("{prefix}{num}"));
-        if dir != song_dir {
-            continue;
-        }
-        for &v in verses {
-            let n_parts = render_ly::num_parts_for_verse(&dir, v);
-            for p in 0..n_parts {
-                prefetch_keys.push((dir.clone(), v, p as u32));
-            }
-        }
-    }
-    for key in prefetch_keys.into_iter().rev() {
-        state.prefetch_push_front(key);
-    }
+    // Drop render_errors for every (verse, part, mag) of the edited song —
+    // a fresh content hash deserves a fresh chance.
+    state.render_errors.retain(|k, _| k.0 != song_dir);
+    // Combined hash changed → every previously-popped item for this song needs
+    // to be reconsidered. Rebuild tiers in full so the edited song lands back
+    // in the appropriate priority bucket.
+    state.rebuild_prefetch_tiers();
 }
 
 /// Return `true` if the slide is an SVG that has no up-to-date cached render.
@@ -192,7 +190,7 @@ fn needs_render(slide: &crate::model::Slide) -> bool {
     is_svg && !render_ly::is_svg_current(&slide.song_dir, slide.current_verse, slide.part)
 }
 
-/// Spawn a background LilyPond render for the given song_dir/verse/part.
+/// Spawn a background LilyPond render at the given magnification.
 /// Only touches state — no UI widgets needed. When the render completes,
 /// updates state and chains to the next unrendered slide.
 fn start_render(
@@ -200,17 +198,18 @@ fn start_render(
     song_dir: std::path::PathBuf,
     verse: u32,
     part: u32,
+    mag_milli: u32,
 ) {
     if !render_ly::lilypond_available() {
         return;
     }
-    let render_key = (song_dir.clone(), verse, part);
+    let render_key: crate::model::RenderKey = (song_dir.clone(), verse, part, mag_milli);
     {
         let mut state = state_rc.borrow_mut();
         if state.rendering.contains(&render_key) {
             return;
         }
-        if render_ly::is_svg_current(&song_dir, verse, part) {
+        if render_ly::is_svg_current_at_mag(&song_dir, verse, part, mag_milli) {
             return;
         }
         state.rendering.insert(render_key.clone());
@@ -218,7 +217,7 @@ fn start_render(
 
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     std::thread::spawn(move || {
-        let result = render_ly::render_svg(&song_dir, verse, part);
+        let result = render_ly::render_svg_at_mag(&song_dir, verse, part, mag_milli);
         let _ = tx.send(result);
     });
 
@@ -245,10 +244,9 @@ fn start_render(
     });
 }
 
-/// Drive the background prefetch queue: pop items from the front, skipping
-/// any that are already cached / in flight / errored, and start the first
-/// real candidate. Caps at one background render in flight. Re-pumped from
-/// the completion handler in `start_render`.
+/// Drive the background prefetch queue: walk the 4 priority tiers in order,
+/// popping items and skipping any already cached / in flight / errored, and
+/// start the first real candidate. Caps at one background render in flight.
 fn pump_prefetch(state_rc: &Rc<RefCell<AppState>>) {
     if !render_ly::lilypond_available() {
         return;
@@ -258,21 +256,24 @@ fn pump_prefetch(state_rc: &Rc<RefCell<AppState>>) {
         if state.prefetch_in_flight.is_some() {
             return;
         }
-        loop {
-            let Some(key) = state.prefetch_queue.pop_front() else {
-                return;
-            };
-            if state.rendering.contains(&key) || state.render_errors.contains_key(&key) {
-                continue;
+        let mut found: Option<crate::model::RenderKey> = None;
+        'tiers: for tier in 0..state.prefetch_tiers.len() {
+            while let Some(key) = state.prefetch_tiers[tier].pop_front() {
+                if state.rendering.contains(&key) || state.render_errors.contains_key(&key) {
+                    continue;
+                }
+                if render_ly::is_svg_current_at_mag(&key.0, key.1, key.2, key.3) {
+                    continue;
+                }
+                found = Some(key);
+                break 'tiers;
             }
-            if render_ly::is_svg_current(&key.0, key.1, key.2) {
-                continue;
-            }
-            state.prefetch_in_flight = Some(key.clone());
-            break key;
         }
+        let Some(key) = found else { return; };
+        state.prefetch_in_flight = Some(key.clone());
+        key
     };
-    start_render(state_rc, next_key.0, next_key.1, next_key.2);
+    start_render(state_rc, next_key.0, next_key.1, next_key.2, next_key.3);
 }
 
 /// Update the main image display for the current slide. Loads a cached texture
@@ -302,10 +303,11 @@ fn refresh_display(
         state.render_width = pixel_width.max(DEFAULT_RENDER_WIDTH);
     }
     let render_width = state.render_width;
+    let mag_milli = render_ly::lyrics_magnification_milli();
     let slide_info = state.slides.get(state.current_slide).map(|slide| {
         (
             (slide.path.clone(), slide.current_verse, slide.part, render_width),
-            (slide.song_dir.clone(), slide.current_verse, slide.part),
+            (slide.song_dir.clone(), slide.current_verse, slide.part, mag_milli),
             slide.song_dir.clone(),
             slide.current_verse,
             slide.part,
@@ -365,7 +367,7 @@ fn refresh_display(
         // Need to render — start it if not already running
         if needs_render(&state.slides[idx]) && !state.rendering.contains(&render_key) {
             drop(state);
-            start_render(state_rc, song_dir, verse, part);
+            start_render(state_rc, song_dir, verse, part, mag_milli);
         } else {
             drop(state);
         }
@@ -949,8 +951,12 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
             let mut s = state.borrow_mut();
             s.texture_cache.clear();
             s.render_errors.clear();
+            // The current-mag definition just changed → every item's tier may
+            // have moved.
+            s.rebuild_prefetch_tiers();
         }
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+        pump_prefetch(&state);
     });
 
     // All button — check all and add immediately

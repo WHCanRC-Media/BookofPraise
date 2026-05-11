@@ -232,6 +232,9 @@ pub struct Slide {
 }
 
 pub type CacheKey = (PathBuf, u32, u32, u32); // (path, verse, part, render_width)
+/// `(song_dir, verse, part, mag_milli)` — every render is keyed by mag so
+/// background prerender at one mag and foreground at another don't clash.
+pub type RenderKey = (PathBuf, u32, u32, u32);
 
 pub struct AppState {
     pub songs_dir: PathBuf,
@@ -241,14 +244,18 @@ pub struct AppState {
     pub current_slide: usize,
     pub render_width: u32,
     pub texture_cache: HashMap<CacheKey, gdk::Texture>,
-    pub rendering: HashSet<(PathBuf, u32, u32)>,
-    pub render_errors: HashMap<(PathBuf, u32, u32), String>,
-    /// Single FIFO queue of items to prerender in the background.
-    /// Liturgy items get pushed to the front (priority); the rest of the
-    /// library is pushed to the back at startup.
-    pub prefetch_queue: VecDeque<(PathBuf, u32, u32)>,
+    pub rendering: HashSet<RenderKey>,
+    pub render_errors: HashMap<RenderKey, String>,
+    /// Background prerender candidates bucketed by priority tier (lower index
+    /// = higher priority):
+    ///   0: liturgy slide AND current mag
+    ///   1: liturgy slide AND other mag
+    ///   2: not liturgy AND current mag
+    ///   3: not liturgy AND other mag
+    /// Within each tier the order is FIFO (push_back, pop_front).
+    pub prefetch_tiers: [VecDeque<RenderKey>; 4],
     /// At most one background prefetch render runs at a time.
-    pub prefetch_in_flight: Option<(PathBuf, u32, u32)>,
+    pub prefetch_in_flight: Option<RenderKey>,
     /// Song dirs that had edits saved this session (for email-patch-on-close).
     pub edited_song_dirs: HashSet<PathBuf>,
     /// Temp directory holding original file snapshots (created on first edit).
@@ -273,7 +280,7 @@ impl AppState {
             texture_cache: HashMap::new(),
             rendering: HashSet::new(),
             render_errors: HashMap::new(),
-            prefetch_queue: VecDeque::new(),
+            prefetch_tiers: Default::default(),
             prefetch_in_flight: None,
             edited_song_dirs: HashSet::new(),
             originals_dir: None,
@@ -287,47 +294,55 @@ impl AppState {
             state.add_song(SongType::Hymn, n);
         }
         state.rebuild_slides();
-
-        // Seed the prefetch queue with every library song (push_back); liturgy
-        // items have already been moved to the front by rebuild_slides.
-        state.seed_library_queue();
         state
     }
 
-    /// Push `key` to the front of the prefetch queue, removing any existing
-    /// entry first so the item ends up uniquely at the front.
-    pub fn prefetch_push_front(&mut self, key: (PathBuf, u32, u32)) {
-        self.prefetch_queue.retain(|k| k != &key);
-        self.prefetch_queue.push_front(key);
-    }
-
-    /// Push `key` to the back of the prefetch queue if not already present.
-    pub fn prefetch_push_back_unique(&mut self, key: (PathBuf, u32, u32)) {
-        if !self.prefetch_queue.iter().any(|k| k == &key) {
-            self.prefetch_queue.push_back(key);
+    /// Re-bucket the prefetch tiers from scratch.
+    ///
+    /// Enumerates every `(song_dir, verse, part, mag_milli)` derivable from
+    /// the library and `render_ly::MAGNIFICATIONS_MILLI`, assigns each a tier
+    /// based on the current liturgy and current global magnification, and
+    /// pushes it onto the back of the appropriate tier's deque. Already-cached
+    /// items are not filtered here — the pump skips them at pop time, which
+    /// avoids a startup-blocking O(library × mag) combined-`.ly` build pass.
+    pub fn rebuild_prefetch_tiers(&mut self) {
+        for tier in &mut self.prefetch_tiers {
+            tier.clear();
         }
-    }
+        let current_mag = crate::render_ly::lyrics_magnification_milli();
+        let liturgy_set: HashSet<(PathBuf, u32, u32)> = self
+            .slides
+            .iter()
+            .map(|s| (s.song_dir.clone(), s.current_verse, s.part))
+            .collect();
 
-    /// Walk the song library and append every (song_dir, verse, part) tuple
-    /// not already in the queue. Cheap to call repeatedly — duplicates are
-    /// skipped and the worker also re-checks `is_svg_current` at pop time.
-    fn seed_library_queue(&mut self) {
-        let entries: Vec<(PathBuf, u32, u32)> = self.library
-            .entries()
-            .flat_map(|(prefix, num, verses)| {
-                let song_dir = self.songs_dir.join(format!("{prefix}{num}"));
-                let mut items = Vec::new();
-                for &v in verses {
-                    let n_parts = crate::render_ly::num_parts_for_verse(&song_dir, v);
-                    for part in 0..n_parts {
-                        items.push((song_dir.clone(), v, part as u32));
+        // Library order: psalms, then hymns, each numeric. Liturgy slide order
+        // is implicit by checking against `liturgy_set`. Within each tier,
+        // items appear in (library × mag) iteration order.
+        for (prefix, num, verses) in self.library.entries() {
+            let song_dir = self.songs_dir.join(format!("{prefix}{num}"));
+            for &v in verses {
+                let n_parts = crate::render_ly::num_parts_for_verse(&song_dir, v);
+                for part in 0..n_parts {
+                    let part = part as u32;
+                    let in_liturgy = liturgy_set.contains(&(song_dir.clone(), v, part));
+                    for &mag in crate::render_ly::MAGNIFICATIONS_MILLI {
+                        let is_current_mag = mag == current_mag;
+                        let tier = match (in_liturgy, is_current_mag) {
+                            (true, true) => 0,
+                            (true, false) => 1,
+                            (false, true) => 2,
+                            (false, false) => 3,
+                        };
+                        self.prefetch_tiers[tier].push_back((
+                            song_dir.clone(),
+                            v,
+                            part,
+                            mag,
+                        ));
                     }
                 }
-                items
-            })
-            .collect();
-        for key in entries {
-            self.prefetch_push_back_unique(key);
+            }
         }
     }
 
@@ -409,17 +424,10 @@ impl AppState {
             }
         }
 
-        // Move every current liturgy slide to the front of the prefetch queue,
-        // in reverse order so the first slide ends up at queue head.
-        let keys: Vec<(PathBuf, u32, u32)> = self
-            .slides
-            .iter()
-            .rev()
-            .map(|s| (s.song_dir.clone(), s.current_verse, s.part))
-            .collect();
-        for key in keys {
-            self.prefetch_push_front(key);
-        }
+        // Liturgy membership changed → re-bucket every prefetch candidate so
+        // newly-added liturgy slides get tier-0/1 priority and removed ones
+        // drop back to tier-2/3.
+        self.rebuild_prefetch_tiers();
     }
 
     /// Move the current slide index by `delta`, clamping to valid bounds.

@@ -24,12 +24,24 @@ pub fn lyrics_magnification() -> f64 {
     LYRICS_MAGNIFICATION_MILLI.load(Ordering::Relaxed) as f64 / 1000.0
 }
 
+/// Get the current lyrics magnification as thousandths (1000 = 1.0×).
+pub fn lyrics_magnification_milli() -> u32 {
+    LYRICS_MAGNIFICATION_MILLI.load(Ordering::Relaxed)
+}
+
 /// Set the lyrics font-size magnification. Callers should also invalidate
 /// the combined-parts cache and any texture caches so the change takes effect.
 pub fn set_lyrics_magnification(mag: f64) {
     let clamped = mag.clamp(0.1, 10.0);
     LYRICS_MAGNIFICATION_MILLI.store((clamped * 1000.0).round() as u32, Ordering::Relaxed);
 }
+
+/// Every magnification the spin button can produce (0.5 → 3.0 in 0.1 steps),
+/// as thousandths. Used by the background prerender to walk every mag.
+pub const MAGNIFICATIONS_MILLI: &[u32] = &[
+    500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700,
+    1800, 1900, 2000, 2100, 2200, 2300, 2400, 2500, 2600, 2700, 2800, 2900, 3000,
+];
 
 /// When true, every verse is rendered on a single slide regardless of its split style.
 static FORCE_ONE_SLIDE: AtomicBool = AtomicBool::new(false);
@@ -1133,14 +1145,20 @@ pub fn invalidate_all_combined_cache() {
 
 /// Get cached combined .ly content parts for a verse, computing if absent.
 fn get_combined_parts(song_dir: &Path, verse: u32) -> Vec<String> {
-    let mag_milli = LYRICS_MAGNIFICATION_MILLI.load(Ordering::Relaxed);
+    get_combined_parts_at_mag(song_dir, verse, lyrics_magnification_milli())
+}
+
+/// Like `get_combined_parts` but at an explicit magnification, so background
+/// prerender can iterate across every magnification without touching global
+/// state shared with the foreground render path.
+fn get_combined_parts_at_mag(song_dir: &Path, verse: u32, mag_milli: u32) -> Vec<String> {
     let key = (song_dir.to_path_buf(), verse, mag_milli);
     if let Ok(cache) = COMBINED_PARTS_CACHE.lock() {
         if let Some(parts) = cache.get(&key) {
             return parts.clone();
         }
     }
-    let parts = build_combined_parts_for_verse(song_dir, verse);
+    let parts = build_combined_parts_for_verse_at_mag(song_dir, verse, mag_milli);
     if let Ok(mut cache) = COMBINED_PARTS_CACHE.lock() {
         cache.insert(key, parts.clone());
     }
@@ -1156,7 +1174,11 @@ pub fn notes_path_for_verse(song_dir: &Path, verse: u32) -> PathBuf {
 
 /// Build the combined .ly content parts for a verse.
 /// Returns empty Vec if notes.ly doesn't exist.
-fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
+fn build_combined_parts_for_verse_at_mag(
+    song_dir: &Path,
+    verse: u32,
+    mag_milli: u32,
+) -> Vec<String> {
     let notes_file = notes_path_for_verse(song_dir, verse);
     let lyrics = song_dir.join(format!("lyrics_{verse}.ly"));
 
@@ -1179,7 +1201,7 @@ fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
         String::new()
     };
 
-    let lyrics_mag = lyrics_magnification();
+    let lyrics_mag = mag_milli as f64 / 1000.0;
 
     if n_parts > 1 {
         let total_lines = count_note_lines(&raw_notes);
@@ -1201,14 +1223,26 @@ fn build_combined_parts_for_verse(song_dir: &Path, verse: u32) -> Vec<String> {
 }
 
 /// Return the number of parts (slides) needed for a verse.
+/// Magnification-independent — derived purely from `notes.ly` break count and
+/// the song's split style, so cheap enough to call ~1000× at startup.
 pub fn num_parts_for_verse(song_dir: &Path, verse: u32) -> usize {
-    let parts = get_combined_parts(song_dir, verse);
-    if parts.is_empty() { 1 } else { parts.len() }
+    let notes_file = notes_path_for_verse(song_dir, verse);
+    let Ok(raw_notes) = fs::read_to_string(&notes_file) else {
+        return 1;
+    };
+    let meta = read_song_meta(song_dir);
+    let break_count = raw_notes.matches("\\break").count();
+    effective_n_parts(&meta.split_style, break_count)
 }
 
-/// Check whether a cached SVG exists for the current source content.
+/// Check whether a cached SVG exists at the *current* magnification.
 pub fn is_svg_current(song_dir: &Path, verse: u32, part: u32) -> bool {
-    let parts = get_combined_parts(song_dir, verse);
+    is_svg_current_at_mag(song_dir, verse, part, lyrics_magnification_milli())
+}
+
+/// Check whether a cached SVG exists at an explicit magnification.
+pub fn is_svg_current_at_mag(song_dir: &Path, verse: u32, part: u32, mag_milli: u32) -> bool {
+    let parts = get_combined_parts_at_mag(song_dir, verse, mag_milli);
     if let Some(combined) = parts.get(part as usize) {
         cached_svg_path(combined).exists()
     } else {
@@ -1224,16 +1258,21 @@ pub fn svg_path_for_verse(song_dir: &Path, verse: u32, part: u32) -> Option<Path
     if path.exists() { Some(path) } else { None }
 }
 
-/// Render the SVG for a given verse part. Returns `Ok(())` on success,
-/// `Err(message)` with the LilyPond error output on failure.
-/// This function is safe to call from a background thread.
-pub fn render_svg(song_dir: &Path, verse: u32, part: u32) -> Result<(), String> {
+/// Render the SVG for a given verse part at an explicit magnification.
+/// Background prerendering uses this directly so foreground and background
+/// renders can target different magnifications concurrently.
+pub fn render_svg_at_mag(
+    song_dir: &Path,
+    verse: u32,
+    part: u32,
+    mag_milli: u32,
+) -> Result<(), String> {
     let notes = song_dir.join("notes.ly");
     if !notes.exists() {
         return Err("notes.ly not found".into());
     }
 
-    let parts = get_combined_parts(song_dir, verse);
+    let parts = get_combined_parts_at_mag(song_dir, verse, mag_milli);
     let n_parts = parts.len();
     let combined = parts.get(part as usize)
         .ok_or("Failed to build combined .ly")?;
