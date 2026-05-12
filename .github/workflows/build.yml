@@ -65,6 +65,7 @@ jobs:
             mingw-w64-ucrt-x86_64-gtk4
             mingw-w64-ucrt-x86_64-rust
             mingw-w64-ucrt-x86_64-pkg-config
+            mingw-w64-ucrt-x86_64-binutils
             unzip
             zip
 
@@ -92,18 +93,27 @@ jobs:
           cp -r /$MSYSTEM/share/glib-2.0/schemas dist/share/glib-2.0/ 2>/dev/null || true
 
       - name: Bundle GNU FreeSerif for installer
-        # FreeSerif covers Combining Half Marks (FE27/FE28/FE2D) which TNR lacks;
-        # installer.iss copies it into the user's font directory so melismas render.
-        # COPYING (GPL-3) ships in the install dir to satisfy GPL distribution terms.
+        # The GNU FTP release of FreeFont (20120503) lacks Combining Half Marks
+        # (U+FE27/FE28/FE2D) which expand_multi_breve emits for K>=3 melisma spans.
+        # The Debian package fonts-freefont-ttf 20211204+svn4273-2 ships a newer
+        # snapshot that includes these glyphs *and* positions them so they tile
+        # into a continuous arc. Pulled directly from the Debian pool so the
+        # version is pinned and verifiable by sha256.
         run: |
           set -e
           mkdir -p installer/fonts
-          curl -fsSL -o /tmp/freefont.zip https://ftp.gnu.org/gnu/freefont/freefont-ttf-20120503.zip
-          echo "7c85baf1bf82a1a1845d1322112bc6ca982221b484e3b3925022e25b5cae89af  /tmp/freefont.zip" | sha256sum -c -
-          unzip -j -o /tmp/freefont.zip "freefont-20120503/FreeSerif.ttf" -d installer/fonts/
-          unzip -p /tmp/freefont.zip "freefont-20120503/COPYING" > dist/FreeSerif-LICENSE.txt
-          test -s installer/fonts/FreeSerif.ttf
-          test -s dist/FreeSerif-LICENSE.txt
+          DEB=/tmp/fonts-freefont-ttf.deb
+          curl -fsSL -o "$DEB" \
+            "https://deb.debian.org/debian/pool/main/f/fonts-freefont/fonts-freefont-ttf_20211204+svn4273-2_all.deb"
+          mkdir -p /tmp/freefont && cd /tmp/freefont
+          ar x "$DEB" data.tar.xz
+          tar -xJf data.tar.xz \
+            ./usr/share/fonts/truetype/freefont/FreeSerif.ttf \
+            ./usr/share/doc/fonts-freefont-ttf/copyright
+          cd "$GITHUB_WORKSPACE"
+          cp /tmp/freefont/usr/share/fonts/truetype/freefont/FreeSerif.ttf installer/fonts/
+          cp /tmp/freefont/usr/share/doc/fonts-freefont-ttf/copyright dist/FreeSerif-LICENSE.txt
+          echo "c1dd2270ff624d66a7f1cd23075b5ce05a662f560be06a70a9599065ce008355  installer/fonts/FreeSerif.ttf" | sha256sum -c -
 
       - name: Zip
         run: cd dist && zip -r ../bop-windows.zip .

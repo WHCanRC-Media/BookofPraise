@@ -43,10 +43,14 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "..\dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Install GNU FreeSerif system-wide so resvg/fontdb finds it via load_system_fonts().
-; Required for melisma underlines (Combining Half Marks U+FE27/FE28/FE2D), which
-; Times New Roman lacks. Source file is staged by the GitHub build workflow.
+; Required for melisma underlines (Combining Half Marks U+FE27/FE28/FE2D); the
+; older 2012 FreeSerif from GNU FTP lacked these glyphs, so CI now bundles the
+; 2021 svn snapshot from Debian which includes (and properly tiles) them.
+; Always overwrite: existing user installs may have the broken 2012 release that
+; lacks Combining Half Marks (FE27/FE28/FE2D). uninsneveruninstall is kept so
+; the font stays available to other apps after Book of Praise is removed.
 Source: "fonts\FreeSerif.ttf"; DestDir: "{autofonts}"; FontInstall: "FreeSerif"; \
-    Flags: onlyifdoesntexist uninsneveruninstall
+    Flags: uninsneveruninstall
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
