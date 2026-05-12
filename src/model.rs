@@ -247,11 +247,14 @@ pub struct AppState {
     pub rendering: HashSet<RenderKey>,
     pub render_errors: HashMap<RenderKey, String>,
     /// Background prerender candidates bucketed by priority tier (lower index
-    /// = higher priority):
+    /// = higher priority). "Common mag" is 1.0×–2.0×, the range people use
+    /// day-to-day; 0.5× and 2.1×+ are long-tail.
     ///   0: liturgy slide AND current mag
-    ///   1: liturgy slide AND other mag
-    ///   2: not liturgy AND current mag
-    ///   3: not liturgy AND other mag
+    ///   1: liturgy slide AND other common mag
+    ///   2: liturgy slide AND other long-tail mag
+    ///   3: not liturgy AND current mag
+    ///   4: not liturgy AND other common mag
+    ///   5: not liturgy AND other long-tail mag
     /// Within each tier the order is FIFO (push_back, pop_front).
     pub prefetch_tiers: [VecDeque<RenderKey>; 6],
     /// At most one background prefetch render runs at a time.
