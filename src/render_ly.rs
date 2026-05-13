@@ -170,6 +170,7 @@ pub fn write_song_meta(song_dir: &Path, meta: &SongMeta) {
         let content = content.strip_prefix("---\n").unwrap_or(&content);
         let _ = fs::write(&yaml_path, content);
     }
+    invalidate_num_parts_cache(song_dir);
 }
 
 /// Filename -> full path index of `.svgz` files in old (non-current) `svg*`
@@ -1284,17 +1285,35 @@ fn build_combined_parts_for_verse_at_mag(
     }
 }
 
+/// Memoizes `num_parts_for_verse` results. Keyed by (song_dir, verse).
+/// Invalidated by `invalidate_num_parts_cache` when notes.ly or song.yaml changes.
+static NUM_PARTS_CACHE: LazyLock<Mutex<HashMap<(PathBuf, u32), usize>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 /// Return the number of parts (slides) needed for a verse.
 /// Magnification-independent — derived purely from `notes.ly` break count and
-/// the song's split style, so cheap enough to call ~1000× at startup.
+/// the song's split style. Result is memoized across calls; invalidate via
+/// `invalidate_num_parts_cache` when the underlying files change.
 pub fn num_parts_for_verse(song_dir: &Path, verse: u32) -> usize {
+    let key = (song_dir.to_path_buf(), verse);
+    if let Some(&n) = NUM_PARTS_CACHE.lock().unwrap().get(&key) {
+        return n;
+    }
     let notes_file = notes_path_for_verse(song_dir, verse);
     let Ok(raw_notes) = fs::read_to_string(&notes_file) else {
         return 1;
     };
     let meta = read_song_meta(song_dir);
     let break_count = raw_notes.matches("\\break").count();
-    effective_n_parts(&meta.split_style, break_count)
+    let n = effective_n_parts(&meta.split_style, break_count);
+    NUM_PARTS_CACHE.lock().unwrap().insert(key, n);
+    n
+}
+
+/// Drop memoized part counts for every verse of `song_dir`. Call after writing
+/// any `notes.ly` or `song.yaml` under that directory.
+pub fn invalidate_num_parts_cache(song_dir: &Path) {
+    NUM_PARTS_CACHE.lock().unwrap().retain(|(d, _), _| d != song_dir);
 }
 
 /// Check whether a cached SVG exists at the *current* magnification.

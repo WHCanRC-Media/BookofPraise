@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use gtk4 as gtk;
 use gtk::gdk;
@@ -88,6 +89,7 @@ fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics
         let buf = notes_view.buffer();
         let notes_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
         let _ = std::fs::write(&notes_path, notes_text.as_str());
+        render_ly::invalidate_num_parts_cache(&song_dir);
 
         let buf = lyrics_view.buffer();
         let lyrics_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
@@ -244,39 +246,75 @@ fn start_render(
     });
 }
 
-/// Drive the background prefetch queue: walk the 4 priority tiers in order,
-/// popping items and skipping any already cached / in flight / errored, and
-/// start the first real candidate. Caps at one background render in flight.
+/// Set on window close so the self-rescheduling `pump_prefetch` doesn't keep
+/// queueing idle handlers and delay the main loop from quitting.
+static PREFETCH_STOPPED: AtomicBool = AtomicBool::new(false);
+
+/// Pop one renderable key off the prefetch tiers and kick its render. Bounded
+/// so a warm cache (where every tier entry passes `is_svg_current_at_mag` at
+/// ~700µs each) can't block the UI thread for 20s on startup. If the budget is
+/// hit before finding a renderable key, re-schedule via `idle_add_local_once`
+/// so the scan resumes once GTK has a moment.
 fn pump_prefetch(state_rc: &Rc<RefCell<AppState>>) {
+    // ~30 checks × ~700µs = ~20ms worst case per call: one frame at 60Hz.
+    const MAX_CHECKS_PER_CALL: usize = 30;
+
+    if PREFETCH_STOPPED.load(Ordering::Relaxed) {
+        return;
+    }
     if !render_ly::lilypond_available() {
         return;
     }
-    let next_key = {
+    enum Outcome {
+        Render(crate::model::RenderKey),
+        BudgetExhausted,
+        Drained,
+    }
+    let outcome = {
         let mut state = state_rc.borrow_mut();
         if state.prefetch_in_flight.is_some() {
             return;
         }
-        let mut found: Option<crate::model::RenderKey> = None;
+        let mut result = Outcome::Drained;
+        let mut checks = 0usize;
         'tiers: for tier in 0..state.prefetch_tiers.len() {
             while let Some(key) = state.prefetch_tiers[tier].pop_front() {
                 if state.rendering.contains(&key) || state.render_errors.contains_key(&key) {
                     continue;
                 }
+                if checks >= MAX_CHECKS_PER_CALL {
+                    // Put the key back at the front of its tier and resume later.
+                    state.prefetch_tiers[tier].push_front(key);
+                    result = Outcome::BudgetExhausted;
+                    break 'tiers;
+                }
+                checks += 1;
                 if render_ly::is_svg_current_at_mag(&key.0, key.1, key.2, key.3) {
                     continue;
                 }
-                found = Some(key);
+                result = Outcome::Render(key);
                 break 'tiers;
             }
         }
-        let Some(key) = found else {
-            render_ly::purge_old_cache_dirs();
-            return;
-        };
-        state.prefetch_in_flight = Some(key.clone());
-        key
+        if let Outcome::Render(ref k) = result {
+            state.prefetch_in_flight = Some(k.clone());
+        }
+        result
     };
-    start_render(state_rc, next_key.0, next_key.1, next_key.2, next_key.3);
+    match outcome {
+        Outcome::Render(key) => {
+            start_render(state_rc, key.0, key.1, key.2, key.3);
+        }
+        Outcome::BudgetExhausted => {
+            let state_for_resume = state_rc.clone();
+            glib::idle_add_local_once(move || {
+                pump_prefetch(&state_for_resume);
+            });
+        }
+        Outcome::Drained => {
+            render_ly::purge_old_cache_dirs();
+        }
+    }
 }
 
 /// Update the main image display for the current slide. Loads a cached texture
@@ -776,10 +814,17 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     // Initial display
     refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
     refresh_liturgy(&state.borrow(), &liturgy_label);
-    // Kick off the background library prerender. No-op if lilypond isn't
-    // available yet; the post-download path will be exercised by the next
-    // navigation's pump.
-    pump_prefetch(&state);
+    // Defer the library prerender scan: with ~46k tier entries × ~700µs each
+    // to verify "already cached", a synchronous scan blocks window.present for
+    // ~20s on a warm cache. Skip entirely when no slides are loaded (nothing
+    // user-visible to prefetch yet), otherwise schedule it after the window
+    // shows so the UI appears immediately.
+    if !state.borrow().slides.is_empty() {
+        let state_for_pump = state.clone();
+        glib::idle_add_local_once(move || {
+            pump_prefetch(&state_for_pump);
+        });
+    }
 
     // ── Helpers for signal closures ──
 
@@ -1036,6 +1081,10 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
     {
         let state = state.clone();
         window.connect_close_request(move |win| {
+            // Stop the bounded prefetch loop from queueing further idle ticks so
+            // the GTK main loop can quit promptly instead of draining ~33s worth
+            // of self-rescheduled work.
+            PREFETCH_STOPPED.store(true, Ordering::Relaxed);
             let s = state.borrow();
             let edited = s.edited_song_dirs.clone();
             let originals_path = s.originals_dir.as_ref().map(|td| td.path().to_path_buf());
