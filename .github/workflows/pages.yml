@@ -1,0 +1,50 @@
+name: Pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'doc/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# Only one concurrent deploy; cancel any in-flight run on a newer push.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install AsciiDoctor
+        run: sudo apt-get update && sudo apt-get install -y asciidoctor
+
+      - name: Render userguide
+        run: |
+          mkdir -p site
+          asciidoctor doc/userguide.adoc -D site -o index.html
+          cp -r doc/images site/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

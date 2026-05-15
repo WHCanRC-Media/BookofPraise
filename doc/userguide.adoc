@@ -4,6 +4,8 @@
 :icons: font
 :imagesdir: images
 :sectnums:
+:release-url: https://github.com/WHCanRC-Media/BookofPraise/releases/latest
+:download-url: https://github.com/WHCanRC-Media/BookofPraise/releases/latest/download
 
 == Introduction
 
@@ -14,17 +16,19 @@ The music is generated from LilyPond source files, and you can edit the notes an
 
 == Installation
 
+Downloads are available from the {release-url}[latest release].
+
 === Windows
 
 The easiest option is the installer:
 
-. Download `BookOfPraise-Setup.exe` from the releases page.
+. Download link:{download-url}/BookOfPraise-Setup.exe[`BookOfPraise-Setup.exe`].
 . Run it and follow the prompts.
 . Launch *Book of Praise* from the Start menu.
 
 Alternatively, the portable zip is available:
 
-. Download the latest `bop-windows.zip` from the releases page.
+. Download link:{download-url}/bop-windows.zip[`bop-windows.zip`].
 . Extract the zip to a folder of your choice.
 . Run `bop.exe` from the extracted folder.
 
@@ -32,7 +36,7 @@ Either way, everything needed to run the application is included.
 
 === Linux
 
-. Download the latest `bop-linux.zip` from the releases page.
+. Download link:{download-url}/bop-linux.zip[`bop-linux.zip`].
 . Extract the zip.
 . Make sure GTK4 is installed on your system.
 . Run the `bop` program from the extracted folder.
