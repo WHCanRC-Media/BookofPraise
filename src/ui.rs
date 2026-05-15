@@ -89,7 +89,6 @@ fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics
         let buf = notes_view.buffer();
         let notes_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
         let _ = std::fs::write(&notes_path, notes_text.as_str());
-        render_ly::invalidate_num_parts_cache(&song_dir);
 
         let buf = lyrics_view.buffer();
         let lyrics_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
@@ -138,49 +137,15 @@ fn save_and_invalidate(
         // so invalidate and rebuild the slide list.
         if let Some(slide) = state.slides.get(state.current_slide) {
             let song_dir = slide.song_dir.clone();
-            invalidate_song(state, &song_dir);
+            state.invalidate_song(&song_dir);
         }
         state.rebuild_slides();
     } else if let Some(slide) = state.slides.get(state.current_slide) {
-        // Only invalidate current verse/part
         let song_dir = slide.song_dir.clone();
-        let path = slide.path.clone();
         let verse = slide.current_verse;
         let part = slide.part;
-        render_ly::invalidate_combined_cache(&song_dir);
-        state.texture_cache.retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
-        // render_errors is keyed by (song_dir, verse, part, mag) — drop
-        // every mag's entry for the affected (verse, part).
-        state
-            .render_errors
-            .retain(|k, _| k.0 != song_dir || k.1 != verse || k.2 != part);
-        let _ = std::fs::remove_file(&path);
-        // The new content hash means previously-popped items for this verse/part
-        // need to come back into the prefetch queue.
-        state.rebuild_prefetch_tiers();
+        state.invalidate_verse(&song_dir, verse, part);
     }
-}
-
-fn invalidate_song(state: &mut AppState, song_dir: &std::path::Path) {
-    render_ly::invalidate_combined_cache(song_dir);
-    let slide_paths: Vec<_> = state
-        .slides
-        .iter()
-        .filter(|sl| sl.song_dir == song_dir)
-        .map(|sl| (sl.path.clone(), sl.current_verse, sl.part))
-        .collect();
-    for (path, verse, part) in slide_paths {
-        state
-            .texture_cache
-            .retain(|k, _| k.0 != path || k.1 != verse || k.2 != part);
-    }
-    // Drop render_errors for every (verse, part, mag) of the edited song —
-    // a fresh content hash deserves a fresh chance.
-    state.render_errors.retain(|k, _| k.0 != song_dir);
-    // Combined hash changed → every previously-popped item for this song needs
-    // to be reconsidered. Rebuild tiers in full so the edited song lands back
-    // in the appropriate priority bucket.
-    state.rebuild_prefetch_tiers();
 }
 
 /// Return `true` if the slide is an SVG that has no up-to-date cached render.
@@ -206,7 +171,7 @@ fn start_render(
         return;
     }
     let render_key: crate::model::RenderKey = (song_dir.clone(), verse, part, mag_milli);
-    {
+    let queued_after: usize = {
         let mut state = state_rc.borrow_mut();
         if state.rendering.contains(&render_key) {
             return;
@@ -215,11 +180,12 @@ fn start_render(
             return;
         }
         state.rendering.insert(render_key.clone());
-    }
+        state.prefetch_tiers.iter().map(|t| t.len()).sum()
+    };
 
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     std::thread::spawn(move || {
-        let result = render_ly::render_svg_at_mag(&song_dir, verse, part, mag_milli);
+        let result = render_ly::render_svg_at_mag(&song_dir, verse, part, mag_milli, queued_after);
         let _ = tx.send(result);
     });
 
@@ -347,7 +313,7 @@ fn refresh_display(
     let mag_milli = render_ly::lyrics_magnification_milli();
     let slide_info = state.slides.get(state.current_slide).map(|slide| {
         (
-            (slide.path.clone(), slide.current_verse, slide.part, render_width),
+            (slide.song_dir.clone(), slide.current_verse, slide.part, render_width),
             (slide.song_dir.clone(), slide.current_verse, slide.part, mag_milli),
             slide.song_dir.clone(),
             slide.current_verse,
@@ -977,7 +943,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                                 let _ = std::fs::copy(entry.path(), song_dir.join(&name));
                             }
                         }
-                        invalidate_song(&mut s, &song_dir);
+                        s.invalidate_song(&song_dir);
                     }
                 }
             }
@@ -994,15 +960,8 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         if let Err(e) = crate::preferences::save(&p) {
             eprintln!("Failed to save preferences: {e}");
         }
-        render_ly::invalidate_all_combined_cache();
-        {
-            let mut s = state.borrow_mut();
-            s.texture_cache.clear();
-            s.render_errors.clear();
-            // The current-mag definition just changed → every item's tier may
-            // have moved.
-            s.rebuild_prefetch_tiers();
-        }
+        // Current-mag definition just changed → every item's tier may have moved.
+        state.borrow_mut().invalidate_all_renders();
         refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
         pump_prefetch(&state);
     });
@@ -1233,8 +1192,8 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                                                         let mut s = state3.borrow_mut();
                                                         s.songs_dir = base_dir();
                                                         s.library = SongLibrary::scan(&s.songs_dir);
-                                                        s.texture_cache.clear();
-                                                        s.render_errors.clear();
+                                                        // Update rewrote source files on disk → combined cache is stale.
+                                                        render_ly::invalidate_all_combined_cache();
                                                         s.rebuild_slides();
                                                     }
                                                     refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3, &mismatch_label3);

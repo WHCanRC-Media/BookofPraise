@@ -231,7 +231,10 @@ pub struct Slide {
     pub song_dir: PathBuf,
 }
 
-pub type CacheKey = (PathBuf, u32, u32, u32); // (path, verse, part, render_width)
+/// `(song_dir, verse, part, render_width)` — the GTK texture cache. Shape
+/// matches `RenderKey` except the last field is the pixel width we
+/// rasterized at (resvg output is per-width), not the lilypond magnification.
+pub type CacheKey = (PathBuf, u32, u32, u32);
 /// `(song_dir, verse, part, mag_milli)` — every render is keyed by mag so
 /// background prerender at one mag and foreground at another don't clash.
 pub type RenderKey = (PathBuf, u32, u32, u32);
@@ -446,6 +449,35 @@ impl AppState {
         }
         let new = self.current_slide as isize + delta;
         self.current_slide = new.clamp(0, self.slides.len() as isize - 1) as usize;
+    }
+
+    /// Drop every cache entry tied to a specific verse/part of a song. Use
+    /// when lyrics for that verse changed but the slide count is unaffected.
+    pub fn invalidate_verse(&mut self, song_dir: &Path, verse: u32, part: u32) {
+        crate::render_ly::invalidate_song_source(song_dir);
+        self.texture_cache.retain(|k, _| k.0 != song_dir || k.1 != verse || k.2 != part);
+        self.render_errors.retain(|k, _| k.0 != song_dir || k.1 != verse || k.2 != part);
+        // New content hash → previously-popped prefetch entries for this
+        // verse/part need to come back into the queue.
+        self.rebuild_prefetch_tiers();
+    }
+
+    /// Drop every cache entry tied to a song. Use when notes.ly or song.yaml
+    /// changed so the part count or split style may differ.
+    pub fn invalidate_song(&mut self, song_dir: &Path) {
+        crate::render_ly::invalidate_song_source(song_dir);
+        self.texture_cache.retain(|k, _| k.0 != song_dir);
+        self.render_errors.retain(|k, _| k.0 != song_dir);
+        self.rebuild_prefetch_tiers();
+    }
+
+    /// Drop every cached render outcome. Use when a global setting (e.g.
+    /// lyrics magnification) changes so every rendered SVG's hash key shifts.
+    pub fn invalidate_all_renders(&mut self) {
+        crate::render_ly::invalidate_all_combined_cache();
+        self.texture_cache.clear();
+        self.render_errors.clear();
+        self.rebuild_prefetch_tiers();
     }
 }
 

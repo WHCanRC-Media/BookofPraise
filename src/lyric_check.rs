@@ -9,18 +9,17 @@
 //! source lines across slides.
 
 use regex::Regex;
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{LazyLock, Mutex};
+use std::sync::LazyLock;
 
-use crate::render_ly::{read_song_meta, SplitStyle};
+use crate::render_ly::{read_song_meta, Memoize, SplitStyle};
 
 /// Cache of mismatch-pair results keyed by SVG path. The SVG filename is a
 /// content hash of the combined .ly source, so any change to notes/lyrics/yaml
 /// produces a different key and the old entry is harmless.
-static MISMATCH_CACHE: LazyLock<Mutex<HashMap<PathBuf, Vec<(String, String)>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+static MISMATCH_CACHE: Memoize<PathBuf, Vec<(String, String)>> = Memoize::new();
 
 static RE_G: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?s)<g transform="translate\(([-0-9.]+),\s*([-0-9.]+)\)"\s*>(.*?)</g>"#).unwrap()
@@ -252,40 +251,34 @@ pub fn mismatch_pairs_nospace(
     svg_path: &Path,
     n_parts: usize,
 ) -> Vec<(String, String)> {
-    if let Ok(cache) = MISMATCH_CACHE.lock() {
-        if let Some(cached) = cache.get(svg_path) {
-            return cached.clone();
+    MISMATCH_CACHE.get_or_init(svg_path.to_path_buf(), || {
+        let Some(src_path) = source_lyrics_path(song_dir) else {
+            return Vec::new();
+        };
+        if !src_path.exists() {
+            return Vec::new();
         }
-    }
-    let Some(src_path) = source_lyrics_path(song_dir) else {
-        return Vec::new();
-    };
-    if !src_path.exists() {
-        return Vec::new();
-    }
-    let src_all = load_source_lyrics(&src_path);
-    let Some(src_lines) = src_all.get(&verse) else {
-        return Vec::new();
-    };
-    let meta = read_song_meta(song_dir);
-    let expected = source_slice_for_part(src_lines, &meta.split_style, n_parts, part as usize);
-    let displayed = extract_svg_lyrics(svg_path);
+        let src_all = load_source_lyrics(&src_path);
+        let Some(src_lines) = src_all.get(&verse) else {
+            return Vec::new();
+        };
+        let meta = read_song_meta(song_dir);
+        let expected = source_slice_for_part(src_lines, &meta.split_style, n_parts, part as usize);
+        let displayed = extract_svg_lyrics(svg_path);
 
-    let strip = |s: &str| -> String { s.chars().filter(|c| *c != ' ').collect() };
+        let strip = |s: &str| -> String { s.chars().filter(|c| *c != ' ').collect() };
 
-    let mut out = Vec::new();
-    let max_len = displayed.len().max(expected.len());
-    for i in 0..max_len {
-        let src = expected.get(i).cloned().unwrap_or_default();
-        let svg = displayed.get(i).cloned().unwrap_or_default();
-        if normalize(&src) != normalize(&svg) {
-            out.push((strip(&src), strip(&svg)));
+        let mut out = Vec::new();
+        let max_len = displayed.len().max(expected.len());
+        for i in 0..max_len {
+            let src = expected.get(i).cloned().unwrap_or_default();
+            let svg = displayed.get(i).cloned().unwrap_or_default();
+            if normalize(&src) != normalize(&svg) {
+                out.push((strip(&src), strip(&svg)));
+            }
         }
-    }
-    if let Ok(mut cache) = MISMATCH_CACHE.lock() {
-        cache.insert(svg_path.to_path_buf(), out.clone());
-    }
-    out
+        out
+    })
 }
 
 /// Compare, log mismatches to stderr once per (song, verse, part), and return

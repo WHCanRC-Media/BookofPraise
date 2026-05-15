@@ -58,6 +58,54 @@ fn force_one_slide() -> bool {
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
+/// Lazy-initialized memoization keyed by `K` with cloneable `V`. Replaces the
+/// hand-rolled `LazyLock<Mutex<HashMap<...>>>` + check/insert pattern.
+pub(crate) struct Memoize<K, V> {
+    inner: OnceLock<Mutex<HashMap<K, V>>>,
+}
+
+impl<K, V> Memoize<K, V>
+where
+    K: Eq + Hash,
+    V: Clone,
+{
+    pub(crate) const fn new() -> Self {
+        Self { inner: OnceLock::new() }
+    }
+
+    fn map(&self) -> &Mutex<HashMap<K, V>> {
+        self.inner.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+
+    /// Return the cached value for `key`, computing and inserting it if absent.
+    /// Two concurrent misses on the same key may both run `compute`; the second
+    /// write overwrites the first — fine for deterministic computations.
+    pub(crate) fn get_or_init(&self, key: K, compute: impl FnOnce() -> V) -> V {
+        if let Ok(map) = self.map().lock() {
+            if let Some(v) = map.get(&key) {
+                return v.clone();
+            }
+        }
+        let v = compute();
+        if let Ok(mut map) = self.map().lock() {
+            map.insert(key, v.clone());
+        }
+        v
+    }
+
+    pub(crate) fn invalidate_where(&self, pred: impl Fn(&K) -> bool) {
+        if let Ok(mut map) = self.map().lock() {
+            map.retain(|k, _| !pred(k));
+        }
+    }
+
+    pub(crate) fn clear(&self) {
+        if let Ok(mut map) = self.map().lock() {
+            map.clear();
+        }
+    }
+}
+
 /// Minimum number of `\break`s before lines are combined in pairs.
 const COMBINE_LINES_THRESHOLD: usize = 7;
 
@@ -170,23 +218,54 @@ pub fn write_song_meta(song_dir: &Path, meta: &SongMeta) {
         let content = content.strip_prefix("---\n").unwrap_or(&content);
         let _ = fs::write(&yaml_path, content);
     }
-    invalidate_num_parts_cache(song_dir);
+    invalidate_song_source(song_dir);
 }
 
-/// Filename -> full path index of `.svgz` files in old (non-current) `svg*`
-/// sibling dirs. Populated by `init_svg_cache_dir`; drained by
+/// Flip to `true` to keep `_combined_*.ly` and `_tmp_*` intermediates in
+/// the cache dir after a render, instead of deleting them. Useful for
+/// debugging LilyPond input/output; orphan-cleanup at startup also skips.
+const KEEP_RENDER_INTERMEDIATES: bool = false;
+
+/// Filenames in the current cache dir that aren't final `.svgz` outputs —
+/// `_combined_HASH.ly` (LilyPond input) and `_tmp_HASH*` (mid-render SVGs).
+/// Removed eagerly after each successful render; this fn sweeps up anything
+/// left behind from a crash or previous-version bug.
+fn purge_intermediates(dir: &Path) {
+    if KEEP_RENDER_INTERMEDIATES {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let s = name.to_string_lossy();
+        if s.starts_with("_combined_") || s.starts_with("_tmp_") {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
+/// Resurrection state for `.svgz` files from previous-version `svg*` cache
+/// dirs. Populated by `init_svg_cache_dir`; drained by
 /// `try_resurrect_from_old_cache` as the new render pipeline asks for files
-/// whose content hash is unchanged from the previous version. Anything still
-/// here when the prefetch queue drains is stale and gets removed.
-static OLD_CACHE_INDEX: LazyLock<Mutex<HashMap<OsString, PathBuf>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-static OLD_CACHE_DIRS: LazyLock<Mutex<Vec<PathBuf>>> =
-    LazyLock::new(|| Mutex::new(Vec::new()));
+/// whose content hash is unchanged. Anything still in `index` when the
+/// prefetch queue drains is stale and gets removed along with `dirs`.
+#[derive(Default)]
+struct OldCache {
+    /// filename → full path in some old dir
+    index: HashMap<OsString, PathBuf>,
+    /// every non-current `svg*` dir, removed wholesale on `purge`
+    dirs: Vec<PathBuf>,
+}
+
+static OLD_CACHE: LazyLock<Mutex<OldCache>> =
+    LazyLock::new(|| Mutex::new(OldCache::default()));
 
 fn init_svg_cache_dir(cache_root: &Path, version: &str) -> PathBuf {
     let current = cache_root.join(format!("svg-{version}"));
-    let mut old_dirs: Vec<PathBuf> = Vec::new();
-    let mut old_index: HashMap<OsString, PathBuf> = HashMap::new();
+    // Sweep any orphan intermediates left in the current dir from a prior
+    // crash (or older app versions that didn't remove them).
+    purge_intermediates(&current);
+    let mut fresh = OldCache::default();
     if let Ok(entries) = fs::read_dir(cache_root) {
         for entry in entries.flatten() {
             let name = entry.file_name();
@@ -197,19 +276,16 @@ fn init_svg_cache_dir(cache_root: &Path, version: &str) -> PathBuf {
                     for f in files.flatten() {
                         let fname = f.file_name();
                         if fname.to_string_lossy().ends_with(".svgz") {
-                            old_index.insert(fname, f.path());
+                            fresh.index.insert(fname, f.path());
                         }
                     }
                 }
-                old_dirs.push(path);
+                fresh.dirs.push(path);
             }
         }
     }
-    if let Ok(mut guard) = OLD_CACHE_INDEX.lock() {
-        *guard = old_index;
-    }
-    if let Ok(mut guard) = OLD_CACHE_DIRS.lock() {
-        *guard = old_dirs;
+    if let Ok(mut guard) = OLD_CACHE.lock() {
+        *guard = fresh;
     }
     current
 }
@@ -220,8 +296,8 @@ fn init_svg_cache_dir(cache_root: &Path, version: &str) -> PathBuf {
 pub fn try_resurrect_from_old_cache(target: &Path) -> bool {
     let Some(fname) = target.file_name().map(|n| n.to_os_string()) else { return false; };
     let old_path = {
-        let Ok(mut idx) = OLD_CACHE_INDEX.lock() else { return false; };
-        match idx.remove(&fname) {
+        let Ok(mut g) = OLD_CACHE.lock() else { return false; };
+        match g.index.remove(&fname) {
             Some(p) => p,
             None => return false,
         }
@@ -236,15 +312,15 @@ pub fn try_resurrect_from_old_cache(target: &Path) -> bool {
 /// Safe to call from the prefetch-drained path: every expected hash has been
 /// asked for at that point, so anything remaining is stale by definition.
 pub fn purge_old_cache_dirs() {
-    let dirs: Vec<PathBuf> = match OLD_CACHE_DIRS.lock() {
-        Ok(mut g) => std::mem::take(&mut *g),
+    let dirs = match OLD_CACHE.lock() {
+        Ok(mut g) => {
+            g.index.clear();
+            std::mem::take(&mut g.dirs)
+        }
         Err(_) => return,
     };
     for dir in &dirs {
         let _ = fs::remove_dir_all(dir);
-    }
-    if let Ok(mut idx) = OLD_CACHE_INDEX.lock() {
-        idx.clear();
     }
 }
 
@@ -323,49 +399,66 @@ fn lilypond_cache_dir() -> PathBuf {
     LILYPOND_CACHE_DIR.clone()
 }
 
-static LILYPOND_AVAILABLE: OnceLock<bool> = OnceLock::new();
-static LILYPOND_BIN: OnceLock<PathBuf> = OnceLock::new();
-
-/// Reset cached LilyPond availability after download.
-pub fn reset_lilypond_cache() {
-    // OnceLock doesn't support reset, so we use a different strategy:
-    // After download, the next call to the inner check functions will succeed.
-    // We work around this by using an atomic bool override.
-    LILYPOND_DOWNLOADED.store(true, std::sync::atomic::Ordering::Relaxed);
+/// Resolved LilyPond install: `bin` is the path we'd invoke, `available` is
+/// whether that path (or `lilypond` on PATH for the fallback) actually exists.
+#[derive(Clone)]
+struct LilypondInfo {
+    bin: PathBuf,
+    available: bool,
 }
 
-static LILYPOND_DOWNLOADED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+/// Memoized result of `resolve_lilypond`. Cleared by `reset_lilypond_cache`
+/// after a successful download so subsequent calls pick up the new binary.
+static LILYPOND_INFO: Mutex<Option<LilypondInfo>> = Mutex::new(None);
+
+fn lilypond_info() -> LilypondInfo {
+    let mut guard = LILYPOND_INFO.lock().unwrap();
+    if let Some(info) = guard.as_ref() {
+        return info.clone();
+    }
+    let info = resolve_lilypond();
+    *guard = Some(info.clone());
+    info
+}
+
+/// Drop the memoized LilyPond availability so the next lookup re-checks disk
+/// and PATH. Call after `download_lilypond` succeeds.
+pub fn reset_lilypond_cache() {
+    *LILYPOND_INFO.lock().unwrap() = None;
+}
 
 /// Check whether LilyPond is available (bundled, cached, or on PATH).
 pub fn lilypond_available() -> bool {
-    if LILYPOND_DOWNLOADED.load(std::sync::atomic::Ordering::Relaxed) {
-        return true;
-    }
-    *LILYPOND_AVAILABLE.get_or_init(lilypond_available_inner)
+    lilypond_info().available
 }
 
-fn lilypond_available_inner() -> bool {
+/// Search bundled → cached → PATH for a lilypond binary in one pass.
+fn resolve_lilypond() -> LilypondInfo {
     let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
     let bin_name = format!("lilypond{exe_suffix}");
 
-    // Bundled next to executable
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            if dir.join("lilypond-bin").join("bin").join(&bin_name).exists() {
-                return true;
+            let bundled = dir.join("lilypond-bin").join("bin").join(&bin_name);
+            if bundled.exists() {
+                return LilypondInfo { bin: bundled, available: true };
             }
         }
     }
 
-    // In cache
-    if lilypond_cache_dir().join("bin").join(&bin_name).exists() {
-        return true;
+    let cached = lilypond_cache_dir().join("bin").join(&bin_name);
+    if cached.exists() {
+        return LilypondInfo { bin: cached, available: true };
     }
 
-    // On PATH
     let which_cmd = if cfg!(windows) { "where" } else { "which" };
-    Command::new(which_cmd).arg("lilypond").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success())
+    let on_path = Command::new(which_cmd)
+        .arg("lilypond")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success());
+    LilypondInfo { bin: PathBuf::from("lilypond"), available: on_path }
 }
 
 /// Download and extract LilyPond into the cache directory.
@@ -443,31 +536,7 @@ pub fn download_lilypond() -> Result<(), String> {
 
 /// Find the lilypond binary: check next to our executable, then cache, then PATH.
 fn lilypond_bin() -> PathBuf {
-    if LILYPOND_DOWNLOADED.load(std::sync::atomic::Ordering::Relaxed) {
-        return lilypond_bin_inner();
-    }
-    LILYPOND_BIN.get_or_init(lilypond_bin_inner).clone()
-}
-
-fn lilypond_bin_inner() -> PathBuf {
-    let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
-    let bin_name = format!("lilypond{exe_suffix}");
-
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let bundled = dir.join("lilypond-bin").join("bin").join(&bin_name);
-            if bundled.exists() {
-                return bundled;
-            }
-        }
-    }
-
-    let cached = lilypond_cache_dir().join("bin").join(&bin_name);
-    if cached.exists() {
-        return cached;
-    }
-
-    PathBuf::from("lilypond")
+    lilypond_info().bin
 }
 
 /// Map a LilyPond note name to a pitch class (0–6, matching C=0 .. B=6).
@@ -1187,23 +1256,23 @@ fn effective_n_parts(split_style: &SplitStyle, break_count: usize) -> usize {
 }
 
 /// Cache of combined .ly parts keyed by (song_dir, verse, lyrics_mag_milli).
-/// Invalidated per song_dir when the user saves edits.
-static COMBINED_PARTS_CACHE: LazyLock<Mutex<HashMap<(PathBuf, u32, u32), Vec<String>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Invalidated per song_dir by `invalidate_song_source` when edits are saved.
+static COMBINED_PARTS_CACHE: Memoize<(PathBuf, u32, u32), Vec<String>> = Memoize::new();
 
-/// Invalidate cached combined parts for a song directory (call after edits are saved).
-pub fn invalidate_combined_cache(song_dir: &Path) {
-    if let Ok(mut cache) = COMBINED_PARTS_CACHE.lock() {
-        cache.retain(|(dir, _, _), _| dir != song_dir);
-    }
+/// Drop every cache derived from a song's source files (`notes.ly`,
+/// `lyrics_N.ly`, `song.yaml`). Use this from any save/edit path — the two
+/// underlying caches always need to move together since each is a function
+/// of the same source set.
+pub fn invalidate_song_source(song_dir: &Path) {
+    NUM_PARTS_CACHE.invalidate_where(|(d, _)| d == song_dir);
+    COMBINED_PARTS_CACHE.invalidate_where(|(dir, _, _)| dir == song_dir);
 }
 
-/// Invalidate every cached combined-parts entry (e.g. when a global setting
-/// like lyrics magnification changes).
+/// Drop every cached combined-parts entry (e.g. when a global setting like
+/// lyrics magnification changes). `NUM_PARTS_CACHE` is mag-independent and
+/// doesn't need a global clear here.
 pub fn invalidate_all_combined_cache() {
-    if let Ok(mut cache) = COMBINED_PARTS_CACHE.lock() {
-        cache.clear();
-    }
+    COMBINED_PARTS_CACHE.clear();
 }
 
 /// Get cached combined .ly content parts for a verse, computing if absent.
@@ -1215,17 +1284,10 @@ fn get_combined_parts(song_dir: &Path, verse: u32) -> Vec<String> {
 /// prerender can iterate across every magnification without touching global
 /// state shared with the foreground render path.
 fn get_combined_parts_at_mag(song_dir: &Path, verse: u32, mag_milli: u32) -> Vec<String> {
-    let key = (song_dir.to_path_buf(), verse, mag_milli);
-    if let Ok(cache) = COMBINED_PARTS_CACHE.lock() {
-        if let Some(parts) = cache.get(&key) {
-            return parts.clone();
-        }
-    }
-    let parts = build_combined_parts_for_verse_at_mag(song_dir, verse, mag_milli);
-    if let Ok(mut cache) = COMBINED_PARTS_CACHE.lock() {
-        cache.insert(key, parts.clone());
-    }
-    parts
+    COMBINED_PARTS_CACHE.get_or_init(
+        (song_dir.to_path_buf(), verse, mag_milli),
+        || build_combined_parts_for_verse_at_mag(song_dir, verse, mag_milli),
+    )
 }
 
 /// Return the path to the notes file for a given verse.
@@ -1286,34 +1348,23 @@ fn build_combined_parts_for_verse_at_mag(
 }
 
 /// Memoizes `num_parts_for_verse` results. Keyed by (song_dir, verse).
-/// Invalidated by `invalidate_num_parts_cache` when notes.ly or song.yaml changes.
-static NUM_PARTS_CACHE: LazyLock<Mutex<HashMap<(PathBuf, u32), usize>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Invalidated by `invalidate_song_source` when notes.ly or song.yaml changes.
+static NUM_PARTS_CACHE: Memoize<(PathBuf, u32), usize> = Memoize::new();
 
 /// Return the number of parts (slides) needed for a verse.
 /// Magnification-independent — derived purely from `notes.ly` break count and
 /// the song's split style. Result is memoized across calls; invalidate via
-/// `invalidate_num_parts_cache` when the underlying files change.
+/// `invalidate_song_source` when the underlying files change.
 pub fn num_parts_for_verse(song_dir: &Path, verse: u32) -> usize {
-    let key = (song_dir.to_path_buf(), verse);
-    if let Some(&n) = NUM_PARTS_CACHE.lock().unwrap().get(&key) {
-        return n;
-    }
-    let notes_file = notes_path_for_verse(song_dir, verse);
-    let Ok(raw_notes) = fs::read_to_string(&notes_file) else {
-        return 1;
-    };
-    let meta = read_song_meta(song_dir);
-    let break_count = raw_notes.matches("\\break").count();
-    let n = effective_n_parts(&meta.split_style, break_count);
-    NUM_PARTS_CACHE.lock().unwrap().insert(key, n);
-    n
-}
-
-/// Drop memoized part counts for every verse of `song_dir`. Call after writing
-/// any `notes.ly` or `song.yaml` under that directory.
-pub fn invalidate_num_parts_cache(song_dir: &Path) {
-    NUM_PARTS_CACHE.lock().unwrap().retain(|(d, _), _| d != song_dir);
+    NUM_PARTS_CACHE.get_or_init((song_dir.to_path_buf(), verse), || {
+        let notes_file = notes_path_for_verse(song_dir, verse);
+        let Ok(raw_notes) = fs::read_to_string(&notes_file) else {
+            return 1;
+        };
+        let meta = read_song_meta(song_dir);
+        let break_count = raw_notes.matches("\\break").count();
+        effective_n_parts(&meta.split_style, break_count)
+    })
 }
 
 /// Check whether a cached SVG exists at the *current* magnification.
@@ -1347,11 +1398,14 @@ pub fn svg_path_for_verse(song_dir: &Path, verse: u32, part: u32) -> Option<Path
 /// Render the SVG for a given verse part at an explicit magnification.
 /// Background prerendering uses this directly so foreground and background
 /// renders can target different magnifications concurrently.
+/// `queued_after` is the prefetch backlog at the moment this render started,
+/// included in the progress log line so the user can gauge how much is left.
 pub fn render_svg_at_mag(
     song_dir: &Path,
     verse: u32,
     part: u32,
     mag_milli: u32,
+    queued_after: usize,
 ) -> Result<(), String> {
     let notes = song_dir.join("notes.ly");
     if !notes.exists() {
@@ -1374,7 +1428,7 @@ pub fn render_svg_at_mag(
         .file_name()
         .unwrap_or_default()
         .to_string_lossy();
-    eprintln!("Rendering {dir_name}/{verse} part {part}...");
+    eprintln!("Rendering {dir_name}/{verse} part {part}... ({queued_after} queued)");
 
     let cache_dir = svg_cache_dir();
     fs::create_dir_all(&cache_dir)
@@ -1423,12 +1477,15 @@ pub fn render_svg_at_mag(
     };
 
     let cleanup = || {
+        if KEEP_RENDER_INTERMEDIATES {
+            return;
+        }
         let _ = fs::remove_file(&tmp_svg);
         let _ = fs::remove_file(tmp_stem.with_extension("svg"));
         let _ = fs::remove_file(tmp_stem.with_extension("cropped.svg"));
+        let _ = fs::remove_file(&combined_ly);
     };
 
-    eprintln!("Writing combined .ly to {}", combined_ly.display());
     if let Err(e) = run_pass(combined) {
         cleanup();
         return Err(e);
@@ -1574,7 +1631,7 @@ pub fn render_svg_at_mag(
         cleanup();
         return Err(format!("Failed to publish SVG: {e}"));
     }
-    let _ = fs::remove_file(&tmp_svg);
+    cleanup();
 
     crate::lyric_check::check(song_dir, verse, part, &svg_out, n_parts);
     Ok(())
