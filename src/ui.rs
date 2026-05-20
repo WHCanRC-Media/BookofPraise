@@ -979,6 +979,42 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         }
     });
 
+    // Right-click on Add → context menu with "Add and go" (adds + jumps to it)
+    {
+        let add_and_go_btn = gtk::Button::with_label("Add and go");
+        add_and_go_btn.add_css_class("flat");
+        let add_popover = gtk::Popover::new();
+        add_popover.set_child(Some(&add_and_go_btn));
+        add_popover.set_parent(&add_btn);
+        add_popover.set_has_arrow(false);
+
+        connect!(add_and_go_btn, connect_clicked, [state, verse_box, number_entry, song_type, widgets, liturgy_label, add_popover], move |_| {
+            add_popover.popdown();
+            if let Ok(num) = number_entry.text().parse::<u32>() {
+                let verses = checked_verses(&verse_box);
+                let new_slide_idx = state.borrow().slides.len();
+                {
+                    let mut s = state.borrow_mut();
+                    s.add_song_with_verses(song_type(), num, verses);
+                    if s.slides.len() > new_slide_idx {
+                        s.current_slide = new_slide_idx;
+                    }
+                }
+                number_entry.set_text("");
+                rebuild_verse_checks(&verse_box, &[]);
+                refresh_display(&state, &widgets);
+                refresh_liturgy(&state.borrow(), &liturgy_label);
+            }
+        });
+
+        let right_click = gtk::GestureClick::new();
+        right_click.set_button(gdk::BUTTON_SECONDARY);
+        right_click.connect_pressed(move |_, _, _, _| {
+            add_popover.popup();
+        });
+        add_btn.add_controller(right_click);
+    }
+
     // Arrow key navigation
     {
         let state = state.clone();
