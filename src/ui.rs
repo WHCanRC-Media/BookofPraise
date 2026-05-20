@@ -1117,6 +1117,15 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
 
     window.present();
 
+    // Open the editor panel on startup when requested (mainly for documentation
+    // screenshots). Deferred so the paned widget has a real width to split.
+    if cli.editor {
+        let edit_btn = edit_btn.clone();
+        glib::timeout_add_local_once(std::time::Duration::from_millis(150), move || {
+            edit_btn.set_active(true);
+        });
+    }
+
     // Closure for dialogs that should only appear after LilyPond is confirmed
     // available, so that multiple modal dialogs don't stack on top of each other.
     let run_post_lilypond_dialogs: Rc<dyn Fn()> = {

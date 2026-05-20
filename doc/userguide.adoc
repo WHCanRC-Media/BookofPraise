@@ -70,7 +70,7 @@ If you don't specify any songs, the application opens with Psalm 1.
 
 == Main Window Overview
 
-image::main-window-annotated.png[Main window,800]
+image::main-window.png[Main window,800]
 
 *Slide display* (centre)::
 The main area showing the current verse as sheet music. The title bar at the top of the slide shows the song name and verse numbers. The current verse number is shown in black; the other verses in grey.
@@ -79,7 +79,7 @@ The main area showing the current verse as sheet music. The title bar at the top
 Shows the list of songs you have added for the service (e.g., "Liturgy: Psalm 42 (1,2,3) | Hymn 1 (1,2)").
 
 *Navigation and toolbar* (bottom centre)::
-*Prev*/*Next* buttons with a slide counter (e.g., "3/12"), *Clear liturgy* to remove all songs, *Edit* to open the music editor, *Verify* to mark a verse as checked, and a *Lyrics ×* control to adjust the lyric font-size magnification.
+*Prev*/*Next* buttons with a slide counter (e.g., "3/12"), *Clear liturgy* to remove all songs, *Edit* to open the music editor, and a *Lyrics ×* control to adjust the lyric font-size magnification.
 
 *Song input* (bottom right)::
 Choose *Psalm* or *Hymn*, type a number, tick the verses you want, then click *Add*. Click *All* to select every verse and add it straight away.
@@ -131,7 +131,6 @@ The music was converted from scanned sheet music and may contain errors. The app
 . *Edit* -- When you spot a mistake in the notes or lyrics, open the editor and fix it right away.
 . *Submit* -- When you close the application after making changes, it offers to submit your corrections to the maintainer for review.
 . *Update* -- The maintainer reviews and accepts the corrections into a new release. The next time anyone starts the application, it downloads the updated songs automatically.
-. *Verify* -- After checking that the music for a song is correct, mark it as verified so others know it has been proofread.
 
 This cycle means that every congregation using the application benefits from corrections made anywhere. The sections below explain each step in detail.
 
@@ -140,7 +139,7 @@ This cycle means that every congregation using the application benefits from cor
 You can correct the music notation and lyrics directly in the app.
 Click *Edit* (bottom centre) to open the editor panel alongside the slide.
 
-image::editor-annotated.png[Editor panel,800]
+image::editor.png[Editor panel,800]
 
 The editor panel is laid out top-to-bottom on the right.
 
@@ -176,14 +175,6 @@ Shows the result after rendering. A spinner appears while the slide is being gen
 
 When you close the application after making changes, you will be asked whether to submit your corrections to the maintainer for review.
 If you choose *Yes*, the changes are uploaded automatically. No further action is needed on your part -- the maintainer will review the corrections and include them in a future update.
-
-== Verifying Songs
-
-Click *Verify* (bottom centre) to mark the current song's music as checked and correct.
-Verification is per song (not per verse): once you verify any verse of a song, the whole song is marked.
-The button changes to *Verified* once the mark has been recorded, and the status is saved in the song's `song.yaml` file.
-
-This helps keep track of which songs have been proofread.
 
 == OBS Integration
 

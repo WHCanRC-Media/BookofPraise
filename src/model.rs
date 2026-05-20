@@ -42,6 +42,10 @@ pub struct Cli {
     /// Force rendering every verse onto a single slide, overriding per-song split style.
     #[arg(long)]
     pub force_one_slide: bool,
+
+    /// Open the editor panel on startup.
+    #[arg(long)]
+    pub editor: bool,
 }
 
 // ── Data model ──────────────────────────────────────────────────────
