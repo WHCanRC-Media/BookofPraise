@@ -15,35 +15,56 @@ use crate::render_ly;
 use crate::rendering::{current_png_path, load_slide_texture, save_current_png, DEFAULT_RENDER_WIDTH};
 use crate::updater::{has_changes, check_for_update, collect_pr_files, create_pr_with_files, download_and_extract, generate_branch_name, should_report_hymn_usage, email_hymn_usage};
 
+// GTK widgets are GObject handles, so `.clone()` just bumps a refcount.
+// Bundling them keeps `refresh_display` and signal-closure setup readable.
+#[derive(Clone)]
+struct DisplayWidgets {
+    picture: gtk::Picture,
+    nav_label: gtk::Label,
+    spinner: gtk::Spinner,
+    error_label: gtk::Label,
+    verify_btn: gtk::Button,
+    mismatch_label: gtk::Label,
+}
+
+#[derive(Clone)]
+struct EditorWidgets {
+    notes_view: gtk::TextView,
+    lyrics_view: gtk::TextView,
+    notes_label: gtk::Label,
+    lyrics_label: gtk::Label,
+    split_style_dropdown: gtk::DropDown,
+}
+
 // ── UI helpers ──────────────────────────────────────────────────────
 
 /// Populate the editor panel's text views and entry fields from the current slide's
 /// LilyPond source files (`notes.ly`, `lyrics_N.ly`, `song.yaml`).
-fn load_editor_contents(state: &AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, notes_label: &gtk::Label, lyrics_label: &gtk::Label, split_style_dropdown: &gtk::DropDown) {
+fn load_editor_contents(state: &AppState, e: &EditorWidgets) {
     if let Some(slide) = state.slides.get(state.current_slide) {
         let notes_path = render_ly::notes_path_for_verse(&slide.song_dir, slide.current_verse);
         let lyrics_path = slide.song_dir.join(format!("lyrics_{}.ly", slide.current_verse));
 
         let notes_text = std::fs::read_to_string(&notes_path).unwrap_or_default();
-        notes_view.buffer().set_text(&notes_text);
+        e.notes_view.buffer().set_text(&notes_text);
 
         let lyrics_text = std::fs::read_to_string(&lyrics_path).unwrap_or_default();
-        lyrics_view.buffer().set_text(&lyrics_text);
+        e.lyrics_view.buffer().set_text(&lyrics_text);
 
         let meta = render_ly::read_song_meta(&slide.song_dir);
         let style_idx = render_ly::SplitStyle::ALL.iter()
             .position(|s| *s == meta.split_style)
             .unwrap_or(0);
-        split_style_dropdown.set_selected(style_idx as u32);
+        e.split_style_dropdown.set_selected(style_idx as u32);
 
-        notes_label.set_text(notes_path.file_name().unwrap_or_default().to_str().unwrap_or("notes.ly"));
-        lyrics_label.set_text(&format!("lyrics_{}.ly", slide.current_verse));
+        e.notes_label.set_text(notes_path.file_name().unwrap_or_default().to_str().unwrap_or("notes.ly"));
+        e.lyrics_label.set_text(&format!("lyrics_{}.ly", slide.current_verse));
     } else {
-        notes_view.buffer().set_text("");
-        lyrics_view.buffer().set_text("");
-        split_style_dropdown.set_selected(0);
-        notes_label.set_text("notes.ly");
-        lyrics_label.set_text("lyrics.ly");
+        e.notes_view.buffer().set_text("");
+        e.lyrics_view.buffer().set_text("");
+        e.split_style_dropdown.set_selected(0);
+        e.notes_label.set_text("notes.ly");
+        e.lyrics_label.set_text("lyrics.ly");
     }
 }
 
@@ -77,7 +98,7 @@ fn snapshot_originals(state: &mut AppState, song_dir: &std::path::Path) {
 
 /// Write the editor panel's current text back to the corresponding LilyPond
 /// source files on disk and mark the song directory as edited.
-fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics_view: &gtk::TextView, split_style_dropdown: &gtk::DropDown) {
+fn save_editor_contents(state: &mut AppState, e: &EditorWidgets) {
     let slide_info = state.slides.get(state.current_slide)
         .map(|s| (s.song_dir.clone(), s.current_verse));
     if let Some((song_dir, verse)) = slide_info {
@@ -86,15 +107,15 @@ fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics
         let notes_path = render_ly::notes_path_for_verse(&song_dir, verse);
         let lyrics_path = song_dir.join(format!("lyrics_{verse}.ly"));
 
-        let buf = notes_view.buffer();
+        let buf = e.notes_view.buffer();
         let notes_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
         let _ = std::fs::write(&notes_path, notes_text.as_str());
 
-        let buf = lyrics_view.buffer();
+        let buf = e.lyrics_view.buffer();
         let lyrics_text = buf.text(&buf.start_iter(), &buf.end_iter(), false);
         let _ = std::fs::write(&lyrics_path, lyrics_text.as_str());
 
-        let style_idx = split_style_dropdown.selected() as usize;
+        let style_idx = e.split_style_dropdown.selected() as usize;
         let split_style = render_ly::SplitStyle::ALL.get(style_idx)
             .cloned()
             .unwrap_or_default();
@@ -108,20 +129,15 @@ fn save_editor_contents(state: &mut AppState, notes_view: &gtk::TextView, lyrics
 /// slides in that song. The SVG cache is content-addressed so stale entries
 /// are harmless — new content will hash to a different filename.
 /// Save editor contents, detect what changed, and invalidate the appropriate caches.
-fn save_and_invalidate(
-    state: &mut AppState,
-    notes_view: &gtk::TextView,
-    lyrics_view: &gtk::TextView,
-    split_style_dropdown: &gtk::DropDown,
-) {
+fn save_and_invalidate(state: &mut AppState, e: &EditorWidgets) {
     let (notes_changed, split_changed) = if let Some(slide) = state.slides.get(state.current_slide) {
         let notes_path = render_ly::notes_path_for_verse(&slide.song_dir, slide.current_verse);
         let old = std::fs::read_to_string(&notes_path).unwrap_or_default();
-        let buf = notes_view.buffer();
+        let buf = e.notes_view.buffer();
         let new = buf.text(&buf.start_iter(), &buf.end_iter(), false);
 
         let old_meta = render_ly::read_song_meta(&slide.song_dir);
-        let new_style_idx = split_style_dropdown.selected() as usize;
+        let new_style_idx = e.split_style_dropdown.selected() as usize;
         let new_style = render_ly::SplitStyle::ALL.get(new_style_idx)
             .cloned()
             .unwrap_or_default();
@@ -130,7 +146,7 @@ fn save_and_invalidate(
         (false, false)
     };
 
-    save_editor_contents(state, notes_view, lyrics_view, split_style_dropdown);
+    save_editor_contents(state, e);
 
     if notes_changed || split_changed {
         // Notes or split style changed — part count may differ,
@@ -286,27 +302,19 @@ fn pump_prefetch(state_rc: &Rc<RefCell<AppState>>) {
 /// Update the main image display for the current slide. Loads a cached texture
 /// if available, otherwise spawns a background LilyPond render and polls for
 /// completion. Also updates the navigation label, verify button, and error state.
-fn refresh_display(
-    state_rc: &Rc<RefCell<AppState>>,
-    picture: &gtk::Picture,
-    nav_label: &gtk::Label,
-    spinner: &gtk::Spinner,
-    error_label: &gtk::Label,
-    verify_btn: &gtk::Button,
-    mismatch_label: &gtk::Label,
-) {
+fn refresh_display(state_rc: &Rc<RefCell<AppState>>, w: &DisplayWidgets) {
     let mut state = state_rc.borrow_mut();
-    spinner.stop();
-    spinner.set_visible(false);
-    error_label.set_visible(false);
-    mismatch_label.set_visible(false);
-    mismatch_label.set_text("");
+    w.spinner.stop();
+    w.spinner.set_visible(false);
+    w.error_label.set_visible(false);
+    w.mismatch_label.set_visible(false);
+    w.mismatch_label.set_text("");
 
     // Render at the picture's actual pixel width
-    let w = picture.width();
-    let scale = picture.scale_factor();
-    if w > 0 {
-        let pixel_width = (w as u32) * (scale as u32);
+    let pic_w = w.picture.width();
+    let scale = w.picture.scale_factor();
+    if pic_w > 0 {
+        let pixel_width = (pic_w as u32) * (scale as u32);
         state.render_width = pixel_width.max(DEFAULT_RENDER_WIDTH);
     }
     let render_width = state.render_width;
@@ -324,22 +332,22 @@ fn refresh_display(
     });
 
     if let Some((cache_key, render_key, song_dir, verse, part, idx, total)) = slide_info {
-        nav_label.set_text(&format!("{}/{}", idx + 1, total));
+        w.nav_label.set_text(&format!("{}/{}", idx + 1, total));
 
         // Update verify button state (song-wide music verification)
         if read_music_verified(&song_dir) {
-            verify_btn.set_label("Verified");
-            verify_btn.set_sensitive(false);
+            w.verify_btn.set_label("Verified");
+            w.verify_btn.set_sensitive(false);
         } else {
-            verify_btn.set_label("Verify");
-            verify_btn.set_sensitive(true);
+            w.verify_btn.set_label("Verify");
+            w.verify_btn.set_sensitive(true);
         }
 
         // Check for render error
         if let Some(err) = state.render_errors.get(&render_key) {
-            picture.set_paintable(None::<&gdk::Texture>);
-            error_label.set_text(err);
-            error_label.set_visible(true);
+            w.picture.set_paintable(None::<&gdk::Texture>);
+            w.error_label.set_text(err);
+            w.error_label.set_visible(true);
             return;
         }
 
@@ -349,7 +357,7 @@ fn refresh_display(
         });
         if let Some(tex) = tex {
             save_current_png(&tex);
-            picture.set_paintable(Some(&tex));
+            w.picture.set_paintable(Some(&tex));
             state.texture_cache.insert(cache_key, tex);
             if let Some(svg_path) = render_ly::svg_path_for_verse(&song_dir, verse, part) {
                 let n_parts = render_ly::num_parts_for_verse(&song_dir, verse);
@@ -362,8 +370,8 @@ fn refresh_display(
                         .map(|(s, v)| format!("src: {s}\nsvg: {v}"))
                         .collect::<Vec<_>>()
                         .join("\n");
-                    mismatch_label.set_text(&text);
-                    mismatch_label.set_visible(true);
+                    w.mismatch_label.set_text(&text);
+                    w.mismatch_label.set_visible(true);
                 }
             }
             drop(state);
@@ -381,24 +389,19 @@ fn refresh_display(
 
         // Show spinner and poll until the render completes (only if lilypond is available)
         if render_ly::lilypond_available() {
-            spinner.set_visible(true);
-            spinner.start();
-            picture.set_paintable(None::<&gdk::Texture>);
+            w.spinner.set_visible(true);
+            w.spinner.start();
+            w.picture.set_paintable(None::<&gdk::Texture>);
 
             let state_rc2 = state_rc.clone();
-            let picture2 = picture.clone();
-            let nav_label2 = nav_label.clone();
-            let spinner2 = spinner.clone();
-            let error_label2 = error_label.clone();
-            let verify_btn2 = verify_btn.clone();
-            let mismatch_label2 = mismatch_label.clone();
+            let w2 = w.clone();
             glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
                 let is_done = {
                     let state = state_rc2.borrow();
                     !state.rendering.contains(&render_key)
                 };
                 if is_done {
-                    refresh_display(&state_rc2, &picture2, &nav_label2, &spinner2, &error_label2, &verify_btn2, &mismatch_label2);
+                    refresh_display(&state_rc2, &w2);
                     glib::ControlFlow::Break
                 } else {
                     glib::ControlFlow::Continue
@@ -406,10 +409,10 @@ fn refresh_display(
             });
         }
     } else {
-        picture.set_paintable(None::<&gdk::Texture>);
-        nav_label.set_text("0/0");
-        verify_btn.set_label("Verify");
-        verify_btn.set_sensitive(false);
+        w.picture.set_paintable(None::<&gdk::Texture>);
+        w.nav_label.set_text("0/0");
+        w.verify_btn.set_label("Verify");
+        w.verify_btn.set_sensitive(false);
     }
 }
 
@@ -777,8 +780,26 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     vbox.append(&path_label);
     window.set_child(Some(&vbox));
 
+    // Bundle the widgets that get passed around together into refresh_display
+    // and signal closures.
+    let widgets = DisplayWidgets {
+        picture: picture.clone(),
+        nav_label: nav_label.clone(),
+        spinner: spinner.clone(),
+        error_label: error_label.clone(),
+        verify_btn: verify_btn.clone(),
+        mismatch_label: mismatch_label.clone(),
+    };
+    let editor = EditorWidgets {
+        notes_view: notes_view.clone(),
+        lyrics_view: lyrics_view.clone(),
+        notes_label: notes_label.clone(),
+        lyrics_label: lyrics_label.clone(),
+        split_style_dropdown: split_style_dropdown.clone(),
+    };
+
     // Initial display
-    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+    refresh_display(&state, &widgets);
     refresh_liturgy(&state.borrow(), &liturgy_label);
     // Defer the library prerender scan: with ~46k tier entries × ~700µs each
     // to verify "already cached", a synchronous scan blocks window.present for
@@ -835,46 +856,41 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     });
 
     // Prev / Next
-    connect!(prev_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, mismatch_label, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown], move |_| {
+    connect!(prev_btn, connect_clicked, [state, widgets, editor_panel, editor], move |_| {
         state.borrow_mut().navigate(-1);
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+        refresh_display(&state, &widgets);
         if editor_panel.is_visible() {
-            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
+            load_editor_contents(&state.borrow(), &editor);
         }
     });
-    connect!(next_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, mismatch_label, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown], move |_| {
+    connect!(next_btn, connect_clicked, [state, widgets, editor_panel, editor], move |_| {
         state.borrow_mut().navigate(1);
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+        refresh_display(&state, &widgets);
         if editor_panel.is_visible() {
-            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
+            load_editor_contents(&state.borrow(), &editor);
         }
     });
 
     // Clear
-    connect!(clear_btn, connect_clicked, [state, picture, nav_label, spinner, error_label, verify_btn, mismatch_label, liturgy_label], move |_| {
+    connect!(clear_btn, connect_clicked, [state, widgets, liturgy_label], move |_| {
         { let mut s = state.borrow_mut(); s.liturgy.clear(); s.rebuild_slides(); }
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+        refresh_display(&state, &widgets);
         refresh_liturgy(&state.borrow(), &liturgy_label);
     });
 
     // Edit toggle
-    connect!(edit_btn, connect_toggled, [state, editor_panel, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown], move |btn| {
+    connect!(edit_btn, connect_toggled, [state, editor_panel, editor], move |btn| {
         let active = btn.is_active();
         editor_panel.set_visible(active);
         if active {
-            load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
+            load_editor_contents(&state.borrow(), &editor);
         }
     });
 
     // Verify button
     {
         let state = state.clone();
-        let picture = picture.clone();
-        let nav_label = nav_label.clone();
-        let spinner = spinner.clone();
-        let error_label = error_label.clone();
-        let mismatch_label = mismatch_label.clone();
-        let verify_btn2 = verify_btn.clone();
+        let widgets = widgets.clone();
         verify_btn.connect_clicked(move |_| {
             {
                 let s = state.borrow();
@@ -882,7 +898,7 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
                     mark_music_verified(&slide.song_dir);
                 }
             }
-            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn2, &mismatch_label);
+            refresh_display(&state, &widgets);
         });
     }
 
@@ -921,13 +937,13 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
     });
 
     // Save & Re-render
-    connect!(save_btn, connect_clicked, [state, notes_view, lyrics_view, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn, mismatch_label], move |_| {
-        save_and_invalidate(&mut state.borrow_mut(), &notes_view, &lyrics_view, &split_style_dropdown);
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+    connect!(save_btn, connect_clicked, [state, editor, widgets], move |_| {
+        save_and_invalidate(&mut state.borrow_mut(), &editor);
+        refresh_display(&state, &widgets);
     });
 
     // Revert to original files from snapshot
-    connect!(revert_btn, connect_clicked, [state, notes_view, lyrics_view, notes_label, lyrics_label, split_style_dropdown, picture, nav_label, spinner, error_label, verify_btn, mismatch_label], move |_| {
+    connect!(revert_btn, connect_clicked, [state, editor, widgets], move |_| {
         {
             let mut s = state.borrow_mut();
             if let Some(slide) = s.slides.get(s.current_slide) {
@@ -947,13 +963,13 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                     }
                 }
             }
-            load_editor_contents(&s, &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
+            load_editor_contents(&s, &editor);
         }
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+        refresh_display(&state, &widgets);
     });
 
     // Lyrics magnification
-    connect!(lyrics_mag_spin, connect_value_changed, [state, picture, nav_label, spinner, error_label, verify_btn, mismatch_label], move |spin| {
+    connect!(lyrics_mag_spin, connect_value_changed, [state, widgets], move |spin| {
         render_ly::set_lyrics_magnification(spin.value());
         let mut p = crate::preferences::load();
         p.lyrics_magnification = spin.value();
@@ -962,31 +978,31 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
         }
         // Current-mag definition just changed → every item's tier may have moved.
         state.borrow_mut().invalidate_all_renders();
-        refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+        refresh_display(&state, &widgets);
         pump_prefetch(&state);
     });
 
     // All button — check all and add immediately
-    connect!(all_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, verify_btn, mismatch_label, liturgy_label], move |_| {
+    connect!(all_btn, connect_clicked, [state, verse_box, number_entry, song_type, widgets, liturgy_label], move |_| {
         check_all(&verse_box);
         if let Ok(num) = number_entry.text().parse::<u32>() {
             let verses = checked_verses(&verse_box);
             state.borrow_mut().add_song_with_verses(song_type(), num, verses);
             number_entry.set_text("");
             rebuild_verse_checks(&verse_box, &[]);
-            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+            refresh_display(&state, &widgets);
             refresh_liturgy(&state.borrow(), &liturgy_label);
         }
     });
 
     // Add button
-    connect!(add_btn, connect_clicked, [state, verse_box, number_entry, song_type, picture, nav_label, spinner, error_label, verify_btn, mismatch_label, liturgy_label], move |_| {
+    connect!(add_btn, connect_clicked, [state, verse_box, number_entry, song_type, widgets, liturgy_label], move |_| {
         if let Ok(num) = number_entry.text().parse::<u32>() {
             let verses = checked_verses(&verse_box);
             state.borrow_mut().add_song_with_verses(song_type(), num, verses);
             number_entry.set_text("");
             rebuild_verse_checks(&verse_box, &[]);
-            refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+            refresh_display(&state, &widgets);
             refresh_liturgy(&state.borrow(), &liturgy_label);
         }
     });
@@ -994,39 +1010,30 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
     // Arrow key navigation
     {
         let state = state.clone();
-        let picture = picture.clone();
-        let nav_label = nav_label.clone();
-        let spinner = spinner.clone();
-        let error_label = error_label.clone();
-        let mismatch_label = mismatch_label.clone();
-        let verify_btn = verify_btn.clone();
+        let widgets = widgets.clone();
+        let editor = editor.clone();
         let editor_panel = editor_panel.clone();
-        let notes_view = notes_view.clone();
-        let lyrics_view = lyrics_view.clone();
-        let notes_label = notes_label.clone();
-        let lyrics_label = lyrics_label.clone();
-        let split_style_dropdown = split_style_dropdown.clone();
         let kc = gtk::EventControllerKey::new();
         kc.connect_key_pressed(move |_, key, _, modifiers| {
             if key == gdk::Key::s && modifiers.contains(gdk::ModifierType::CONTROL_MASK) && editor_panel.is_visible() {
-                save_and_invalidate(&mut state.borrow_mut(), &notes_view, &lyrics_view, &split_style_dropdown);
-                refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+                save_and_invalidate(&mut state.borrow_mut(), &editor);
+                refresh_display(&state, &widgets);
                 return glib::Propagation::Stop;
             }
             match key {
                 gdk::Key::Left => {
                     state.borrow_mut().navigate(-1);
-                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+                    refresh_display(&state, &widgets);
                     if editor_panel.is_visible() {
-                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
+                        load_editor_contents(&state.borrow(), &editor);
                     }
                     glib::Propagation::Stop
                 }
                 gdk::Key::Right => {
                     state.borrow_mut().navigate(1);
-                    refresh_display(&state, &picture, &nav_label, &spinner, &error_label, &verify_btn, &mismatch_label);
+                    refresh_display(&state, &widgets);
                     if editor_panel.is_visible() {
-                        load_editor_contents(&state.borrow(), &notes_view, &lyrics_view, &notes_label, &lyrics_label, &split_style_dropdown);
+                        load_editor_contents(&state.borrow(), &editor);
                     }
                     glib::Propagation::Stop
                 }
@@ -1107,34 +1114,19 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
     let run_post_lilypond_dialogs: Rc<dyn Fn()> = {
         let window = window.clone();
         let state = state.clone();
-        let picture = picture.clone();
-        let nav_label = nav_label.clone();
-        let spinner = spinner.clone();
-        let error_label = error_label.clone();
-        let mismatch_label = mismatch_label.clone();
-        let verify_btn = verify_btn.clone();
+        let widgets = widgets.clone();
         let cli_update = cli.update;
         Rc::new(move || {
             // Closure for the update check, called after the hymn dialog (if any) is dismissed.
             let run_update_check: Rc<dyn Fn()> = {
                 let window = window.clone();
                 let state = state.clone();
-                let picture = picture.clone();
-                let nav_label = nav_label.clone();
-                let spinner = spinner.clone();
-                let error_label = error_label.clone();
-        let mismatch_label = mismatch_label.clone();
-                let verify_btn = verify_btn.clone();
+                let widgets = widgets.clone();
                 Rc::new(move || {
                     if !cli_update { return; }
                     let window = window.clone();
                     let state = state.clone();
-                    let picture = picture.clone();
-                    let nav_label = nav_label.clone();
-                    let spinner = spinner.clone();
-                    let error_label = error_label.clone();
-        let mismatch_label = mismatch_label.clone();
-                    let verify_btn = verify_btn.clone();
+                    let widgets = widgets.clone();
                     let (tx, rx) = std::sync::mpsc::channel();
                     std::thread::spawn(move || {
                         let _ = tx.send(check_for_update());
@@ -1151,12 +1143,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                                 );
                                 let window2 = window.clone();
                                 let state2 = state.clone();
-                                let picture2 = picture.clone();
-                                let nav_label2 = nav_label.clone();
-                                let spinner2 = spinner.clone();
-                                let error_label2 = error_label.clone();
-                let mismatch_label2 = mismatch_label.clone();
-                                let verify_btn2 = verify_btn.clone();
+                                let widgets2 = widgets.clone();
                                 let asset_url = Rc::new(asset_url);
                                 dialog.connect_response(move |dlg, resp| {
                                     dlg.close();
@@ -1178,12 +1165,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                                         });
 
                                         let state3 = state2.clone();
-                                        let picture3 = picture2.clone();
-                                        let nav_label3 = nav_label2.clone();
-                                        let spinner3 = spinner2.clone();
-                                        let error_label3 = error_label2.clone();
-                                        let mismatch_label3 = mismatch_label2.clone();
-                                        let verify_btn3 = verify_btn2.clone();
+                                        let widgets3 = widgets2.clone();
                                         glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
                                             match rx2.try_recv() {
                                                 Ok(Ok(())) => {
@@ -1196,7 +1178,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                                                         render_ly::invalidate_all_combined_cache();
                                                         s.rebuild_slides();
                                                     }
-                                                    refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3, &mismatch_label3);
+                                                    refresh_display(&state3, &widgets3);
                                                     glib::ControlFlow::Break
                                                 }
                                                 Ok(Err(e)) => {
@@ -1274,12 +1256,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
     let proceed_after_copyright: Rc<dyn Fn()> = {
         let window = window.clone();
         let state = state.clone();
-        let picture = picture.clone();
-        let nav_label = nav_label.clone();
-        let spinner = spinner.clone();
-        let error_label = error_label.clone();
-        let mismatch_label = mismatch_label.clone();
-        let verify_btn = verify_btn.clone();
+        let widgets = widgets.clone();
         let run_post_lilypond_dialogs = run_post_lilypond_dialogs.clone();
         Rc::new(move || {
             if !render_ly::lilypond_available() {
@@ -1294,12 +1271,7 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                 dialog.add_button("Yes", gtk::ResponseType::Yes);
                 let window2 = window.clone();
                 let state2 = state.clone();
-                let picture2 = picture.clone();
-                let nav_label2 = nav_label.clone();
-                let spinner2 = spinner.clone();
-                let error_label2 = error_label.clone();
-                let mismatch_label2 = mismatch_label.clone();
-                let verify_btn2 = verify_btn.clone();
+                let widgets2 = widgets.clone();
                 let run_post_lilypond_dialogs = run_post_lilypond_dialogs.clone();
                 dialog.connect_response(move |dlg, resp| {
                     if resp == gtk::ResponseType::Yes {
@@ -1313,19 +1285,14 @@ Put <tt>(</tt> after the first note and <tt>)</tt> after the last note:
                         let dlg2 = dlg.clone();
                         let window3 = window2.clone();
                         let state3 = state2.clone();
-                        let picture3 = picture2.clone();
-                        let nav_label3 = nav_label2.clone();
-                        let spinner3 = spinner2.clone();
-                        let error_label3 = error_label2.clone();
-                        let mismatch_label3 = mismatch_label2.clone();
-                        let verify_btn3 = verify_btn2.clone();
+                        let widgets3 = widgets2.clone();
                         let post_dialogs = run_post_lilypond_dialogs.clone();
                         glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
                             match rx.try_recv() {
                                 Ok(Ok(())) => {
                                     dlg2.hide();
                                     dlg2.destroy();
-                                    refresh_display(&state3, &picture3, &nav_label3, &spinner3, &error_label3, &verify_btn3, &mismatch_label3);
+                                    refresh_display(&state3, &widgets3);
                                     pump_prefetch(&state3);
                                     post_dialogs();
                                     glib::ControlFlow::Break
