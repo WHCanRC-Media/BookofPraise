@@ -864,10 +864,12 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     });
 
     // Edit toggle
-    connect!(edit_btn, connect_toggled, [state, editor_panel, editor], move |btn| {
+    connect!(edit_btn, connect_toggled, [state, editor_panel, editor, hpaned], move |btn| {
         let active = btn.is_active();
         editor_panel.set_visible(active);
         if active {
+            // Default to a 50/50 split; the user can still drag the divider.
+            hpaned.set_position(hpaned.width() / 2);
             load_editor_contents(&state.borrow(), &editor);
         }
     });
