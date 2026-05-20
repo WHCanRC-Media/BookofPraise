@@ -404,20 +404,72 @@ fn refresh_display(state_rc: &Rc<RefCell<AppState>>, w: &DisplayWidgets) {
     }
 }
 
-/// Update the liturgy summary label with the current list of songs and verses.
-fn refresh_liturgy(state: &AppState, label: &gtk::Label) {
+/// Byte range of one verse link in the rendered liturgy text (layout-text
+/// indices, used for Pango hit-testing).
+struct LinkRange {
+    start: i32,
+    end: i32,
+    song_dir: String,
+    verse: u32,
+}
+
+/// Build the liturgy label's Pango markup and the byte ranges of its verse
+/// links. If `hovered` matches one of the verses, that verse is wrapped in
+/// `<b>` so it renders bold (GTK doesn't apply CSS font-weight to Pango
+/// markup links, so we rebuild the markup on hover instead).
+fn build_liturgy_markup(state: &AppState, hovered: Option<(&str, u32)>) -> (String, Vec<LinkRange>) {
     if state.liturgy.is_empty() {
+        return (String::new(), Vec::new());
+    }
+    let mut markup = String::from("Liturgy: ");
+    let mut pos = markup.len() as i32;
+    let mut ranges = Vec::new();
+
+    for (i, entry) in state.liturgy.iter().enumerate() {
+        if i > 0 {
+            markup.push_str(" | ");
+            pos += 3;
+        }
+        let name = format!("{} (", entry.song_name);
+        markup.push_str(&glib::markup_escape_text(&name));
+        pos += name.len() as i32;
+
+        for (j, &v) in entry.verses.iter().enumerate() {
+            if j > 0 {
+                markup.push(',');
+                pos += 1;
+            }
+            let vs = v.to_string();
+            let start = pos;
+            let is_hovered = hovered.is_some_and(|(d, hv)| d == entry.song_dir && hv == v);
+            if is_hovered {
+                markup.push_str(&format!("<a href=\"{}:{}\"><b>{}</b></a>", entry.song_dir, v, vs));
+            } else {
+                markup.push_str(&format!("<a href=\"{}:{}\">{}</a>", entry.song_dir, v, vs));
+            }
+            pos += vs.len() as i32;
+            ranges.push(LinkRange {
+                start,
+                end: pos,
+                song_dir: entry.song_dir.clone(),
+                verse: v,
+            });
+        }
+        markup.push(')');
+        pos += 1;
+    }
+    (markup, ranges)
+}
+
+/// Update the liturgy summary label with the current list of songs and verses.
+/// Each verse number is rendered as a clickable Pango link; see the
+/// `connect_activate_link` and motion-tracking handlers in `build_ui`.
+fn refresh_liturgy(state: &AppState, label: &gtk::Label) {
+    let (markup, _) = build_liturgy_markup(state, None);
+    if markup.is_empty() {
         label.set_text("");
     } else {
-        let parts: Vec<String> = state
-            .liturgy
-            .iter()
-            .map(|e| {
-                let vs = e.verses.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(",");
-                format!("{} ({})", e.song_name, vs)
-            })
-            .collect();
-        label.set_text(&format!("Liturgy: {}", parts.join(" | ")));
+        label.set_markup(&markup);
     }
 }
 
@@ -674,10 +726,25 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     hpaned.set_resize_end_child(true);
     hpaned.set_vexpand(true);
 
-    // Liturgy label
+    // Liturgy label — verse links navigate on click; bold-on-hover is
+    // driven by a motion controller wired up below. Override the default
+    // blue link color so verses read as normal text.
     let liturgy_label = gtk::Label::new(None);
     liturgy_label.set_xalign(0.0);
     liturgy_label.set_wrap(true);
+    liturgy_label.add_css_class("liturgy-label");
+    let liturgy_css = gtk::CssProvider::new();
+    // Use `inherit` rather than @theme_fg_color so the rule survives custom
+    // (e.g. Windows) themes that don't define the Adwaita-named colors.
+    liturgy_css.load_from_data(
+        ".liturgy-label link, .liturgy-label link:hover, .liturgy-label link:visited \
+         { color: inherit; text-decoration: none; }",
+    );
+    gtk::style_context_add_provider_for_display(
+        &gdk::Display::default().expect("display"),
+        &liturgy_css,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
 
     // Navigation row
     let prev_btn = gtk::Button::with_label("Prev");
@@ -786,6 +853,96 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     // Initial display
     refresh_display(&state, &widgets);
     refresh_liturgy(&state.borrow(), &liturgy_label);
+
+    // Clicking a verse link in the liturgy label jumps to that verse.
+    // Hrefs are "song_dir:verse"; we resolve to the first matching slide.
+    {
+        let state = state.clone();
+        let widgets = widgets.clone();
+        liturgy_label.connect_activate_link(move |_, uri| {
+            if let Some((song_dir, verse_str)) = uri.split_once(':') {
+                if let Ok(verse) = verse_str.parse::<u32>() {
+                    let idx = {
+                        let s = state.borrow();
+                        s.slides.iter().position(|sl| {
+                            sl.song_dir
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .is_some_and(|n| n == song_dir)
+                                && sl.current_verse == verse
+                        })
+                    };
+                    if let Some(i) = idx {
+                        state.borrow_mut().current_slide = i;
+                        refresh_display(&state, &widgets);
+                    }
+                }
+            }
+            glib::Propagation::Stop
+        });
+    }
+
+    // Bold the hovered verse link. GTK4 does not propagate CSS font-weight
+    // to Pango markup links, so we hit-test on motion and rebuild the markup
+    // with <b> around whichever verse the cursor is over.
+    {
+        let label = liturgy_label.clone();
+        let state = state.clone();
+        let last_hover: Rc<RefCell<Option<(String, u32)>>> = Rc::new(RefCell::new(None));
+        let motion = gtk::EventControllerMotion::new();
+        {
+            let label = label.clone();
+            let state = state.clone();
+            let last_hover = last_hover.clone();
+            motion.connect_motion(move |_, x, y| {
+                let s = state.borrow();
+                let (_, ranges) = build_liturgy_markup(&s, None);
+                if ranges.is_empty() {
+                    return;
+                }
+                let layout = label.layout();
+                let (off_x, off_y) = label.layout_offsets();
+                let lx = (x as i32 - off_x) * gtk::pango::SCALE;
+                let ly = (y as i32 - off_y) * gtk::pango::SCALE;
+                let (inside, index, _) = layout.xy_to_index(lx, ly);
+                let new_hover = if inside {
+                    ranges
+                        .iter()
+                        .find(|r| r.start <= index && index < r.end)
+                        .map(|r| (r.song_dir.clone(), r.verse))
+                } else {
+                    None
+                };
+                let mut h = last_hover.borrow_mut();
+                if *h != new_hover {
+                    let (markup, _) = build_liturgy_markup(
+                        &s,
+                        new_hover.as_ref().map(|(d, v)| (d.as_str(), *v)),
+                    );
+                    if markup.is_empty() {
+                        label.set_text("");
+                    } else {
+                        label.set_markup(&markup);
+                    }
+                    *h = new_hover;
+                }
+            });
+        }
+        {
+            let label = label.clone();
+            let state = state.clone();
+            let last_hover = last_hover.clone();
+            motion.connect_leave(move |_| {
+                let mut h = last_hover.borrow_mut();
+                if h.is_some() {
+                    *h = None;
+                    refresh_liturgy(&state.borrow(), &label);
+                }
+            });
+        }
+        liturgy_label.add_controller(motion);
+    }
+
     // Defer the library prerender scan: with ~46k tier entries × ~700µs each
     // to verify "already cached", a synchronous scan blocks window.present for
     // ~20s on a warm cache. Skip entirely when no slides are loaded (nothing
