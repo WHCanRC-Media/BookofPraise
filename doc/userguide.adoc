@@ -116,6 +116,9 @@ The liturgy is the list of songs and verses for a service. It is shown in the su
 . Tick the verses you want.
 . Click *Add*.
 
+The song is added to the liturgy without changing the current slide.
+To add the song and jump straight to its first slide, right-click *Add* and choose *Add and go*.
+
 === Adding All Verses
 
 Click *All* (bottom right) to tick every verse and add the song in one step.
