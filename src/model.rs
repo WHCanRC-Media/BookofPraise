@@ -144,20 +144,6 @@ fn scan_verses(dir: &Path) -> Vec<u32> {
     verses.into_iter().collect()
 }
 
-/// Whether the music for this song has been visually verified.
-pub fn read_music_verified(song_dir: &Path) -> bool {
-    crate::render_ly::read_song_meta(song_dir).verified
-}
-
-/// Mark the music for this song as verified and persist `song.yaml`.
-pub fn mark_music_verified(song_dir: &Path) {
-    let mut meta = crate::render_ly::read_song_meta(song_dir);
-    if !meta.verified {
-        meta.verified = true;
-        crate::render_ly::write_song_meta(song_dir, &meta);
-    }
-}
-
 /// Hymns that require usage tracking (e.g. for copyright/licensing reporting).
 const TRACKED_HYMNS: &[u32] = &[38, 50, 66, 79];
 

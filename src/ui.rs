@@ -8,7 +8,7 @@ use gtk::glib;
 use gtk::prelude::*;
 
 use crate::model::{
-    base_dir, read_music_verified, mark_music_verified, AppState, SongLibrary, SongType,
+    base_dir, AppState, SongLibrary, SongType,
 };
 use crate::lyric_check;
 use crate::render_ly;
@@ -23,7 +23,6 @@ struct DisplayWidgets {
     nav_label: gtk::Label,
     spinner: gtk::Spinner,
     error_label: gtk::Label,
-    verify_btn: gtk::Button,
     mismatch_label: gtk::Label,
 }
 
@@ -301,7 +300,7 @@ fn pump_prefetch(state_rc: &Rc<RefCell<AppState>>) {
 
 /// Update the main image display for the current slide. Loads a cached texture
 /// if available, otherwise spawns a background LilyPond render and polls for
-/// completion. Also updates the navigation label, verify button, and error state.
+/// completion. Also updates the navigation label and error state.
 fn refresh_display(state_rc: &Rc<RefCell<AppState>>, w: &DisplayWidgets) {
     let mut state = state_rc.borrow_mut();
     w.spinner.stop();
@@ -333,15 +332,6 @@ fn refresh_display(state_rc: &Rc<RefCell<AppState>>, w: &DisplayWidgets) {
 
     if let Some((cache_key, render_key, song_dir, verse, part, idx, total)) = slide_info {
         w.nav_label.set_text(&format!("{}/{}", idx + 1, total));
-
-        // Update verify button state (song-wide music verification)
-        if read_music_verified(&song_dir) {
-            w.verify_btn.set_label("Verified");
-            w.verify_btn.set_sensitive(false);
-        } else {
-            w.verify_btn.set_label("Verify");
-            w.verify_btn.set_sensitive(true);
-        }
 
         // Check for render error
         if let Some(err) = state.render_errors.get(&render_key) {
@@ -411,8 +401,6 @@ fn refresh_display(state_rc: &Rc<RefCell<AppState>>, w: &DisplayWidgets) {
     } else {
         w.picture.set_paintable(None::<&gdk::Texture>);
         w.nav_label.set_text("0/0");
-        w.verify_btn.set_label("Verify");
-        w.verify_btn.set_sensitive(false);
     }
 }
 
@@ -697,7 +685,6 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
     let next_btn = gtk::Button::with_label("Next");
     let clear_btn = gtk::Button::with_label("Clear liturgy");
     let edit_btn = gtk::ToggleButton::with_label("Edit");
-    let verify_btn = gtk::Button::with_label("Verify");
     let lyrics_mag_label = gtk::Label::new(Some("Lyrics ×"));
     let lyrics_mag_spin = gtk::SpinButton::with_range(0.5, 3.0, 0.1);
     lyrics_mag_spin.set_digits(1);
@@ -715,7 +702,6 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
         clear_btn.upcast_ref(),
         spacer.upcast_ref(),
         edit_btn.upcast_ref(),
-        verify_btn.upcast_ref(),
         lyrics_mag_label.upcast_ref(),
         lyrics_mag_spin.upcast_ref(),
     ] {
@@ -787,7 +773,6 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
         nav_label: nav_label.clone(),
         spinner: spinner.clone(),
         error_label: error_label.clone(),
-        verify_btn: verify_btn.clone(),
         mismatch_label: mismatch_label.clone(),
     };
     let editor = EditorWidgets {
@@ -886,21 +871,6 @@ pub fn build_ui(app: &gtk::Application, cli: &crate::model::Cli) {
             load_editor_contents(&state.borrow(), &editor);
         }
     });
-
-    // Verify button
-    {
-        let state = state.clone();
-        let widgets = widgets.clone();
-        verify_btn.connect_clicked(move |_| {
-            {
-                let s = state.borrow();
-                if let Some(slide) = s.slides.get(s.current_slide) {
-                    mark_music_verified(&slide.song_dir);
-                }
-            }
-            refresh_display(&state, &widgets);
-        });
-    }
 
     // Notes syntax help
     connect!(notes_help_btn, connect_clicked, [window], move |_| {

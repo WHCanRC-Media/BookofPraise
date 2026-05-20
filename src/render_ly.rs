@@ -158,12 +158,6 @@ pub struct SongMeta {
     pub composer: Option<String>,
     #[serde(default)]
     pub split_style: SplitStyle,
-    #[serde(
-        default,
-        deserialize_with = "deserialize_verified",
-        skip_serializing_if = "std::ops::Not::not"
-    )]
-    pub verified: bool,
 }
 
 impl Default for SongMeta {
@@ -171,23 +165,8 @@ impl Default for SongMeta {
         SongMeta {
             composer: None,
             split_style: SplitStyle::Default,
-            verified: false,
         }
     }
-}
-
-/// Accept either the new `verified: bool` form or the legacy per-verse
-/// map (`verified: { 1: 1, 2: 1, ... }`). Any non-empty map collapses to `true`.
-fn deserialize_verified<'de, D>(de: D) -> Result<bool, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let v = serde_yaml::Value::deserialize(de)?;
-    Ok(match v {
-        serde_yaml::Value::Bool(b) => b,
-        serde_yaml::Value::Mapping(m) => !m.is_empty(),
-        _ => false,
-    })
 }
 
 /// Read song metadata from `song.yaml` in the given directory.
@@ -206,7 +185,6 @@ pub fn read_song_meta(song_dir: &Path) -> SongMeta {
         SongMeta {
             composer,
             split_style: SplitStyle::Default,
-            verified: false,
         }
     }
 }
