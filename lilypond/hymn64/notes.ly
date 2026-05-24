@@ -20,7 +20,7 @@ melody = \relative c' {
   f2 bes4 bes4 a2 g2 a4 bes4 c4 c4 d2 c2 r2 \break
 
   % Line 6
-  c2 f,4 g4 a2 f2 g4 a4 bes4 a4 g2 a2 \break
+  c2 f,4 g4 a2 f2 g4 a4 bes4 a4 g2 a2 r2 \break
 
   % Line 7
   a2 a4 a4 g2 a2 bes4 a4 g4 f4 e2 c2 \break
