@@ -32,5 +32,5 @@ melody = \relative c' {
   g4 f4 g4 f4 g4 a4 bes2 \break
 
   % Line 10
-  c4 d4 ees4 d4 c4 b4 c2 \bar "|."
+  c4 d4 ees4 d4 c4 b4 c2 \fermata \bar "|."
 }

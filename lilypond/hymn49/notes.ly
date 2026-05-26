@@ -8,7 +8,7 @@ melody = \relative c' {
   f4 bes4 f4 g4 g4 f4 ees4 d4 \break
 
   % Line 2
-  d4 ees4 d4 c4 f4 f4 ees4 f4 \break
+  d4 ees4 d4 c4 f4 f4 ees4 f4 \breathe \break
 
   % Line 3
   f4 bes4 c4 d4 bes4 ees4 d4 c4 \break
