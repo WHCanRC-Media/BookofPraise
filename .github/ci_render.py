@@ -231,7 +231,10 @@ def cmd_render(args):
 
 def cmd_comment(args):
     """Generate markdown PR comment body from a list of PNG paths."""
-    pngs = [line.strip() for line in sys.stdin if line.strip().endswith(".png")]
+    pngs = [
+        line.strip() for line in sys.stdin
+        if line.strip().endswith("_diff.png")
+    ]
     if not pngs:
         return
 
@@ -243,16 +246,12 @@ def cmd_comment(args):
         parts = png.split("/")
         song = parts[-2]
         filename = os.path.basename(png).replace(".png", "")
-        is_diff = filename.endswith("_diff")
         verse = filename.replace("_diff", "")
         if song != last_song:
             body += f"### {song}\n"
             last_song = song
         png_url = f"https://github.com/{args.repo}/raw/{args.branch}/{png}"
-        if is_diff:
-            body += f"**Verse {verse} (diff)**\n![{song} v{verse} diff]({png_url})\n"
-        else:
-            body += f"**Verse {verse}**\n![{song} v{verse}]({png_url})\n"
+        body += f"**Verse {verse}**\n![{song} v{verse} diff]({png_url})\n"
 
     body += "\n\U0001f7e2 Added \U0001f534 Removed \u26aa Unchanged\n"
     print(body)
