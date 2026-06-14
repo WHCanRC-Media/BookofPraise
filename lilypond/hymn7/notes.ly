@@ -14,7 +14,7 @@ melody = \relative c' {
   f4 d4 bes'4 f4 d'4. c8 bes4 a4 \break
 
   % Line 4
-  bes4 a4 g4 a4( bes4) a4 g4 f2 \break
+  bes4 a4 g4 a8( bes8) a4 g4 f2 \break
 
   % Line 5
   c'4 c8 a4 f4 d'4. c8 bes4 g4 \break
