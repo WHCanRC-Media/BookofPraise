@@ -1,3 +1,2 @@
 composer: Geneva, 1543/1551
-split_style: default
-verified: true
+split_style: combine lines
