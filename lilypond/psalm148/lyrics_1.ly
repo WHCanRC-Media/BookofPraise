@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O praise the Lord! His name ex -- alt!
+  O praise the \markup { \smallCaps "Lord!" } His name ex -- alt!
 Praise him from high -- est heav -- en's vault.
 You an -- gels, from your loft -- y post
 praise him with all the heaven -- ly host.

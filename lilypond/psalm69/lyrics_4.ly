@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Lord, for your house I am con -- sumed with zeal;
+  \markup { \smallCaps "Lord," } for your house I am con -- sumed with zeal;
 taunts meant for you have now on me de -- scen -- ded.
 I weep and fast. By none I am de -- fend -- ed;
 deep are the shame and sor -- row that I feel.

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  In your light we see light, O Lord;
+  In your light we see light, O \markup { \smallCaps "Lord;" }
 you are the fount from which is poured
 life boun -- ti -- ful and pre -- cious.
 Let not your ca -- ring love de -- part

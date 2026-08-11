@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Lord, re -- buke me not in an -- ger,
+  \markup { \smallCaps "Lord," } re -- buke me not in an -- ger,
 and no lon -- ger
 let your wrath on me de -- scend.
 You have pierced me with your ar -- rows,

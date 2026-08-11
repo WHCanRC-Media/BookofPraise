@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Those hop -- ing in the Lord for vin -- di -- ca -- tion
+  Those hop -- ing in the \markup { \smallCaps "Lord" } for vin -- di -- ca -- tion
 will as their her -- i -- tage pos -- sess the land.
 But e -- vil -- do -- ers, to their con -- ster -- na -- tion,
 will be cut off by God's al -- migh -- ty hand.

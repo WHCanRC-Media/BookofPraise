@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  They dis -- o -- beyed the Lord's com -- mand
+  They dis -- o -- beyed the \markup { \concat { \smallCaps "Lord" "'s" } } com -- mand
 to slay the peo -- ples of the land,
 but, min -- gling with the heath -- en nations,
 they learned their wick -- ed cus -- toms there,

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Like Or -- eb and like Ze -- eb, Lord,
+  Like Or -- eb and like Ze -- ëb, \markup { \smallCaps "Lord," }
 let foes re -- ceive their due re -- ward;
 like Ze -- bah and Zal -- mun -- nah, hum -- bled
 when to their down -- fall they both stum -- "bled –"

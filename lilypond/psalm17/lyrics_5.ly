@@ -1,10 +1,10 @@
 verse = \lyricmode {
   They like a li -- on crave their prey.
-Rise up, O Lord, rise up to show them
+Rise up, O \markup { \smallCaps "Lord," } rise up to show them
 the sword you draw to o -- ver -- throw them.
 Now with your hand snatch me a -- way
 from those who trust in earth -- ly trea -- sure,
 who have in this life their re -- ward.
-O gorge them and their off -- spring, Lord,
+O gorge them and their off -- spring, \markup { \smallCaps "Lord," }
 with bit -- ter fruits in full -- est mea -- sure.
 }

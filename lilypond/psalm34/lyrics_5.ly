@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Come, chil -- dren, hear my voice;
-you I will teach to fear the Lord.
+you I will teach to fear the \markup { \smallCaps "Lord." }
 Who is the man de -- sir -- ing life,
 its pleas -- ures and re -- wards?
 Keep then your tongue from wrong

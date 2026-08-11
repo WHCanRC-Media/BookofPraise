@@ -1,6 +1,6 @@
 verse = \lyricmode {
   I praise your name, for it is good;
-Lord, you have saved me from my suf -- fering.
+\markup { \smallCaps "Lord," } you have saved me from my suf -- fering.
 To you I bring my free -- will of -- fering,
 my sac -- ri -- fice of grat -- i -- tude.
 You are the one who set me free

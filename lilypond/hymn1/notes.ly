@@ -35,7 +35,7 @@ melody = \relative c' {
   a4 b4 c8 c8 b8 a8 b4 \break
 
   % Line 11
-  a8( b8) c8 c8 b8 a8 b4 e,4. e8 f8 g8 a4 a8 a8 g4( f4) e2 r4 \break
+  a8 b8 c8 c8 b8 a8 b4 e,4. e8 f8 g8 a4 a8 a8 g4( f4) e2 r4 \break
 
   % Line 12
   e4 e4 f8 g8 a4. a8 b4. b8 b8 b8 a8 b8 c2 r4 \break

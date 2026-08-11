@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Lord, do not drag me off to per -- ish
+  \markup { \smallCaps "Lord," } do not drag me off to per -- ish
 with those who sin and e -- vil cher -- ish;
 let me not share their con -- dem -- na -- tion.
 They are a wic -- ked gen -- er -- a -- tion;

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  I said, \"O Lord, be mer -- ci -- ful to me;
+  I said, \"O \markup { \smallCaps "Lord," } be mer -- ci -- ful to me;
 heal me, for I have sinned.\"
 See how my en -- e -- mies ma -- li -- cious -- ly
 wait for my life to end.

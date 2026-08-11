@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The Migh -- ty One, the Lord, pro -- claims his word;
+  The Migh -- ty One, the \markup { \smallCaps "Lord," } pro -- claims his word;
 God speaks, and ev -- ery -- where his voice is heard.
 He from the ri -- sing to the set -- ting sun
 calls all the earth and sum -- mons ev -- ery -- one.

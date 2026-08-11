@@ -1,6 +1,6 @@
 verse = \lyricmode {
   Their path be slip -- p͜e͜ry, dark with woe,
-the An -- gel of the Lord their foe.
+the An -- gel of the \markup { \smallCaps "Lord" } their foe.
 They with -- out cause to -- geth -- er band -- ed
 to hide a net for me in -- tend -- ed.
 They tried to trap me in a pit;

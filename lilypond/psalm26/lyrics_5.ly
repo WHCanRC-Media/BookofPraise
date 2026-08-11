@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O Lord, I love your house,
+  O \markup { \smallCaps "Lord," } I love your house,
 the place that you once chose
 to be your home in Is -- ra -- el.
 I stand in a -- do -- ra -- tion,

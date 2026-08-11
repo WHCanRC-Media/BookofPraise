@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The Lord's my ref -- uge! Why do you keep say -- ing,
+  The \markup { \concat { \smallCaps "Lord" "'s" } } my ref -- uge! Why do you keep say -- ing,
 \"Flee like a bird that to the moun -- tain wings.
 For look, the wick -- ed bend their bows for slay -- ing;
 they fit their sharp -- ened ar -- rows to the strings

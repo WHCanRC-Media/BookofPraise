@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Lord, be to me a rock and for -- tress,
+  \markup { \smallCaps "Lord," } be to me a rock and for -- tress,
 and is -- sue your com -- mand
 to save me from the hand
 of those who sav -- age -- ly at -- tack me.

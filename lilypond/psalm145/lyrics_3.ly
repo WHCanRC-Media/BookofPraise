@@ -1,7 +1,7 @@
 verse = \lyricmode {
   You show to all your good -- ness and your grace;
 you all your crea -- tures in your love em -- brace.
-Your ten -- der mer -- cy they, O Lord, will bless,
+Your ten -- der mer -- cy they, O \markup { \smallCaps "Lord," } will bless,
 and all your saints will praise your faith -- ful -- ness.
 They will ex -- tol your king -- dom's power and gran -- deur,
 your migh -- ty acts and your ma -- jes -- tic splen -- dour,

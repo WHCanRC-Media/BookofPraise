@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Lord, how a -- bun -- dant is your good -- ness,
+  \markup { \smallCaps "Lord," } how a -- bun -- dant is your good -- ness,
 which is re -- served for all
 who fear you and re -- call
 what you have done for those who serve you,

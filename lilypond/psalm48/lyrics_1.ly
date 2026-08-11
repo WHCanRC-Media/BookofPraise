@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Great is the Lord! Him great -- ly laud
+  Great is the \markup { \smallCaps "Lord!" } Him great -- ly laud
 with -- in the cit -- y of our God.
 To him your thank -- ful prais -- es ren -- der.
 His ho -- ly moun -- tain soars in splen -- dour.

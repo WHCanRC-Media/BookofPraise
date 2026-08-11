@@ -3,7 +3,7 @@ verse = \lyricmode {
 they will come and bow be -- fore you,
 bring -- ing glo -- ry to your name,
 for none e -- quals you in fame.
-Lord su -- preme in might and splen -- dour,
+\markup { \smallCaps "Lord" } su -- preme in might and splen -- dour,
 glo -- rious are your works of won -- der;
 glo -- rious is your heav -- e͜nly throne.
 You are "God –" yes, you a -- lone.

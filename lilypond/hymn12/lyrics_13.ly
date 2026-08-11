@@ -1,5 +1,5 @@
 verse = \lyricmode {
- \"My hand to heave͜n up -- lift -- ed, I, the Lord,
+ \"My hand to heave͜n up -- lift -- ed, I, the \markup { \smallCaps "Lord," }
 now swear that, as I live for -- ev -- er,
 I'll whet my great and glit -- te͜ring sword
 to bring to nought the foe's en -- dea -- vour;

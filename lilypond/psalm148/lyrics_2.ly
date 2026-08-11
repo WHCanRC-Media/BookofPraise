@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Let them ex -- tol the Lord, for he
+  Let them ex -- tol the \markup { \smallCaps "Lord," } for he
 cre -- a -- ted them by his de -- cree,
 and by a law that will en -- dure
 he fixed their bounds for ev -- er -- more.

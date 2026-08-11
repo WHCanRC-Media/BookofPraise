@@ -5,10 +5,10 @@ the moun -- tains quaked and trem -- bled.
 From Si -- nai, God vic -- to -- rious -- ly
 came down in -- to his sanc -- tu -- ary;
 in Zi -- on all as -- sem -- bled.
-When you, O Lord, went up a -- gain
+When you, O \markup { \smallCaps "Lord," } went up a -- gain
 you led your cap -- tives in your train
 with trib -- ute in a -- bun -- dance;
 gifts, too, from those who reb -- els "were –"
-that you, Lord God, for ev -- er -- more,
+that you, \markup { \smallCaps "Lord" } God, for ev -- er -- more,
 might dwell there in res -- plen -- dence.
 }

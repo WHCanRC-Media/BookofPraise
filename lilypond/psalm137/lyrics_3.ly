@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Re -- mem -- ber, Lord, how E -- dom showed no pi -- ty
+  Re -- mem -- ber, \markup { \smallCaps "Lord," } how E -- dom showed no pi -- ty
 that day when Bab -- y -- lon razed Zi -- on's ci -- ty,
 how E -- sau's sons re -- joiced and said to them,
 \"Tear down, tear down all of Je -- ru -- sa -- lem.

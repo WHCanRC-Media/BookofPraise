@@ -1,6 +1,6 @@
 verse = \lyricmode {
   When in their steps they fal -- ter and are sha -- ken,
-the Lord him -- self will grasp them by the hand.
+the \markup { \smallCaps "Lord" } him -- self will grasp them by the hand.
 Young once, now old, I've seen how God has ta -- ken
 good care of those who on his help de -- pend:
 I've nev -- er known the just to be for -- sa -- ken

@@ -1,8 +1,8 @@
 verse = \lyricmode {
-  Lord, keep your word! Come to your ser -- vant's aid.
+  \markup { \smallCaps "Lord," } keep your word! Come to your ser -- vant's aid.
 Then all will stand in fear and awe be -- fore you.
 A -- vert from me the taunt -- ing that I dread.
 Your laws are good, ac -- claimed by all who fear you.
 I long for them. Your jus -- tice makes me glad;
-through it re -- vive me, Lord, for I re -- vere you.
+through it re -- vive me, \markup { \smallCaps "Lord," } for I re -- vere you.
 }

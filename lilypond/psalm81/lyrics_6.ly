@@ -1,6 +1,6 @@
 verse = \lyricmode {
   \"In a thun -- der -- cloud
-I, the Lord, ad -- dressed you;
+I, the \markup { \smallCaps "Lord," } ad -- dressed you;
 my sup -- port I vowed,
 and you al -- so saw
 how at Me -- ri -- bah

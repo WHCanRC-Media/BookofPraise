@@ -1,5 +1,5 @@
 verse = \lyricmode {
- Come praise the Ho -- ly Spir -- it!
+ Come, praise the Ho -- ly Spir -- it!
 The proph -- ets he in -- spired;
 they af -- ter our sal -- va -- tion
 un -- ceas -- ing -- ly in -- quired.

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The Lord our God, whose praise we sing,
+  The \markup { \smallCaps "Lord" } our God, whose praise we sing,
 rules as our great and glo -- rious King.
 None e -- quals him, no god is grea -- ter.
 The deep -- est caves are in his hand;

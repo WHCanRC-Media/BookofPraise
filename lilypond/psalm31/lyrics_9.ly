@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  But, Lord, I trust in you to save me;
+  But, \markup { \smallCaps "Lord," } I trust in you to save me;
 on you I will de -- pend.
 My times are in your hand;
 de -- liv -- er me from my pur -- su -- ers.

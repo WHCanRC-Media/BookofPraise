@@ -1,6 +1,6 @@
 verse = \lyricmode {
-  Show us your pi -- ty; Lord, be mer -- ci -- ful!
-O Lord, be mer -- ci -- ful!
+  Show us your pi -- ty; \markup { \smallCaps "Lord," } be mer -- ci -- ful!
+O \markup { \smallCaps "Lord," } be mer -- ci -- ful!
 Too long, O God, have we been made to suf -- fer
 the in -- sults of the scof -- fer.
 We've had our fill of taunt -- ing and de -- ri -- sion,

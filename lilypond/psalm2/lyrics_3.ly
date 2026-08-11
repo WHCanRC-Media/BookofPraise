@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O peo -- ples, lis -- ten to the Lord's de -- cree.
+  O peo -- ples, lis -- ten to the \markup { \concat { \smallCaps "Lord" "'s" } } de -- cree.
 I will make known his roy -- al dec -- la -- ra -- tion:
 \"Your Fa -- ther I be -- come this ver -- y day;
 you are my Son. To you I give the na -- tions.

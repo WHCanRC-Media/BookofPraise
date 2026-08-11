@@ -1,7 +1,7 @@
 verse = \lyricmode {
-  The Lord is just and kind in all his ways;
+  The \markup { \smallCaps "Lord" } is just and kind in all his ways;
 he in his deeds his stead -- fast love dis -- plays.
-To all who call on him, the Lord is near;
+To all who call on him, the \markup { \smallCaps "Lord" } is near;
 he sat -- is -- fies all those who him re -- vere.
 He hears the cry of those who seek him tru -- ly
 but will de -- stroy the wick -- ed and un -- ru -- ly.

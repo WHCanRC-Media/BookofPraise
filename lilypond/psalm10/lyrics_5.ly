@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  A -- rise, O Lord! Lift up your migh -- ty hand.
+  A -- rise, O \markup { \smallCaps "Lord!" } Lift up your migh -- ty hand.
 Do not for -- get the poor. O God, be near!
 The hum -- ble in their help -- less -- ness de -- fend!
 Why does the wick -- ed man still scoff and sneer?

@@ -1,6 +1,6 @@
 verse = \lyricmode {
   May a fu -- ture gen -- er -- a -- tion
-praise the Lord for such sal -- va -- tion:
+praise the \markup { \smallCaps "Lord" } for such sal -- va -- tion:
 \"He looked down from heav͜en on high
 to re -- lease those doomed to die!\"
 So in Zi -- on, in his dwel -- ling,

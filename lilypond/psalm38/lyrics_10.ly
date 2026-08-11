@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Lord, for -- sake me not but hear me
+  \markup { \smallCaps "Lord," } for -- sake me not but hear me
 and stay near me;
 be my help and shield, I pray.
 Has -- ten to my aid, O Sav -- iour;

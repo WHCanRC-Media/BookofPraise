@@ -1,6 +1,6 @@
 verse = \lyricmode {
   How blest is he who cares a -- bout the poor:
-him will the Lord de -- fend.
+him will the \markup { \smallCaps "Lord" } de -- fend.
 In times of trou -- ble God keeps him se -- cure;
 blest is he in the land.
 His en -- e -- mies de -- mand his life in vain,

@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  \"I, Lord God of truth,
+  \"I, \markup { \smallCaps "Lord" } God of truth,
 I from E -- gypt freed you.
 O -- pen wide your mouth;
 put your trust in me.

@@ -1,7 +1,7 @@
 verse = \lyricmode {
   Why should the heath -- en, Is -- ra -- el de -- rid -- ing,
 ask in con -- tempt, \"Where may their God be hid -- ing?\"
-A -- rise, O Lord! Strike in re -- tal -- i -- a -- tion;
+A -- rise, O \markup { \smallCaps "Lord!" } Strike in re -- tal -- i -- a -- tion;
 the blood of saints a -- venge be -- fore the na -- tions!
 And may you from your throne
 hear how the pris -- on͜ers groan.

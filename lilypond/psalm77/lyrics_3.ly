@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  \"Will the Lord spurn us for -- ev -- er
+  \"Will the \markup { \smallCaps "Lord" } spurn us for -- ev -- er
 and with -- hold from us his fa -- vour?
 Will his love and mer -- cy fail?
 Will his prom -- ise not pre -- vail?

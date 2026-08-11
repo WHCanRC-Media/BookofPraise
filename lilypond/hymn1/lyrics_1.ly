@@ -9,7 +9,7 @@ was cru -- ci -- fied, dead, and bur -- ied;
 he de -- scend -- ed in -- to hell; 
 the third day he rose a -- gain from the dead;
 he as -- cend -- ed in -- to heaven
-and sit -- teth at the right hand of God the Fa -- ther al -- might -- y; 
+and is seat -- ed at the right hand of God the Fa -- ther al -- might -- y;
 from there he shall come to judge the liv -- ing and the dead.
 I be -- lieve in the Ho -- ly Spir -- it;
 I be -- lieve a ho -- ly cath -- o -- lic church, 

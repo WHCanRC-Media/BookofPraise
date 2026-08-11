@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  No sac -- ri -- fice did you, O Lord, re -- quire;
+  No sac -- ri -- fice did you, O \markup { \smallCaps "Lord," } re -- quire;
 but you gave me an o -- pen ear.
 I said, \"I've come; see, I am here.
 O God, to do your will is my de -- sire.

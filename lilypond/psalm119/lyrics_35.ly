@@ -3,6 +3,6 @@ verse = \lyricmode {
 I would have per -- ished here in my af -- flic -- tion.
 Your pre -- cepts I will not for -- get or slight:
 you have re -- newed my life by their di -- rec -- tion.
-Lord, I am yours. Come, save me by your might.
+\markup { \smallCaps "Lord," } I am yours. Come, save me by your might.
 Your laws have I sought out for my in -- struc -- tion.
 }

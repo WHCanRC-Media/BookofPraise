@@ -4,7 +4,7 @@ What haugh -- ty schemes are they in vain con -- triv -- ing?
 The kings and rul -- ers of the earth en -- gage
 in rash at -- tempts to plot their emp -- ty striv -- ing.
 They stand pre -- pared, they all con -- spire to -- geth -- er
-a -- gainst the Lord and his a -- noint -- ed King.
+a -- gainst the \markup { \smallCaps "Lord" } and his a -- noint -- ed King.
 \"Let us,\" they say, \"tear loose and break their fet -- ters,
 cast off their chains, their shack -- les from us fling.\"
 }

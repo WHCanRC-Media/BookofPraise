@@ -6,5 +6,5 @@ Re -- joice for -- ev -- er!
 All na -- tions will re -- mem -- ber to re -- vere him,
 and all their fam -- i͜lies will bow down and fear him.
 He is -- sues his com -- mands and all will hear him:
-the Lord is king.
+the \markup { \smallCaps "Lord" } is king.
 }

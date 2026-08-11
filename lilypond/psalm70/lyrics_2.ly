@@ -6,5 +6,5 @@ be glad and sing with ju -- bi -- la -- tion,
 But I am poor and weak as ev -- er;
 come quick -- ly, God, and res -- cue me,
 for you a -- lone can set me free.
-Do not de -- lay, O Lord my Sav -- iour.
+Do not de -- lay, O \markup { \smallCaps "Lord" } my Sav -- iour.
 }

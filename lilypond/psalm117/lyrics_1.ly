@@ -1,8 +1,8 @@
 verse = \lyricmode {
-  Come, all you na -- tions, praise the Lord!
+  Come, all you na -- tions, praise the \markup { \smallCaps "Lord!" }
 Ex -- tol him all with one ac -- cord.
 Great is his stead -- fast love toward us;
 en -- dur -- ing is his faith -- ful -- ness.
-All peo -- ples, in the Lord re -- joice
+All peo -- ples, in the \markup { \smallCaps "Lord" } re -- joice
 and praise his name with heart and voice.
 }

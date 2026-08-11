@@ -5,6 +5,6 @@ Let those by whom I now am hound -- ed
 re -- treat in shame and be con -- found -- ed.
 Foiled be the mis -- chief they in -- tend;
 may they be chaff be -- fore the wind,
-and may the An -- gel of the Lord
+and may the An -- gel of the \markup { \smallCaps "Lord" }
 pur -- sue them with his glit -- te͜ring sword.
 }

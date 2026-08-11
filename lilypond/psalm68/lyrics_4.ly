@@ -5,7 +5,7 @@ the flock you had as -- sem -- bled,
 you caused the earth to quake and cower;
 O God of Is -- ra͜el, great in pow͜er,
 be -- fore you, Si -- nai trem -- bled.
-You with a -- bun -- dant rain, O Lord,
+You with a -- bun -- dant rain, O \markup { \smallCaps "Lord," }
 your wea -- ry her -- i -- tage re -- stored
 and, as you had de -- cid -- ed,
 you let your peo -- ple set -- tle there;

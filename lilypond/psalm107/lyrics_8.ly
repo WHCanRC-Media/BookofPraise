@@ -3,7 +3,7 @@ verse = \lyricmode {
 he came with power to save,
 stretched out his hand of heal -- ing
 and snatched them from the grave.
-Let them all thank the Lord,
+Let them all thank the \markup { \smallCaps "Lord," }
 their sac -- ri -- fic -- es bring -- ing,
 and his great deeds re -- cord
 with joy -- ful shouts and sing -- ing.

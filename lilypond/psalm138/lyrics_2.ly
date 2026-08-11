@@ -5,6 +5,6 @@ You heard me in my dark -- est hour
 and by your power was I sup -- por -- ted.
 Now let the kings of all the earth
 in awe shout forth their praise un -- bro -- ken,
-for peo -- ples ev -- ery -- where, O Lord,
+for peo -- ples ev -- ery -- where, O \markup { \smallCaps "Lord," }
 have heard the words that you have spo -- ken.
 }

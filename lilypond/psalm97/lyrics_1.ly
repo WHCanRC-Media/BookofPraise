@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The Lord our God is King!
+  The \markup { \smallCaps "Lord" } our God is King!
 Let earth re -- joice and sing.
 Let shores of dis -- tant na -- tions
 re -- sound with ju -- bi -- la -- tion.

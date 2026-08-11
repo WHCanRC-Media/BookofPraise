@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  I am con -- vinced that nei -- ther pow -- ers, death, nor life,
+  I am con -- vinced that nei -- ther pow -- èrs, death, nor life,
 nor an -- gels, things to come, things pre -- sent, prin -- ces, strife,
 nor height, nor depth, nor a -- ny o -- ther thing cre -- a -- ted
 will from the love of God now keep us se -- pa -- ra -- "ted –"

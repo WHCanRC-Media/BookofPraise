@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The Lord, my God and Sav -- iour,
+  The \markup { \smallCaps "Lord," } my God and Sav -- iour,
 in him I will re -- joice,
 and, in his pow͜e͜r ex -- ul -- ting,
 I will lift up my voice.

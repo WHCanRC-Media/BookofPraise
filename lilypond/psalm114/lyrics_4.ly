@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Be -- fore the Lord, O earth, trem -- ble in fear,
+  Be -- fore the \markup { \smallCaps "Lord," } O earth, trem -- ble in fear,
 as when the God of Ja -- cob once drew near
 on Ho -- reb's ho -- ly moun -- tain.
 He turned the rock in -- to a spark -- ling stream;

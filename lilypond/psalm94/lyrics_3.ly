@@ -3,6 +3,6 @@ verse = \lyricmode {
 They slay the wi -- dow and the stran -- ger
 and put to death the fa -- ther -- less;
 the poor and help -- less they op -- press.
-They say, \"The Lord, he does not see.
+They say, \"The \markup { \smallCaps "Lord," } he does not see.
 The God of Ja -- cob, where is he?\"
 }

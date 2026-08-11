@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  The Lord will not for -- get us but will bless
+  The \markup { \smallCaps "Lord" } will not for -- get us but will bless
 all who in him a -- lone their faith con -- fess
 with thanks for all he gave them.
 On Aa -- ron's house and on his Is -- ra -- el,

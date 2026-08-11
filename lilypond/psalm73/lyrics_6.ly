@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O Lord, you sure -- ly set them all
+  O \markup { \smallCaps "Lord," } you sure -- ly set them all
 on slip -- pe͜ry ground to make them fall.
 You cause the ar -- ro -- gant to stum -- ble;
 they head -- long to their ru -- in tum -- ble.

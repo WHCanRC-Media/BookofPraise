@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  O Lord, wake up! Why are you sleep -- ing?
+  O \markup { \smallCaps "Lord," } wake up! Why are you sleep -- ing?
 Come to our help, your pro -- mise keep -- ing.
 Why is it that you hide your face?
 Have you for -- got -- ten our dis -- grace?

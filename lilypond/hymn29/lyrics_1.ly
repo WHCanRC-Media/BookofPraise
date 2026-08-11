@@ -6,5 +6,5 @@ made loud ho -- san -- nas ring.
 Thou art the King of Is -- rael,
 thou, Da -- vid's roy -- al Son,
 who in the Lord's name com -- est,
-the King and Bless -- ed One.
+the King and Bless -- èd One.
 }

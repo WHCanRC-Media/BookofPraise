@@ -1,5 +1,5 @@
 verse = \lyricmode {
-  Cast on the Lord the cares that grieve you;
+  Cast on the \markup { \smallCaps "Lord" } the cares that grieve you;
 he will sus -- tain you, nev -- er leave you.
 The right -- eous he up -- holds for -- ev -- er
 but flings in -- to the deep -- est pit
